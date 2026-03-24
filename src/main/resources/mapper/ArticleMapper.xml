@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.platform.mapper.ArticleMapper">
+
+    <!--
+        通用结果映射：文章基础字段 + 作者字段（JOIN users 时使用）
+        注意：author_* 前缀字段是查询别名，实体中不存在，需要在 Service 层二次组装
+              或通过 @Results 手动映射到 VO。此处 resultMap 映射到 Article 实体本身，
+              作者信息由 Service 层通过 authorId 二次查询或在 VO 组装时注入。
+    -->
+    <resultMap id="ArticleBaseMap" type="com.platform.entity.Article">
+        <id     column="id"                  property="id"/>
+        <result column="author_id"           property="authorId"/>
+        <result column="title"               property="title"/>
+        <result column="content"             property="content"/>
+        <result column="summary"             property="summary"/>
+        <result column="cover_url"           property="coverUrl"/>
+        <result column="cover_color"         property="coverColor"/>
+        <result column="word_count"          property="wordCount"/>
+        <result column="read_minutes"        property="readMinutes"/>
+        <result column="duration_category"   property="durationCategory"/>
+        <result column="status"              property="status"/>
+        <result column="submit_count"        property="submitCount"/>
+        <result column="last_submitted_at"   property="lastSubmittedAt"/>
+        <result column="published_at"        property="publishedAt"/>
+        <result column="deleted"             property="deleted"/>
+        <result column="created_at"          property="createdAt"/>
+        <result column="updated_at"          property="updatedAt"/>
+    </resultMap>
+
+    <!-- ================================================================
+         首页聚合查询
+         ================================================================ -->
+
+    <!--
+        首页 Hero 主卡：最新 1 篇 APPROVED 文章
+        仅作兜底使用，正常路径由 selectRandomApproved 覆盖
+    -->
+    <select id="selectHeroPrimary" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+        ORDER BY a.published_at DESC
+        LIMIT 1
+    </select>
+
+    <!--
+        首页 Hero 次卡：次新 4 篇 APPROVED 文章（跳过主卡那一篇）
+        仅作兜底使用，正常路径由 selectRandomApproved 覆盖
+    -->
+    <select id="selectHeroSecondary" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+        ORDER BY a.published_at DESC
+        LIMIT 4 OFFSET 1
+    </select>
+
+    <!--
+        每日随机取 N 篇 APPROVED 文章
+        用于首页 Hero 每日随机逻辑（由 HomeServiceImpl 配合 Redis 缓存调用）
+
+        性能说明：
+          ORDER BY RAND() 全表扫描，数据量小时（< 万条）完全可用。
+          如未来数据量增大，可改为以下优化方案之一：
+          1. 随机偏移：SELECT ... LIMIT 1 OFFSET FLOOR(RAND() * total)
+          2. 应用层随机：先查全量 ID，Java 侧 Collections.shuffle 后取前 N 个
+    -->
+    <select id="selectRandomApproved" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+        ORDER BY RAND()
+        LIMIT #{limit}
+    </select>
+
+    <!--
+        首页各分类 section：按 duration_category 过滤，取最新 N 篇
+        limit 参数由调用方传入（首页通常取 6~8 篇）
+    -->
+    <select id="selectApprovedByCategory" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.duration_category = #{category}
+          AND a.deleted = 0
+        ORDER BY a.published_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- ================================================================
+         分类详情页分页查询
+         ================================================================ -->
+
+    <!--
+        分类详情页：分页查询指定分类的 APPROVED 文章
+        MyBatis Plus 分页插件会自动在外层包裹 COUNT 查询
+    -->
+    <select id="selectPageByCategory" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.duration_category = #{category}
+          AND a.deleted = 0
+        ORDER BY a.published_at DESC
+    </select>
+
+    <!-- ================================================================
+         搜索（P2 占位，一期简单 LIKE 实现）
+         ================================================================ -->
+
+    <!--
+        按关键词模糊搜索标题和摘要（仅 APPROVED 文章）
+        一期使用 LIKE，后续可替换为 FULLTEXT 或 Elasticsearch
+        注意：LIKE '%keyword%' 无法利用索引，数据量大时需加全文索引或搜索引擎
+    -->
+    <select id="searchByKeyword" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+          AND (
+            a.title   LIKE CONCAT('%', #{keyword}, '%')
+                OR a.summary LIKE CONCAT('%', #{keyword}, '%')
+            )
+        ORDER BY a.published_at DESC
+    </select>
+
+</mapper>

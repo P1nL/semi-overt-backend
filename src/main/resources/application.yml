@@ -1,0 +1,91 @@
+﻿server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # 数据库连接
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+  # Redis 配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # password: 123456   # 有密码则取消注释
+      database: 0
+      timeout: 3000ms
+
+  # 文件上传限制（前端已压缩，但后端仍二次校验）
+  servlet:
+    multipart:
+      max-file-size: 15MB       # 留一点余量，实际业务逻辑里限制 10MB
+      max-request-size: 15MB
+
+  # 邮件配置（找回密码用，开发阶段可暂不填）
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: ${MAIL_USERNAME:noreply@example.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+# MyBatis Plus 配置
+mybatis-plus:
+  type-aliases-package: com.platform.entity
+  mapper-locations: classpath:mapper/*.xml
+  global-config:
+    db-config:
+      logic-delete-field: deleted   # 逻辑删除字段（articles 表）
+      id-type: auto                 # 主键自增（数据库自增，非雪花）
+  configuration:
+    map-underscore-to-camel-case: true   # 下划线转驼峰
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 开发环境打印 SQL，生产可关闭
+
+# JWT 配置
+jwt:
+  token:
+    # 普通登录有效期（分钟）
+    expiration: 120
+    # rememberMe 登录有效期（分钟，7 天）
+    remember-me-expiration: 10080
+    # 签名密钥（生产环境请替换为复杂随机字符串）
+    sign-key: ${JWT_SIGN_KEY:change-me-in-local-env}
+    # Token 剩余有效期小于此值时（分钟），响应头下发新 Token
+    refresh-threshold: 30
+
+# 本地文件存储配置
+storage:
+  # 文件实际存储根目录（按需修改为你本地路径）
+  upload-path: E:/nowdata/app/uploads
+  # 对外访问的 URL 前缀（与 WebMvcConfig 中的映射保持一致）
+  access-prefix: /static/uploads
+  # 允许上传的文件类型
+  allowed-types:
+    - image/jpeg
+    - image/png
+    - image/webp
+  # 单文件大小上限（字节，10MB）
+  max-file-size: 10485760
+
+# 业务配置
+platform:
+  # 文章提交审核限流：同一篇文章 30 分钟内不可重复提交
+  submit-review-cooldown-minutes: 30
+  # 草稿缓存 TTL（天）
+  draft-cache-ttl-days: 7
+  # 草稿刷盘间隔（分钟，定时任务使用）
+  draft-flush-interval-minutes: 5
+  # 注册/登录邮件发送限流（分钟）
+  reset-pwd-token-ttl-minutes: 15
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+
