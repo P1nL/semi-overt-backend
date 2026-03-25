@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: auth-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  config:
+    import:
+      - optional:nacos:shared-common.yaml?group=NOW_DEMO
+      - optional:nacos:shared-db.yaml?group=NOW_DEMO
+      - optional:nacos:shared-redis.yaml?group=NOW_DEMO
+      - optional:nacos:shared-jwt.yaml?group=NOW_DEMO
+      - optional:nacos:${spring.application.name}.yaml?group=NOW_DEMO
+      - optional:nacos:${spring.application.name}-${spring.profiles.active}.yaml?group=NOW_DEMO
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        group: NOW_DEMO
+        namespace: ${NACOS_NAMESPACE:dev}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        group: NOW_DEMO
+        namespace: ${NACOS_NAMESPACE:dev}
+        file-extension: yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+      timeout: 3000ms
+  mail:
+    host: ${MAIL_HOST:smtp.example.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:noreply@example.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+server:
+  port: ${SERVER_PORT:8081}
+
+mybatis-plus:
+  type-aliases-package: com.platform.entity
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  token:
+    expiration: ${JWT_EXPIRATION:120}
+    remember-me-expiration: ${JWT_REMEMBER_ME_EXPIRATION:10080}
+    sign-key: ${JWT_SIGN_KEY:bXktc3VwZXItc2VjdXJlLWtleS1mb3Itand0LXNpZ25pbmctbmVlZHMtdG8tYmUtbG9uZy1lbm91Z2g=}
+    refresh-threshold: ${JWT_REFRESH_THRESHOLD:30}
+
+platform:
+  reset-pwd-token-ttl-minutes: ${RESET_PWD_TOKEN_TTL_MINUTES:15}
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}

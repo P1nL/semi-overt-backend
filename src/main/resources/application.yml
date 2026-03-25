@@ -49,7 +49,12 @@ mybatis-plus:
       id-type: auto                 # 主键自增（数据库自增，非雪花）
   configuration:
     map-underscore-to-camel-case: true   # 下划线转驼峰
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 开发环境打印 SQL，生产可关闭
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl  # 开发环境打印 SQL，生产可关闭
+
+logging:
+  level:
+    com.platform.mapper: debug
+    org.apache.ibatis: debug
 
 # JWT 配置
 jwt:
