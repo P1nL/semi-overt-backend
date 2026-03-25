@@ -1,5 +1,8 @@
 package com.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
 import com.platform.common.api.ResultUtils;
@@ -7,6 +10,10 @@ import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.BatchUserQueryReq;
 import com.platform.common.dto.internal.LatestReviewReasonDto;
+import com.platform.common.dto.internal.UserProfileArticleItemDto;
+import com.platform.common.dto.internal.UserProfileArticleStatsDto;
+import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
+import com.platform.common.dto.internal.UserProfileArticlesResp;
 import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.dto.resp.ArticleDetailResp;
 import com.platform.dto.resp.SubmitCooldownResp;
@@ -282,6 +289,66 @@ public class ArticleServiceImpl implements ArticleService {
         articleMapper.updateById(article);
     }
 
+    @Override
+    public UserProfileArticlesResp getUserProfileArticles(UserProfileArticlesQueryReq req) {
+        if (req == null || req.getAuthorId() == null) {
+            throw BusinessException.badRequest("authorId 涓嶈兘涓虹┖");
+        }
+
+        int page = req.getPage() <= 0 ? 1 : req.getPage();
+        int pageSize = req.getPageSize() <= 0 ? 10 : req.getPageSize();
+        Long authorId = req.getAuthorId();
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        boolean canViewAll = authorId.equals(currentUserId) || SecurityUtils.isAdmin();
+        ArticleStatus filterStatus = resolveProfileTabStatus(req.getTab(), canViewAll);
+        UserSummaryDto author = fetchUser(authorId);
+
+        UserProfileArticleStatsDto stats = buildProfileStats(authorId, canViewAll);
+
+        LambdaQueryWrapper<Article> query = new LambdaQueryWrapper<Article>()
+                .eq(Article::getAuthorId, authorId)
+                .orderByDesc(Article::getUpdatedAt);
+
+        if (filterStatus != null) {
+            query.eq(Article::getStatus, filterStatus);
+        } else if (!canViewAll) {
+            query.eq(Article::getStatus, ArticleStatus.APPROVED);
+        }
+
+        IPage<Article> pageResult = articleMapper.selectPage(new Page<>(page, pageSize), query);
+        List<Article> articles = pageResult.getRecords();
+        Map<Long, String> rejectReasonMap = buildRejectReasonMap(filterStatus, articles);
+
+        List<UserProfileArticleItemDto> list = articles.stream()
+                .map(article -> UserProfileArticleItemDto.builder()
+                        .articleId(article.getId())
+                        .title(article.getTitle())
+                        .summary(article.getSummary())
+                        .previewText(article.getContent() == null ? null
+                                : com.platform.util.ArticleUtils.extractPreviewText(article.getContent(), 120))
+                        .coverUrl(article.getCoverUrl())
+                        .coverColor(article.getCoverColor())
+                        .readMinutes(article.getReadMinutes())
+                        .durationCategory(article.getDurationCategory())
+                        .status(article.getStatus())
+                        .authorId(authorId)
+                        .authorName(author != null ? author.getNickname() : null)
+                        .authorAvatar(author != null ? author.getAvatarUrl() : null)
+                        .publishedAt(article.getPublishedAt())
+                        .updatedAt(article.getUpdatedAt())
+                        .rejectReason(rejectReasonMap.get(article.getId()))
+                        .build())
+                .toList();
+
+        return UserProfileArticlesResp.builder()
+                .stats(stats)
+                .list(list)
+                .total(pageResult.getTotal())
+                .page(page)
+                .pageSize(pageSize)
+                .build();
+    }
+
     private void checkReadPermission(Article article, Long currentUserId) {
         if (article.getStatus() == ArticleStatus.APPROVED) {
             return;
@@ -325,6 +392,68 @@ public class ArticleServiceImpl implements ArticleService {
     private String getLatestReviewReason(Long articleId) {
         LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(articleId));
         return dto != null ? dto.getReason() : null;
+    }
+
+    private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {
+        long approved = countByStatus(authorId, ArticleStatus.APPROVED);
+        int totalWordCount = articleMapper.selectList(
+                        new LambdaQueryWrapper<Article>()
+                                .eq(Article::getAuthorId, authorId)
+                                .eq(Article::getStatus, ArticleStatus.APPROVED)
+                                .select(Article::getWordCount))
+                .stream()
+                .mapToInt(article -> article.getWordCount() != null ? article.getWordCount() : 0)
+                .sum();
+
+        if (!canViewAll) {
+            return UserProfileArticleStatsDto.builder()
+                    .approved(approved)
+                    .totalWordCount(totalWordCount)
+                    .build();
+        }
+
+        return UserProfileArticleStatsDto.builder()
+                .approved(approved)
+                .pending(countByStatus(authorId, ArticleStatus.PENDING))
+                .returned(countByStatus(authorId, ArticleStatus.RETURNED))
+                .rejected(countByStatus(authorId, ArticleStatus.REJECTED))
+                .draft(countByStatus(authorId, ArticleStatus.DRAFT))
+                .totalWordCount(totalWordCount)
+                .build();
+    }
+
+    private long countByStatus(Long authorId, ArticleStatus status) {
+        return articleMapper.selectCount(new LambdaQueryWrapper<Article>()
+                .eq(Article::getAuthorId, authorId)
+                .eq(Article::getStatus, status));
+    }
+
+    private ArticleStatus resolveProfileTabStatus(String tab, boolean canViewAll) {
+        if (!canViewAll) {
+            return ArticleStatus.APPROVED;
+        }
+        if (tab == null || tab.equalsIgnoreCase("all")) {
+            return null;
+        }
+        return switch (tab.toLowerCase()) {
+            case "approved" -> ArticleStatus.APPROVED;
+            case "pending" -> ArticleStatus.PENDING;
+            case "returned" -> ArticleStatus.RETURNED;
+            case "rejected" -> ArticleStatus.REJECTED;
+            case "draft" -> ArticleStatus.DRAFT;
+            default -> null;
+        };
+    }
+
+    private Map<Long, String> buildRejectReasonMap(ArticleStatus filterStatus, List<Article> articles) {
+        if (filterStatus != ArticleStatus.REJECTED || articles.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        return articles.stream().collect(Collectors.toMap(
+                Article::getId,
+                article -> getLatestReviewReason(article.getId())
+        ));
     }
 
     private void writeReviewLog(Long articleId, Long operatorId,

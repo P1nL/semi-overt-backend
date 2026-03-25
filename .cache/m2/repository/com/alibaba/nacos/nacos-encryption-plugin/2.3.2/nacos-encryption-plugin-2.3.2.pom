@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.alibaba.nacos</groupId>
+	<artifactId>nacos-encryption-plugin</artifactId>
+	<version>2.3.2</version>
+	<name>nacos-encryption-plugin 2.3.2</name>
+	<description>Nacos encryption plugin pom.xml file</description>
+	<url>https://nacos.io</url>
+	<organization>
+		<name>Alibaba Group</name>
+		<url>https://github.com/alibaba</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+	<developers>
+		<developer>
+			<id>Alibaba Nacos</id>
+			<name>Nacos</name>
+			<email>nacos_dev@linux.alibaba.com</email>
+			<url>https://nacos.io</url>
+		</developer>
+	</developers>
+	<scm>
+		<connection>scm:git@github.com:alibaba/nacos.git</connection>
+		<developerConnection>scm:git@github.com:alibaba/nacos.git</developerConnection>
+		<tag>nacos-all-${revision}</tag>
+		<url>git@github.com:alibaba/nacos.git</url>
+	</scm>
+	<issueManagement>
+		<system>github</system>
+		<url>https://github.com/alibaba/nacos/issues</url>
+	</issueManagement>
+</project>

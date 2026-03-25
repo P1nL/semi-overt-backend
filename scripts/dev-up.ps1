@@ -1,5 +1,5 @@
 param(
-    [string]$Profile = "local",
+    [string]$RunProfile = "local",
     [string[]]$Services = @(
         "auth-service",
         "content-service",
@@ -144,12 +144,7 @@ function Invoke-Maven {
 
     Push-Location $WorkingDirectory
     try {
-        if ($MavenCommand.ToLowerInvariant().EndsWith(".cmd")) {
-            & cmd.exe /d /c call $MavenCommand @Arguments
-        }
-        else {
-            & $MavenCommand @Arguments
-        }
+        & $MavenCommand @Arguments
 
         if ($LASTEXITCODE -ne 0) {
             throw "Maven command failed with exit code $LASTEXITCODE"
@@ -160,12 +155,26 @@ function Invoke-Maven {
     }
 }
 
+function Get-MavenCommonArguments {
+    $arguments = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_SETTINGS)) {
+        $arguments += @("-s", $env:MAVEN_SETTINGS)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_REPO_LOCAL)) {
+        $arguments += "-Dmaven.repo.local=$($env:MAVEN_REPO_LOCAL)"
+    }
+
+    return $arguments
+}
+
 function Get-ServiceCommand {
     param(
         [string]$MavenCommand,
         [string]$RepoRoot,
         [string]$Service,
-        [string]$Profile
+        [string]$RunProfile
     )
 
     $modulePom = Join-Path $RepoRoot "$Service\pom.xml"
@@ -176,8 +185,14 @@ function Get-ServiceCommand {
     return @{
         MavenCommand = $MavenCommand
         ModulePom = $modulePom
-        Profile = $Profile
+        RunProfile = $RunProfile
     }
+}
+
+function ConvertTo-SingleQuotedPowerShellLiteral {
+    param([string]$Value)
+
+    return "'" + $Value.Replace("'", "''") + "'"
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -186,10 +201,16 @@ $runtimeRoot = Join-Path $repoRoot ".codex-runtime"
 $pidRoot = Join-Path $runtimeRoot "pids"
 $logRoot = Join-Path $runtimeRoot "logs"
 $mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
+$mavenCommonArguments = @(Get-MavenCommonArguments)
 
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $pidRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+
+Write-Step "Using Maven command: $mavenCommand"
+if ($mavenCommonArguments.Count -gt 0) {
+    Write-Step "Using extra Maven arguments: $($mavenCommonArguments -join ' ')"
+}
 
 if (-not $SkipDocker) {
     if (-not (Test-Path $composePath)) {
@@ -214,10 +235,10 @@ else {
 
 Write-Step "Installing parent POM and common module into local Maven repository"
 Invoke-Maven -MavenCommand $mavenCommand `
-    -Arguments @("-N", "install") `
+    -Arguments ($mavenCommonArguments + @("-N", "install")) `
     -WorkingDirectory $repoRoot
 Invoke-Maven -MavenCommand $mavenCommand `
-    -Arguments @("-f", (Join-Path $repoRoot "common\pom.xml"), "install", "-DskipTests") `
+    -Arguments ($mavenCommonArguments + @("-f", (Join-Path $repoRoot "common\pom.xml"), "install", "-DskipTests")) `
     -WorkingDirectory $repoRoot
 
 foreach ($service in $Services) {
@@ -238,7 +259,7 @@ foreach ($service in $Services) {
                 @()
             }
 
-            if ($existingProcess -and $listeningPids.Count -gt 0) {
+            if ($existingProcess -and (@($listeningPids)).Count -gt 0) {
                 Write-Step "$service is already running with PID $existingPid"
                 continue
             }
@@ -252,40 +273,27 @@ foreach ($service in $Services) {
     Reset-LogFile -Path $stdoutLog
     Reset-LogFile -Path $stderrLog
 
-    $command = Get-ServiceCommand -MavenCommand $mavenCommand -RepoRoot $repoRoot -Service $service -Profile $Profile
+    $command = Get-ServiceCommand -MavenCommand $mavenCommand -RepoRoot $repoRoot -Service $service -RunProfile $RunProfile
     Write-Step "Starting $service"
 
-    if ($command.MavenCommand.ToLowerInvariant().EndsWith(".cmd")) {
-        $process = Start-Process -FilePath "cmd.exe" `
-            -ArgumentList @(
-                "/d",
-                "/c",
-                "call",
-                $command.MavenCommand,
-                "-f",
-                $command.ModulePom,
-                "spring-boot:run",
-                "-Dspring-boot.run.profiles=$($command.Profile)"
-            ) `
-            -WorkingDirectory $repoRoot `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog `
-            -PassThru
-    }
-    else {
-        $encodedScript = @"
-& '$($command.MavenCommand)' '-f' '$($command.ModulePom)' 'spring-boot:run' '-Dspring-boot.run.profiles=$($command.Profile)'
-"@
+    $serviceArguments = $mavenCommonArguments + @(
+        "-f",
+        $command.ModulePom,
+        "spring-boot:run",
+        "-Dspring-boot.run.profiles=$($command.RunProfile)"
+    )
+    $encodedArgumentArray = (($serviceArguments | ForEach-Object {
+        ConvertTo-SingleQuotedPowerShellLiteral -Value $_
+    }) -join ", ")
+    $encodedScript = "& $(ConvertTo-SingleQuotedPowerShellLiteral -Value $command.MavenCommand) @($encodedArgumentArray)"
 
-        $process = Start-Process -FilePath "powershell.exe" `
-            -ArgumentList "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $encodedScript `
-            -WorkingDirectory $repoRoot `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog `
-            -PassThru
-    }
+    $process = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $encodedScript `
+        -WorkingDirectory $repoRoot `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $stdoutLog `
+        -RedirectStandardError $stderrLog `
+        -PassThru
 
     Set-Content -Path $pidFile -Value $process.Id -NoNewline
 }

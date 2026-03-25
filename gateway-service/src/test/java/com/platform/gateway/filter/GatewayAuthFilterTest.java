@@ -81,6 +81,37 @@ class GatewayAuthFilterTest {
     }
 
     @Test
+    void forgedUserHeadersAreOverwrittenByGateway() {
+        when(redisTemplate.hasKey("jwt:blacklist:valid-token")).thenReturn(Mono.just(false));
+        when(jwtHelper.parse("valid-token")).thenReturn(JwtUser.builder()
+                .userId(7L)
+                .username("alice")
+                .role("USER")
+                .build());
+        when(jwtHelper.shouldRefresh("valid-token")).thenReturn(false);
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/alice/profile")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                        .header(HeaderNames.X_USER_ID, "999")
+                        .header(HeaderNames.X_USERNAME, "mallory")
+                        .header(HeaderNames.X_USER_ROLE, "ADMIN")
+                        .header(HeaderNames.X_TRACE_ID, "client-trace")
+                        .build()
+        );
+        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
+        GatewayFilterChain chain = chainCapturing(forwardedRequest);
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertThat(forwardedRequest.get()).isNotNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isEqualTo("7");
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isEqualTo("alice");
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isEqualTo("USER");
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_TRACE_ID)).isEqualTo("client-trace");
+    }
+
+    @Test
     void whitelistedRequestWithBlacklistedTokenReturnsUnauthorized() {
         when(redisTemplate.hasKey("jwt:blacklist:revoked-token")).thenReturn(Mono.just(true));
 
@@ -98,7 +129,7 @@ class GatewayAuthFilterTest {
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
         assertThat(chainCalled.get()).isFalse();
-        assertThat(exchange.getResponse().getStatusCode()).hasToString("200 OK");
+        assertThat(exchange.getResponse().getStatusCode()).hasToString("401 UNAUTHORIZED");
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
     }
 
@@ -116,6 +147,7 @@ class GatewayAuthFilterTest {
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
         assertThat(chainCalled.get()).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).hasToString("401 UNAUTHORIZED");
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
     }
 
@@ -143,6 +175,7 @@ class GatewayAuthFilterTest {
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
         assertThat(chainCalled.get()).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).hasToString("403 FORBIDDEN");
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":403");
     }
 

@@ -3,7 +3,6 @@ package com.platform.service;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
-import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.dto.req.SaveDraftReq;
 import com.platform.dto.resp.SubmitResp;
 import com.platform.entity.Article;
@@ -12,7 +11,7 @@ import com.platform.mapper.ArticleMapper;
 import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.impl.ArticleServiceImpl;
 import com.platform.service.impl.DraftServiceImpl;
-import com.platform.util.Result;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
@@ -21,8 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
@@ -30,6 +27,11 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DraftAndSubmitFlowTest {
+
+    @BeforeAll
+    static void initMybatisPlus() {
+        MybatisPlusTestSupport.initLambdaCache(Article.class);
+    }
 
     @Mock
     private ArticleMapper articleMapper;
@@ -75,9 +77,6 @@ class DraftAndSubmitFlowTest {
         when(articleMapper.selectById(articleId)).thenReturn(article);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("draft:" + userId + ":" + articleId)).thenReturn(latestContent);
-        when(authInternalClient.batchUsers(ArgumentMatchers.any())).thenReturn(Result.ok(List.of(
-                UserSummaryDto.builder().id(userId).username("tester").build()
-        )));
 
         doAnswer(invocation -> {
             LambdaUpdateWrapper<Article> wrapper = invocation.getArgument(1);

@@ -2,6 +2,8 @@ package com.platform.controller.internal;
 
 import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
+import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
+import com.platform.common.dto.internal.UserProfileArticlesResp;
 import com.platform.service.ArticleService;
 import com.platform.util.Result;
 import lombok.RequiredArgsConstructor;
@@ -24,5 +26,10 @@ public class InternalArticleController {
                                           @RequestBody ApplyReviewResultReq req) {
         articleService.applyReviewResult(id, req);
         return Result.ok();
+    }
+
+    @PostMapping("/profile-page")
+    public Result<UserProfileArticlesResp> profilePage(@RequestBody UserProfileArticlesQueryReq req) {
+        return Result.ok(articleService.getUserProfileArticles(req));
     }
 }

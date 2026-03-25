@@ -172,6 +172,19 @@
 - 不会把认证公共类重新散落回各服务，认证相关公共能力继续收敛在 common
 ```
 
+### 3.1 认证与网关线程补充说明
+- 公开接口的最终鉴权语义已经固定，不得在后续线程中改回“白名单即完全跳过鉴权”：
+  - 无 `Authorization`：匿名放行
+  - 有效 token：继续透传 `X-User-Id`、`X-Username`、`X-User-Role`
+  - 失效、解析失败或黑名单 token：直接返回兼容 `401`
+- 上述规则尤其适用于 `GET /api/v1/articles/{id}` 和 `GET /api/v1/users/{username}/profile` 这类“公开但仍需身份感知”的接口，后续线程需要在此语义上继续设计，不得破坏作者查看草稿/待审核详情等场景。
+- 本机联调时，优先使用 `MAVEN_CMD` 指向真实 `mvn.cmd`；不要默认信任 `mvnw.cmd` 在所有机器上都稳定可用。当前 `dev-up.ps1` 已支持优先读取 `MAVEN_CMD`。
+- 当前这台开发机已确认可用的 Maven 路径示例为：`C:\Users\PINKING\.m2\wrapper\dists\apache-maven-3.9.12-bin\5nmfsn99br87k5d4ajlekdq10k\apache-maven-3.9.12\bin\mvn.cmd`
+- 认证与网关线程的回归重点应显式覆盖：
+  - 登录作者点击草稿箱中的草稿，不再跳 `404`
+  - 登出后旧 token 访问公开文章详情，必须返回 `401`，不能静默降级为匿名
+  - 单模块启动不再出现 `Unknown lifecycle phase ".run.profiles=local"`
+
 ## 4. 内容域线程提示词
 ```text
 你现在负责这个项目的“内容域线程”，目标是将现有文章、草稿、首页、分类相关能力拆到 content-service，并明确它作为文章状态真源的边界。
@@ -229,6 +242,18 @@
 - 文章状态机在 content-service 内依旧清晰可控
 - 后续 review 和 MQ 线程能直接挂接到 content-service
 ```
+
+### 4.1 内容域线程补充说明
+- 内容域线程必须建立在网关既定语义之上：`GET /api/v1/articles/{id}` 虽然是公开接口，但不能等同于“完全匿名接口”。
+- 对文章详情的正确理解是：
+  - 无 `Authorization`：按匿名视角返回，只允许公开内容
+  - 有效 token：下游能拿到 `X-User-*`，因此作者本人可以读取自己的草稿、退回稿、待审核稿详情
+  - 失效、解析失败或黑名单 token：网关直接返回 `401`
+- 内容域线程不得用“把私有稿件改成公开可见”这种方式规避鉴权问题，必须继续依赖网关注入的用户头做作者视角权限判断。
+- 内容域线程的回归重点应显式覆盖：
+  - 登录作者点击草稿箱中的草稿，不再跳 `404`
+  - 匿名访问公开文章详情仍然正常
+  - 旧 token 访问文章详情时返回 `401`，而不是静默降级为匿名
 
 ## 5. 审核域线程提示词
 ```text
@@ -394,6 +419,19 @@
 - 至少能演示一条完整链路：注册登录 -> 提交审核 -> 审核通过 -> 收到通知 -> 搜索可见
 - 交付方式足够工程化，但不过度复杂
 ```
+
+### 7.1 交付与运维线程补充说明
+- 本机启动方案必须把 `MAVEN_CMD` 作为一等入口，优先允许显式指定真实 `mvn.cmd`；不要默认信任 `mvnw.cmd` 在所有 Windows 机器上都稳定可用。
+- 当前这台开发机的已知可用示例路径为：`C:\Users\PINKING\.m2\wrapper\dists\apache-maven-3.9.12-bin\5nmfsn99br87k5d4ajlekdq10k\apache-maven-3.9.12\bin\mvn.cmd`
+- 启动脚本和运行说明需要明确：
+  - `MAVEN_CMD` 指向的 `mvn.cmd` 优先通过 PowerShell 直接调用，并使用参数数组传递参数，不再额外套 `cmd.exe /d /c call ...`
+  - 如需在受限环境重定向 Maven settings 或本地仓库，统一通过 `MAVEN_SETTINGS`、`MAVEN_REPO_LOCAL` 注入，不要在脚本外再包一层 `cmd.exe`
+  - `-Dspring-boot.run.profiles=local`、`-Dmaven.repo.local=...` 这类参数必须作为单个参数传递，不能再被拆坏
+  - 服务是否“已启动”必须以目标端口是否真实监听为准，不能只依赖残留 PID
+- 运维线程的回归重点应显式覆盖：
+  - 单模块启动不再出现 `Unknown lifecycle phase ".run.profiles=local"`
+  - 服务启动失败后再次执行启动脚本，不会因为残留 launcher PID 被误判为“已运行”
+  - `gateway-service` 重启后，公开接口仍满足“无 token 匿名放行、有效 token 透传身份、坏 token 返回 `401`”这条既定语义
 
 ## 8. 验收要求
 所有新线程都必须满足以下共性要求：

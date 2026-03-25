@@ -53,11 +53,14 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                     }
 
                     if (authContext.status() != AuthStatus.AUTHENTICATED) {
-                        return writeResult(baseExchange, HttpStatus.OK, Result.unauthorized("未登录或 Token 已失效"));
+                        return writeResult(baseExchange, HttpStatus.UNAUTHORIZED,
+                                Result.unauthorized("未登录或 Token 已失效"));
                     }
 
-                    if (path.startsWith("/api/v1/reviews/") && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
-                        return writeResult(baseExchange, HttpStatus.OK, Result.forbidden("权限不足"));
+                    if (path.startsWith("/api/v1/reviews/")
+                            && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
+                        return writeResult(baseExchange, HttpStatus.FORBIDDEN,
+                                Result.forbidden("权限不足"));
                     }
 
                     return chain.filter(authContext.exchange());
@@ -71,7 +74,8 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
     private Mono<Void> handleWhitelistedRequest(AuthContext authContext, GatewayFilterChain chain) {
         if (authContext.status() == AuthStatus.INVALID_TOKEN) {
-            return writeResult(authContext.exchange(), HttpStatus.OK, Result.unauthorized("未登录或 Token 已失效"));
+            return writeResult(authContext.exchange(), HttpStatus.UNAUTHORIZED,
+                    Result.unauthorized("未登录或 Token 已失效"));
         }
         return chain.filter(authContext.exchange());
     }
@@ -123,8 +127,7 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return null;
     }
 
-    private Mono<AuthContext> authenticate(ServerWebExchange baseExchange,
-                                           ServerHttpRequest baseRequest) {
+    private Mono<AuthContext> authenticate(ServerWebExchange baseExchange, ServerHttpRequest baseRequest) {
         String token = extractToken(baseRequest);
         if (token == null || token.isBlank()) {
             return Mono.just(new AuthContext(baseExchange, AuthStatus.NO_TOKEN, null));
