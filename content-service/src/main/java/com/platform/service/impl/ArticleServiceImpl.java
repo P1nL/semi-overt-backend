@@ -10,6 +10,8 @@ import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.BatchUserQueryReq;
 import com.platform.common.dto.internal.LatestReviewReasonDto;
+import com.platform.common.dto.internal.ReviewTaskRemoveReq;
+import com.platform.common.dto.internal.ReviewTaskUpsertReq;
 import com.platform.common.dto.internal.UserProfileArticleItemDto;
 import com.platform.common.dto.internal.UserProfileArticleStatsDto;
 import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
@@ -24,6 +26,7 @@ import com.platform.enums.ReviewAction;
 import com.platform.exception.BusinessException;
 import com.platform.mapper.ArticleMapper;
 import com.platform.service.ArticleService;
+import com.platform.util.ArticleUtils;
 import com.platform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -82,7 +85,7 @@ public class ArticleServiceImpl implements ArticleService {
     public ArticleDetailResp getArticleDetail(Long articleId, Long currentUserId) {
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
-            throw BusinessException.notFound("文章不存在");
+            throw BusinessException.notFound("Article not found");
         }
 
         checkReadPermission(article, currentUserId);
@@ -138,13 +141,13 @@ public class ArticleServiceImpl implements ArticleService {
 
         if (!SUBMITTABLE_STATUSES.contains(article.getStatus())) {
             throw BusinessException.conflict(
-                    "当前状态不允许提交审核，状态为：" + article.getStatus());
+                    "Article status does not allow submission: " + article.getStatus());
         }
 
         String content = getLatestContent(userId, articleId, article.getContent());
         if (content == null || content.length() < MIN_CONTENT_LENGTH) {
             throw BusinessException.badRequest(
-                    "正文内容不足 " + MIN_CONTENT_LENGTH + " 字，请补充后再提交");
+                    "Content must be at least " + MIN_CONTENT_LENGTH + " characters before submit");
         }
 
         if (article.getLastSubmittedAt() != null) {
@@ -153,7 +156,7 @@ public class ArticleServiceImpl implements ArticleService {
             if (LocalDateTime.now().isBefore(cooldownEnd)) {
                 long remainingSeconds = Math.max(1, ChronoUnit.SECONDS.between(LocalDateTime.now(), cooldownEnd));
                 throw BusinessException.tooManyRequests(
-                        "同一文章 30 分钟内只能提交一次审核，请稍后再试",
+                        "This article can only be submitted once every 30 minutes",
                         SubmitCooldownResp.builder()
                                 .nextSubmitAt(cooldownEnd)
                                 .remainingSeconds(remainingSeconds)
@@ -172,6 +175,8 @@ public class ArticleServiceImpl implements ArticleService {
         article.setLastSubmittedAt(now);
         articleMapper.updateById(article);
         redisTemplate.delete(buildDraftKey(userId, articleId));
+
+        syncReviewTaskUpsert(article);
 
         log.info("Submit article for review: articleId={}, userId={}, submitCount={}",
                 articleId, userId, article.getSubmitCount());
@@ -192,11 +197,14 @@ public class ArticleServiceImpl implements ArticleService {
 
         if (article.getStatus() != ArticleStatus.PENDING) {
             throw BusinessException.conflict(
-                    "只有待审核状态的文章才能取消审核，当前状态为：" + article.getStatus());
+                    "Only pending articles can cancel review, current status: " + article.getStatus());
         }
 
+        String taskEventId = buildCancelTaskEventId(article);
         article.setStatus(ArticleStatus.DRAFT);
         articleMapper.updateById(article);
+
+        syncReviewTaskRemove(articleId, taskEventId);
 
         log.info("Cancel article review: articleId={}, userId={}", articleId, userId);
         return Map.of("status", ArticleStatus.DRAFT);
@@ -211,8 +219,7 @@ public class ArticleServiceImpl implements ArticleService {
 
         if (!DELETABLE_STATUSES.contains(article.getStatus())) {
             throw BusinessException.conflict(
-                    "当前状态不允许删除，状态为：" + article.getStatus()
-                            + "，仅 DRAFT / RETURNED / REJECTED 状态可删除");
+                    "Article status does not allow delete: " + article.getStatus());
         }
 
         articleMapper.deleteById(articleId);
@@ -225,13 +232,14 @@ public class ArticleServiceImpl implements ArticleService {
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> adminDeleteArticle(Long articleId, Long adminId) {
         if (!SecurityUtils.isAdmin()) {
-            throw BusinessException.forbidden("无权执行管理员删除操作");
+            throw BusinessException.forbidden("Access denied");
         }
 
         Article article = getArticleByIdForWrite(articleId);
 
         if (!ADMIN_DELETABLE_STATUSES.contains(article.getStatus())) {
-            throw BusinessException.conflict("当前状态不允许管理员删除，状态为：" + article.getStatus());
+            throw BusinessException.conflict(
+                    "Article status does not allow admin delete: " + article.getStatus());
         }
 
         articleMapper.deleteById(articleId);
@@ -264,14 +272,15 @@ public class ArticleServiceImpl implements ArticleService {
     public void applyReviewResult(Long articleId, ApplyReviewResultReq req) {
         Article article = getArticleByIdForWrite(articleId);
         if (article.getStatus() != ArticleStatus.PENDING) {
-            throw BusinessException.conflict("当前状态不允许应用审核结果，状态为：" + article.getStatus());
+            throw BusinessException.conflict(
+                    "Article status does not allow applying a review result: " + article.getStatus());
         }
 
         ArticleStatus toStatus = switch (req.getAction()) {
             case APPROVE -> ArticleStatus.APPROVED;
             case RETURN -> ArticleStatus.RETURNED;
             case REJECT -> ArticleStatus.REJECTED;
-            default -> throw BusinessException.badRequest("不支持的审核动作");
+            default -> throw BusinessException.badRequest("Unsupported review action");
         };
 
         article.setStatus(toStatus);
@@ -284,7 +293,7 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public UserProfileArticlesResp getUserProfileArticles(UserProfileArticlesQueryReq req) {
         if (req == null || req.getAuthorId() == null) {
-            throw BusinessException.badRequest("authorId 涓嶈兘涓虹┖");
+            throw BusinessException.badRequest("authorId is required");
         }
 
         int page = req.getPage() <= 0 ? 1 : req.getPage();
@@ -317,7 +326,7 @@ public class ArticleServiceImpl implements ArticleService {
                         .title(article.getTitle())
                         .summary(article.getSummary())
                         .previewText(article.getContent() == null ? null
-                                : com.platform.util.ArticleUtils.extractPreviewText(article.getContent(), 120))
+                                : ArticleUtils.extractPreviewText(article.getContent(), 120))
                         .coverUrl(article.getCoverUrl())
                         .coverColor(article.getCoverColor())
                         .readMinutes(article.getReadMinutes())
@@ -350,28 +359,27 @@ public class ArticleServiceImpl implements ArticleService {
                 && currentUserId.equals(article.getAuthorId());
 
         if (article.getStatus() == ArticleStatus.PENDING) {
-            boolean isAdmin = SecurityUtils.isAdmin();
-            if (!isAuthor && !isAdmin) {
-                throw BusinessException.notFound("文章不存在");
+            if (!isAuthor && !SecurityUtils.isAdmin()) {
+                throw BusinessException.notFound("Article not found");
             }
             return;
         }
 
         if (!isAuthor) {
-            throw BusinessException.notFound("文章不存在");
+            throw BusinessException.notFound("Article not found");
         }
     }
 
     private void checkOwnership(Article article, Long userId) {
         if (!userId.equals(article.getAuthorId())) {
-            throw BusinessException.forbidden("无权操作他人的文章");
+            throw BusinessException.forbidden("Access denied");
         }
     }
 
     private Article getArticleByIdForWrite(Long articleId) {
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
-            throw BusinessException.notFound("文章不存在");
+            throw BusinessException.notFound("Article not found");
         }
         return article;
     }
@@ -384,6 +392,37 @@ public class ArticleServiceImpl implements ArticleService {
     private String getLatestReviewReason(Long articleId) {
         LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(articleId));
         return dto != null ? dto.getReason() : null;
+    }
+
+    private void syncReviewTaskUpsert(Article article) {
+        ResultUtils.requireOk(reviewInternalClient.upsertTask(ReviewTaskUpsertReq.builder()
+                .articleId(article.getId())
+                .authorId(article.getAuthorId())
+                .title(article.getTitle())
+                .wordCount(article.getWordCount())
+                .status(article.getStatus())
+                .submitCount(article.getSubmitCount())
+                .submittedAt(article.getLastSubmittedAt())
+                .lastEventId(buildSubmitTaskEventId(article))
+                .build()));
+    }
+
+    private void syncReviewTaskRemove(Long articleId, String lastEventId) {
+        ResultUtils.requireOk(reviewInternalClient.removeTask(ReviewTaskRemoveReq.builder()
+                .articleId(articleId)
+                .lastEventId(lastEventId)
+                .build()));
+    }
+
+    private String buildSubmitTaskEventId(Article article) {
+        return "submit-sync:" + article.getId() + ":" + article.getSubmitCount();
+    }
+
+    private String buildCancelTaskEventId(Article article) {
+        String submittedAt = article.getLastSubmittedAt() == null
+                ? "unknown"
+                : article.getLastSubmittedAt().toString();
+        return "cancel-sync:" + article.getId() + ":" + submittedAt;
     }
 
     private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {
@@ -456,9 +495,8 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     private UserSummaryDto fetchUser(Long userId) {
-        BatchUserQueryReq req = new BatchUserQueryReq();
-        req.setUserIds(Collections.singletonList(userId));
-        List<UserSummaryDto> users = ResultUtils.requireOk(authInternalClient.batchUsers(req));
+        List<UserSummaryDto> users = ResultUtils.requireOk(authInternalClient.batchUsers(
+                new BatchUserQueryReq(Collections.singletonList(userId))));
         return users.isEmpty() ? null : users.get(0);
     }
 }

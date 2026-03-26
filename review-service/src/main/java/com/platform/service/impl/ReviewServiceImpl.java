@@ -1,26 +1,27 @@
 package com.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ContentInternalClient;
 import com.platform.common.api.ResultUtils;
+import com.platform.common.context.TraceContextHolder;
 import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.BatchUserQueryReq;
+import com.platform.common.dto.internal.ReviewDecisionPayload;
 import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.dto.req.ReviewActionReq;
 import com.platform.dto.resp.ReviewActionResp;
 import com.platform.dto.resp.ReviewListItemResp;
 import com.platform.dto.resp.ReviewLogResp;
-import com.platform.entity.Article;
 import com.platform.entity.ReviewLog;
+import com.platform.entity.ReviewTask;
 import com.platform.enums.ArticleStatus;
 import com.platform.enums.ReviewAction;
 import com.platform.exception.BusinessException;
-import com.platform.mapper.ArticleMapper;
 import com.platform.mapper.ReviewLogMapper;
+import com.platform.mapper.ReviewTaskMapper;
 import com.platform.service.ReviewService;
 import com.platform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -29,208 +30,203 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * 审核服务实现
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
 
-    private final ArticleMapper articleMapper;
+    private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewLogMapper reviewLogMapper;
     private final AuthInternalClient authInternalClient;
     private final ContentInternalClient contentInternalClient;
 
-    // ==================== 获取待审核列表 ====================
-
     @Override
     public Page<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
-        // 查询 PENDING 且不是当前管理员自己提交的文章
-        IPage<Article> pageResult = articleMapper.selectPage(
+        Page<ReviewTask> pageResult = reviewTaskMapper.selectPage(
                 new Page<>(page, pageSize),
-                new LambdaQueryWrapper<Article>()
-                        .eq(Article::getStatus, ArticleStatus.PENDING)
-                        .ne(Article::getAuthorId, currentAdminId)   // 排除自己提交的文章
-                        .orderByDesc(Article::getLastSubmittedAt)
+                new LambdaQueryWrapper<ReviewTask>()
+                        .eq(ReviewTask::getStatus, ArticleStatus.PENDING)
+                        .ne(currentAdminId != null, ReviewTask::getAuthorId, currentAdminId)
+                        .orderByDesc(ReviewTask::getSubmittedAt, ReviewTask::getArticleId)
         );
 
-        List<Article> articles = pageResult.getRecords();
+        List<ReviewTask> tasks = pageResult.getRecords();
+        Map<Long, UserSummaryDto> userMap = batchFetchUsers(tasks.stream()
+                .map(ReviewTask::getAuthorId)
+                .collect(Collectors.toSet()));
 
-        // 批量查询作者信息
-        Set<Long> authorIds = articles.stream()
-                .map(Article::getAuthorId)
-                .collect(Collectors.toSet());
-        Map<Long, UserSummaryDto> userMap = batchFetchUsers(authorIds);
-
-        // 组装响应列表
-        List<ReviewListItemResp> list = articles.stream()
-                .map(a -> {
-                    UserSummaryDto author = userMap.get(a.getAuthorId());
+        List<ReviewListItemResp> list = tasks.stream()
+                .map(task -> {
+                    UserSummaryDto author = userMap.get(task.getAuthorId());
                     return ReviewListItemResp.builder()
-                            .id(a.getId())
-                            .title(a.getTitle())
-                            .submitCount(a.getSubmitCount())
-                            .submittedAt(a.getLastSubmittedAt())
-                            .wordCount(a.getWordCount())
-                            .author(author != null
-                                    ? ReviewListItemResp.AuthorInfo.builder()
+                            .id(task.getArticleId())
+                            .title(task.getTitle())
+                            .submitCount(task.getSubmitCount())
+                            .submittedAt(task.getSubmittedAt())
+                            .wordCount(task.getWordCount())
+                            .author(author == null ? null : ReviewListItemResp.AuthorInfo.builder()
                                     .id(author.getId())
                                     .username(author.getUsername())
-                                    .build()
-                                    : null)
+                                    .build())
                             .build();
                 })
-                .collect(Collectors.toList());
+                .toList();
 
-        // 手动构造分页结果（MyBatis Plus Page 本身是 IPage 实现，直接复用）
         Page<ReviewListItemResp> result = new Page<>(page, pageSize, pageResult.getTotal());
         result.setRecords(list);
         return result;
     }
 
-    // ==================== 提交审核动作 ====================
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ReviewActionResp doReview(Long articleId, Long currentAdminId, ReviewActionReq req) {
-        // ---- 1. 解析审核动作枚举 ----
-        ReviewAction action;
-        try {
-            action = ReviewAction.valueOf(req.getAction().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw BusinessException.badRequest("无效的审核动作：" + req.getAction()
-                    + "，支持：APPROVE / RETURN / REJECT");
-        }
+        ReviewAction action = parseAction(req.getAction());
+        validateActionRequest(action, req.getReason());
 
-        // ---- 2. 仅允许 APPROVE / RETURN / REJECT（CANCEL 由文章作者操作） ----
-        if (action == ReviewAction.CANCEL) {
-            throw BusinessException.badRequest("CANCEL 操作请调用取消审核接口");
-        }
-
-        // ---- 3. RETURN / REJECT 时 reason 必填 ----
-        if ((action == ReviewAction.RETURN || action == ReviewAction.REJECT)
-                && (req.getReason() == null || req.getReason().isBlank())) {
-            throw BusinessException.badRequest("退回或拒绝时必须填写原因");
-        }
-
-        // ---- 4. 查询文章（加锁兜底，防止两个管理员并发审核） ----
         ArticleReviewSnapshotDto snapshot = ResultUtils.requireOk(contentInternalClient.reviewSnapshot(articleId));
         if (snapshot == null) {
-            throw BusinessException.notFound("文章不存在");
+            throw BusinessException.notFound("Article not found");
         }
-
-        // ---- 5. 校验文章仍为 PENDING（并发保护） ----
         if (snapshot.getStatus() != ArticleStatus.PENDING) {
             throw BusinessException.conflict(
-                    "文章当前状态为 " + snapshot.getStatus() + "，已不在待审核状态，请刷新后重试");
+                    "Article is no longer pending review: " + snapshot.getStatus());
+        }
+        if (currentAdminId != null && currentAdminId.equals(snapshot.getAuthorId())) {
+            throw BusinessException.forbidden("Administrators cannot review their own article");
         }
 
-        // ---- 6. 管理员不能审核自己提交的文章 ----
-        if (currentAdminId.equals(snapshot.getAuthorId())) {
-            throw BusinessException.forbidden("不能审核自己提交的文章，请由其他管理员操作");
-        }
+        ArticleStatus toStatus = toDecisionStatus(action);
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        ReviewDecisionPayload decision = ReviewDecisionPayload.builder()
+                .articleId(articleId)
+                .adminId(currentAdminId)
+                .action(action)
+                .reason(normalizeReason(req.getReason()))
+                .reviewedAt(reviewedAt)
+                .fromStatus(snapshot.getStatus())
+                .toStatus(toStatus)
+                .traceId(TraceContextHolder.get())
+                .build();
 
-        // ---- 7. 计算目标状态 ----
-        ArticleStatus fromStatus = ArticleStatus.PENDING;
-        ArticleStatus toStatus = switch (action) {
-            case APPROVE -> ArticleStatus.APPROVED;
-            case RETURN  -> ArticleStatus.RETURNED;
-            case REJECT  -> ArticleStatus.REJECTED;
-            default -> throw BusinessException.badRequest("不支持的审核动作");
-        };
+        reviewLogMapper.insert(toReviewLog(decision));
+        reviewTaskMapper.delete(new LambdaQueryWrapper<ReviewTask>()
+                .eq(ReviewTask::getArticleId, articleId));
 
-        LocalDateTime now = LocalDateTime.now();
-        // ---- 8. 写入审核日志 ----
-        ReviewLog reviewLog = new ReviewLog();
-        reviewLog.setArticleId(articleId);
-        reviewLog.setOperatorId(currentAdminId);
-        reviewLog.setAction(action);
-        reviewLog.setFromStatus(fromStatus);
-        reviewLog.setToStatus(toStatus);
-        reviewLog.setReason(req.getReason());
-        reviewLogMapper.insert(reviewLog);
+        ResultUtils.requireOk(contentInternalClient.applyReviewResult(articleId, new ApplyReviewResultReq(
+                decision.getAdminId(),
+                decision.getAction(),
+                decision.getReason()
+        )));
 
-        ApplyReviewResultReq applyReq = new ApplyReviewResultReq();
-        applyReq.setAdminId(currentAdminId);
-        applyReq.setAction(action);
-        applyReq.setReason(req.getReason());
-        ResultUtils.requireOk(contentInternalClient.applyReviewResult(articleId, applyReq));
-
-        log.info("审核完成: articleId={}, adminId={}, action={}, toStatus={}",
-                articleId, currentAdminId, action, toStatus);
+        log.info("Review decided: articleId={}, adminId={}, action={}, toStatus={}, traceId={}",
+                articleId, currentAdminId, action, toStatus, decision.getTraceId());
 
         return ReviewActionResp.builder()
                 .status(toStatus)
-                .reviewedAt(now)
+                .reviewedAt(reviewedAt)
                 .build();
     }
 
-    // ==================== 获取审核日志 ====================
-
     @Override
     public List<ReviewLogResp> getReviewLogs(Long articleId, Long currentUserId) {
-        // ---- 1. 查询文章（确认存在） ----
         ArticleReviewSnapshotDto snapshot = ResultUtils.requireOk(contentInternalClient.reviewSnapshot(articleId));
         if (snapshot == null) {
-            throw BusinessException.notFound("文章不存在");
+            throw BusinessException.notFound("Article not found");
         }
 
-        // ---- 2. 权限校验：管理员可查所有，普通用户只能查自己的文章 ----
         boolean isAdmin = SecurityUtils.isAdmin();
         boolean isAuthor = currentUserId != null && currentUserId.equals(snapshot.getAuthorId());
         if (!isAdmin && !isAuthor) {
-            throw BusinessException.forbidden("无权查看该文章的审核记录");
+            throw BusinessException.forbidden("Access denied");
         }
 
-        // ---- 3. 查询日志列表（按时间升序，方便前端展示审核历史时间轴） ----
-        List<ReviewLog> logs = reviewLogMapper.selectList(
-                new LambdaQueryWrapper<ReviewLog>()
-                        .eq(ReviewLog::getArticleId, articleId)
-                        .orderByAsc(ReviewLog::getCreatedAt)
-        );
-
+        List<ReviewLog> logs = reviewLogMapper.selectList(new LambdaQueryWrapper<ReviewLog>()
+                .eq(ReviewLog::getArticleId, articleId)
+                .orderByAsc(ReviewLog::getCreatedAt));
         if (logs.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // ---- 4. 批量查询操作人信息 ----
-        Set<Long> operatorIds = logs.stream()
+        Map<Long, UserSummaryDto> userMap = batchFetchUsers(logs.stream()
                 .map(ReviewLog::getOperatorId)
-                .collect(Collectors.toSet());
-        Map<Long, UserSummaryDto> userMap = batchFetchUsers(operatorIds);
+                .collect(Collectors.toSet()));
 
-        // ---- 5. 组装响应 ----
         return logs.stream()
-                .map(l -> {
-                    UserSummaryDto operator = userMap.get(l.getOperatorId());
+                .map(log -> {
+                    UserSummaryDto operator = userMap.get(log.getOperatorId());
                     return ReviewLogResp.builder()
-                            .action(l.getAction())
-                            .fromStatus(l.getFromStatus())
-                            .toStatus(l.getToStatus())
-                            .reason(l.getReason())
-                            .operator(operator != null
-                                    ? ReviewLogResp.OperatorInfo.builder()
+                            .action(log.getAction())
+                            .fromStatus(log.getFromStatus())
+                            .toStatus(log.getToStatus())
+                            .reason(log.getReason())
+                            .operator(operator == null ? null : ReviewLogResp.OperatorInfo.builder()
                                     .id(operator.getId())
                                     .username(operator.getUsername())
-                                    .build()
-                                    : null)
-                            .createdAt(l.getCreatedAt())
+                                    .build())
+                            .createdAt(log.getCreatedAt())
                             .build();
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    // ==================== 私有辅助方法 ====================
+    private ReviewAction parseAction(String actionValue) {
+        try {
+            return ReviewAction.valueOf(actionValue.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw BusinessException.badRequest("Unsupported review action: " + actionValue);
+        }
+    }
+
+    private void validateActionRequest(ReviewAction action, String reason) {
+        if (action == ReviewAction.CANCEL) {
+            throw BusinessException.badRequest("CANCEL is owned by the article cancel-review flow");
+        }
+        if ((action == ReviewAction.RETURN || action == ReviewAction.REJECT)
+                && (reason == null || reason.isBlank())) {
+            throw BusinessException.badRequest("Reason is required for RETURN and REJECT");
+        }
+    }
+
+    private ArticleStatus toDecisionStatus(ReviewAction action) {
+        return switch (action) {
+            case APPROVE -> ArticleStatus.APPROVED;
+            case RETURN -> ArticleStatus.RETURNED;
+            case REJECT -> ArticleStatus.REJECTED;
+            default -> throw BusinessException.badRequest("Unsupported review action");
+        };
+    }
+
+    private ReviewLog toReviewLog(ReviewDecisionPayload decision) {
+        ReviewLog reviewLog = new ReviewLog();
+        reviewLog.setArticleId(decision.getArticleId());
+        reviewLog.setOperatorId(decision.getAdminId());
+        reviewLog.setAction(decision.getAction());
+        reviewLog.setFromStatus(decision.getFromStatus());
+        reviewLog.setToStatus(decision.getToStatus());
+        reviewLog.setReason(decision.getReason());
+        return reviewLog;
+    }
+
+    private String normalizeReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        String trimmed = reason.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
 
     private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> ids) {
-        if (ids.isEmpty()) return Collections.emptyMap();
-        BatchUserQueryReq req = new BatchUserQueryReq();
-        req.setUserIds(ids.stream().toList());
-        return ResultUtils.requireOk(authInternalClient.batchUsers(req)).stream()
-                .collect(Collectors.toMap(UserSummaryDto::getId, u -> u));
+        if (ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(ids.stream().toList())))
+                .stream()
+                .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
     }
 }

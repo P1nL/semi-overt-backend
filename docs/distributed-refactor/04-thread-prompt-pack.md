@@ -429,6 +429,42 @@
   - 搜索或通知改造后，公开文章详情和公开主页的身份感知行为保持不变
   - 若引入取消审核补日志链路，`CANCEL` 留痕最终落在 `review-service`，且文章状态仍只由 `content-service` 写
 
+### 6.2 已落地审核域事实
+- `review-service` 已不再本地直连 `articles`；原审核服务内的 `Article` 实体、`ArticleMapper`、`ArticleMapper.xml` 已移除。
+- `review-service` 当前已收口为只负责：
+  - `review_logs`
+  - `review_tasks`
+- `GET /api/v1/reviews/pending` 已改为只查 `review_tasks`，排序固定为 `submitted_at DESC, article_id DESC`，并继续排除管理员审核自己提交的文章。
+- `review_tasks` 当前字段语义已固定包含：
+  - `article_id`
+  - `author_id`
+  - `title`
+  - `word_count`
+  - `status`
+  - `submit_count`
+  - `submitted_at`
+  - `last_event_id`
+- 在 MQ / outbox 尚未落地前，`content-service` 已通过同步内部接口维护审核任务投影：
+  - `POST /internal/reviews/tasks/upsert`
+  - `POST /internal/reviews/tasks/remove`
+- 当前同步审核链路已实际落地为：
+  - 提审成功后，`content-service` 同步 upsert `review_tasks`
+  - 取消审核成功后，`content-service` 同步 remove `review_tasks`
+  - 管理员审核时，`review-service` 先写 `review_logs`、删 `review_tasks`，再同步调用 `POST /internal/articles/{id}/apply-review-result`
+- 公共层已新增 `ReviewDecisionPayload`，字段固定为：
+  - `articleId`
+  - `adminId`
+  - `action`
+  - `reason`
+  - `reviewedAt`
+  - `fromStatus`
+  - `toStatus`
+  - `traceId`
+- 后续事件线程若落地 `ReviewDecidedEvent`，应优先复用 `ReviewDecisionPayload` 的字段语义，不要再定义另一套审核决定载荷。
+- `GET /internal/reviews/articles/{id}/latest` 仍然只从 `review_logs` 中查询最新 `RETURN/REJECT` 原因；后续改造不得让它依赖 `review_tasks`、通知、搜索或其他派生表。
+- `CANCEL` 留痕目前仍未恢复，且同步链路没有新增补日志接口；这件事已固定留给后续事件线程通过 `ArticleStatusChangedEvent(PENDING -> DRAFT)` 异步补写到 `review-service`。
+- 对外鉴权失败语义已实际改为真实 HTTP `401/403`；后续线程不得再退回到 HTTP `200 + code` 的兼容包装模式。
+
 ## 7. 交付与运维线程提示词
 ```text
 你现在负责这个项目的“交付与运维线程”，目标是让分布式改造后的项目具备本地演示、联调、运行说明和基础可观测性，而不是只停留在服务拆分层面。
