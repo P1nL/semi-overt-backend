@@ -75,6 +75,7 @@ $composeArgs = @("compose", "down")
 if ($RemoveVolumes) {
     $composeArgs += "-v"
 }
+$composeArgs += "--remove-orphans"
 
 Write-Step ("Stopping Docker middleware" + ($(if ($RemoveVolumes) { " and removing volumes" } else { "" })))
 
@@ -83,6 +84,11 @@ try {
     docker @composeArgs
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose down failed with exit code $LASTEXITCODE"
+    }
+
+    docker compose --profile ops-ui down --remove-orphans
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose --profile ops-ui down failed with exit code $LASTEXITCODE"
     }
 }
 finally {

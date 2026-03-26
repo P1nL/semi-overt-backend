@@ -61,9 +61,23 @@ jwt:
 platform:
   reset-pwd-token-ttl-minutes: ${RESET_PWD_TOKEN_TTL_MINUTES:15}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  feign:
+    connect-timeout-ms: ${FEIGN_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${FEIGN_READ_TIMEOUT_MS:5000}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    mail:
+      enabled: false

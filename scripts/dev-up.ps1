@@ -1,16 +1,20 @@
 # Local Windows development launcher. Not intended for Linux/cloud deployment.
 param(
     [string]$RunProfile = "local",
+    [ValidateSet("stable", "fast")]
+    [string]$StartupMode = "stable",
     [string[]]$Services = @(
         "auth-service",
         "content-service",
         "review-service",
         "search-service",
-        "file-service",
         "notification-service",
+        "file-service",
         "gateway-service"
     ),
-    [switch]$SkipDocker
+    [switch]$SkipDocker,
+    [switch]$ForceRebuildCommon,
+    [switch]$RestartServices
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +37,15 @@ function Write-Step {
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
 
+function Write-StageTiming {
+    param(
+        [string]$Name,
+        [double]$Seconds
+    )
+
+    Write-Host ("    {0}: {1:N2}s" -f $Name, $Seconds) -ForegroundColor DarkGray
+}
+
 $servicePorts = @{
     "gateway-service" = 8080
     "auth-service" = 8081
@@ -42,6 +55,14 @@ $servicePorts = @{
     "file-service" = 8085
     "notification-service" = 8086
 }
+
+$infrastructureServices = @(
+    @{ Name = "mysql"; Port = 3306 },
+    @{ Name = "redis"; Port = 6379 },
+    @{ Name = "nacos"; Port = 8848 },
+    @{ Name = "rabbitmq"; Port = 5672 },
+    @{ Name = "elasticsearch"; Port = 9200 }
+)
 
 function Get-ListeningPidsForPort {
     param([int]$Port)
@@ -56,6 +77,44 @@ function Get-ListeningPidsForPort {
     }
 
     return $pids | Select-Object -Unique
+}
+
+function Get-PrimaryProcessForPort {
+    param([int]$Port)
+
+    $portPid = @(Get-ListeningPidsForPort -Port $Port) | Select-Object -First 1
+    if ($null -eq $portPid) {
+        return $null
+    }
+
+    return Get-Process -Id $portPid -ErrorAction SilentlyContinue
+}
+
+function Get-PrimaryListeningPidForService {
+    param([string]$Service)
+
+    if (-not $servicePorts.ContainsKey($Service)) {
+        return $null
+    }
+
+    return @(Get-ListeningPidsForPort -Port $servicePorts[$Service]) | Select-Object -First 1
+}
+
+function Wait-ForProcessExit {
+    param(
+        [int]$ProcessId,
+        [int]$TimeoutSeconds = 10
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if (-not $process) {
+            return
+        }
+
+        Start-Sleep -Milliseconds 300
+    }
 }
 
 function Stop-ServiceProcesses {
@@ -73,6 +132,7 @@ function Stop-ServiceProcesses {
             if ($process) {
                 Write-Step "Stopping stale $Service launcher (PID $pidValue)"
                 Stop-Process -Id $pidValue -Force -ErrorAction SilentlyContinue
+                Wait-ForProcessExit -ProcessId ([int]$pidValue)
                 $stoppedPids += [int]$pidValue
             }
         }
@@ -90,25 +150,301 @@ function Stop-ServiceProcesses {
             if ($portProcess) {
                 Write-Step "Stopping orphan $Service process on port $($servicePorts[$Service]) (PID $portPid)"
                 Stop-Process -Id $portPid -Force -ErrorAction SilentlyContinue
+                Wait-ForProcessExit -ProcessId $portPid
             }
         }
     }
 }
 
 function Reset-LogFile {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [int]$RetryCount = 40
+    )
 
     if (-not (Test-Path $Path)) {
         return
     }
 
+    for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
+        try {
+            Remove-Item $Path -Force
+            return
+        }
+        catch {
+            try {
+                $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+                $rotatedPath = "$Path.$timestamp.$attempt"
+                Move-Item $Path $rotatedPath -Force
+                return
+            }
+            catch {
+                if ($attempt -eq $RetryCount) {
+                    throw "Cannot reset log file $Path because it is still in use by another process."
+                }
+
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    }
+}
+
+function Invoke-HttpGet {
+    param([string]$Uri)
+
+    return Invoke-WebRequest -Uri $Uri -Method Get -TimeoutSec 5
+}
+
+function Test-ServiceHealthEndpoint {
+    param([int]$Port)
+
     try {
-        Remove-Item $Path -Force
+        $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/actuator/health" -Method Get -TimeoutSec 5
+        return $response.status -eq "UP"
     }
     catch {
-        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-        $rotatedPath = "$Path.$timestamp"
-        Move-Item $Path $rotatedPath -Force
+        return $false
+    }
+}
+
+function Test-ServiceInfoEndpoint {
+    param([int]$Port)
+
+    try {
+        $response = Invoke-HttpGet -Uri "http://127.0.0.1:$Port/actuator/info"
+        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-TcpPortOpen {
+    param(
+        [string]$TargetHost,
+        [int]$Port
+    )
+
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $asyncResult = $client.BeginConnect($TargetHost, $Port, $null, $null)
+        $connected = $asyncResult.AsyncWaitHandle.WaitOne(2000, $false)
+        if (-not $connected) {
+            return $false
+        }
+
+        $client.EndConnect($asyncResult)
+        return $true
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+
+function Wait-ForTcpPort {
+    param(
+        [string]$Name,
+        [string]$TargetHost,
+        [int]$Port,
+        [int]$TimeoutSeconds = 120
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-TcpPortOpen -TargetHost $TargetHost -Port $Port) {
+            Write-Step "$Name is accepting TCP connections on ${TargetHost}:$Port"
+            return
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    throw "$Name did not open TCP port ${TargetHost}:$Port within $TimeoutSeconds seconds"
+}
+
+function Wait-ForServiceReadiness {
+    param(
+        [string]$Service,
+        [int]$Port,
+        [int]$TimeoutSeconds = 180,
+        $Process = $null,
+        [string]$StdoutLog = "",
+        [string]$StderrLog = ""
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $healthReady = $false
+    $infoReady = $false
+
+    while ((Get-Date) -lt $deadline) {
+        $listening = (@(Get-ListeningPidsForPort -Port $Port)).Count -gt 0
+        if ($listening) {
+            $healthReady = Test-ServiceHealthEndpoint -Port $Port
+            $infoReady = Test-ServiceInfoEndpoint -Port $Port
+            if ($healthReady -and $infoReady) {
+                Write-Step "$Service is ready on port $Port"
+                return
+            }
+        }
+
+        if ($Process -and -not $listening) {
+            try {
+                $Process.Refresh()
+            }
+            catch {
+                # Ignore launcher process state. The actual Java service may outlive the wrapper.
+            }
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    $missingChecks = @()
+    if (-not ((@(Get-ListeningPidsForPort -Port $Port)).Count -gt 0)) {
+        $missingChecks += "port $Port is not listening"
+    }
+    if (-not $healthReady) {
+        $missingChecks += "/actuator/health is not UP"
+    }
+    if (-not $infoReady) {
+        $missingChecks += "/actuator/info is not reachable"
+    }
+
+    throw "$Service did not become ready within $TimeoutSeconds seconds: $($missingChecks -join '; ')"
+}
+
+function Get-DockerServiceContainerId {
+    param(
+        [string]$RepoRoot,
+        [string]$Service
+    )
+
+    Push-Location $RepoRoot
+    try {
+        $output = docker compose ps -q $Service
+        if ($null -eq $output) {
+            return ""
+        }
+
+        return ($output | Out-String).Trim()
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Get-DockerServiceHealth {
+    param([string]$ContainerId)
+
+    if ([string]::IsNullOrWhiteSpace($ContainerId)) {
+        return ""
+    }
+
+    return (docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" $ContainerId).Trim()
+}
+
+function Get-DockerServiceLogs {
+    param(
+        [string]$RepoRoot,
+        [string]$Service,
+        [int]$Tail = 20
+    )
+
+    Push-Location $RepoRoot
+    try {
+        $output = docker compose logs --tail $Tail $Service 2>&1
+        if ($null -eq $output) {
+            return ""
+        }
+
+        return ($output | Out-String).Trim()
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Get-InfrastructureRecoveryHint {
+    param(
+        [string]$Service,
+        [string]$Logs
+    )
+
+    if ($Service -eq "redis" -and $Logs -match "Can't handle RDB format version") {
+        return "Redis volume contains data created by a newer Redis version. For this local demo stack, remove the Redis container and volume, then retry. Example: docker compose rm -sf redis; docker volume rm now-demo_redis-data"
+    }
+
+    return ""
+}
+
+function Wait-ForDockerServiceHealth {
+    param(
+        [string]$RepoRoot,
+        [string]$Service,
+        [int]$TimeoutSeconds = 180
+    )
+
+    Write-Step "Waiting for infrastructure service $Service"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    while ((Get-Date) -lt $deadline) {
+        $containerId = Get-DockerServiceContainerId -RepoRoot $RepoRoot -Service $Service
+        $health = Get-DockerServiceHealth -ContainerId $containerId
+
+        if ($health -eq "healthy" -or $health -eq "running") {
+            return
+        }
+        if ($health -eq "unhealthy" -or $health -eq "exited" -or $health -eq "dead") {
+            $logs = Get-DockerServiceLogs -RepoRoot $RepoRoot -Service $Service
+            $hint = Get-InfrastructureRecoveryHint -Service $Service -Logs $logs
+            if (-not [string]::IsNullOrWhiteSpace($logs)) {
+                if (-not [string]::IsNullOrWhiteSpace($hint)) {
+                    throw "Infrastructure service $Service is $health.`nRecovery hint: $hint`nRecent logs:`n$logs"
+                }
+
+                throw "Infrastructure service $Service is $health.`nRecent logs:`n$logs"
+            }
+
+            throw "Infrastructure service $Service is $health"
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    throw "Infrastructure service $Service did not become healthy within $TimeoutSeconds seconds"
+}
+
+function Assert-InfrastructurePortsAvailable {
+    param([string]$RepoRoot)
+
+    foreach ($infraService in $infrastructureServices) {
+        $containerId = Get-DockerServiceContainerId -RepoRoot $RepoRoot -Service $infraService.Name
+        if (-not [string]::IsNullOrWhiteSpace($containerId)) {
+            continue
+        }
+
+        $portProcess = Get-PrimaryProcessForPort -Port $infraService.Port
+        if ($null -eq $portProcess) {
+            continue
+        }
+
+        $path = ""
+        try {
+            $path = $portProcess.Path
+        }
+        catch {
+            $path = ""
+        }
+
+        $details = "Infrastructure port $($infraService.Port) for $($infraService.Name) is already in use by PID $($portProcess.Id) ($($portProcess.ProcessName))"
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            $details += " at $path"
+        }
+
+        throw "$details. Stop the conflicting process or free the port before running dev-up."
     }
 }
 
@@ -117,8 +453,8 @@ function Resolve-MavenCommand {
 
     $candidates = @(
         $env:MAVEN_CMD,
-        (Join-Path $RepoRoot ".cache\maven\apache-maven-3.9.12\bin\mvn.cmd"),
         "mvn.cmd",
+        (Join-Path $RepoRoot ".cache\maven\apache-maven-3.9.12\bin\mvn.cmd"),
         (Join-Path $RepoRoot "mvnw.cmd")
     ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
@@ -280,91 +616,182 @@ function ConvertTo-SingleQuotedPowerShellLiteral {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$composePath = Join-Path $repoRoot "docker-compose.yml"
-$runtimeRoot = Join-Path $repoRoot ".codex-runtime"
-$pidRoot = Join-Path $runtimeRoot "pids"
-$logRoot = Join-Path $runtimeRoot "logs"
+function Get-RepoRelativePath {
+    param(
+        [string]$BasePath,
+        [string]$Path
+    )
 
-New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
-New-Item -ItemType Directory -Force -Path $pidRoot | Out-Null
-New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+    $baseUri = [System.Uri](([System.IO.Path]::GetFullPath($BasePath).TrimEnd('\') + '\'))
+    $pathUri = [System.Uri]([System.IO.Path]::GetFullPath($Path))
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
+}
 
-$mavenRuntimeConfig = Ensure-MavenRuntimeConfig -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot
-$mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
-$mavenCommonArguments = @(Get-MavenCommonArguments `
-    -SettingsPath $mavenRuntimeConfig.SettingsPath `
-    -RepoLocal $mavenRuntimeConfig.RepoLocal)
+function Get-TextSha256 {
+    param([string]$Text)
 
-Write-Step "Using Maven command: $mavenCommand"
-Write-Step "Using Maven settings: $($mavenRuntimeConfig.SettingsPath)"
-Write-Step "Using Maven local repository: $($mavenRuntimeConfig.RepoLocal)"
-
-if (-not $SkipDocker) {
-    if (-not (Test-Path $composePath)) {
-        throw "Cannot find docker-compose.yml at $composePath"
-    }
-
-    Write-Step "Starting Docker middleware from docker-compose.yml"
-    Push-Location $repoRoot
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        docker compose up -d
-        if ($LASTEXITCODE -ne 0) {
-            throw "docker compose up -d failed with exit code $LASTEXITCODE"
-        }
+        $hashBytes = $sha256.ComputeHash($bytes)
+        return ([System.BitConverter]::ToString($hashBytes)).Replace("-", "")
     }
     finally {
-        Pop-Location
+        $sha256.Dispose()
     }
 }
-else {
-    Write-Step "Skipping Docker startup"
-}
 
-Write-Step "Installing parent POM and common module into local Maven repository"
-Invoke-Maven -MavenCommand $mavenCommand `
-    -Arguments ($mavenCommonArguments + @("-N", "install")) `
-    -WorkingDirectory $repoRoot
-Invoke-Maven -MavenCommand $mavenCommand `
-    -Arguments ($mavenCommonArguments + @("-f", (Join-Path $repoRoot "common\pom.xml"), "install", "-DskipTests")) `
-    -WorkingDirectory $repoRoot
+function Get-CommonBuildFingerprint {
+    param([string]$RepoRoot)
 
-foreach ($service in $Services) {
-    $moduleDir = Join-Path $repoRoot $service
-    if (-not (Test-Path $moduleDir)) {
-        throw "Cannot find module directory: $moduleDir"
+    $paths = New-Object System.Collections.Generic.List[string]
+    $paths.Add((Join-Path $RepoRoot "pom.xml"))
+    $paths.Add((Join-Path $RepoRoot "common\pom.xml"))
+
+    $commonMainPath = Join-Path $RepoRoot "common\src\main"
+    if (Test-Path $commonMainPath) {
+        Get-ChildItem -Path $commonMainPath -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object { $paths.Add($_.FullName) }
     }
 
-    $pidFile = Join-Path $pidRoot "$service.pid"
-    if (Test-Path $pidFile) {
-        $existingPid = Get-Content $pidFile -ErrorAction SilentlyContinue
-        if ($existingPid) {
-            $existingProcess = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
-            $listeningPids = if ($servicePorts.ContainsKey($service)) {
-                @(Get-ListeningPidsForPort -Port $servicePorts[$service])
-            }
-            else {
-                @()
-            }
-
-            if ($existingProcess -and (@($listeningPids)).Count -gt 0) {
-                Write-Step "$service is already running with PID $existingPid"
-                continue
-            }
+    $builder = New-Object System.Text.StringBuilder
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $relativePath = Get-RepoRelativePath -BasePath $RepoRoot -Path $path
+            $hash = (Get-FileHash -Path $path -Algorithm SHA256).Hash
+            [void]$builder.AppendLine("$relativePath|$hash")
+        }
+        else {
+            [void]$builder.AppendLine("MISSING|$path")
         }
     }
 
-    Stop-ServiceProcesses -Service $service -PidFile $pidFile
+    return Get-TextSha256 -Text $builder.ToString()
+}
 
-    $stdoutLog = Join-Path $logRoot "$service.out.log"
-    $stderrLog = Join-Path $logRoot "$service.err.log"
+function Get-LauncherState {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return @{}
+    }
+
+    try {
+        $raw = Get-Content -Path $Path -Raw -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            return @{}
+        }
+
+        return ($raw | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        return @{}
+    }
+}
+
+function Save-LauncherState {
+    param(
+        [string]$Path,
+        [string]$CommonBuildFingerprint
+    )
+
+    $state = [ordered]@{
+        commonBuildFingerprint = $CommonBuildFingerprint
+        updatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+
+    $state | ConvertTo-Json | Set-Content -Path $Path -Encoding UTF8
+}
+
+function Get-LauncherStateValue {
+    param(
+        $State,
+        [string]$PropertyName
+    )
+
+    if ($null -eq $State) {
+        return $null
+    }
+
+    if ($State -is [System.Collections.IDictionary]) {
+        if ($State.Contains($PropertyName)) {
+            return $State[$PropertyName]
+        }
+
+        return $null
+    }
+
+    $property = $State.PSObject.Properties[$PropertyName]
+    if ($null -ne $property) {
+        return $property.Value
+    }
+
+    return $null
+}
+
+function Test-MavenArtifactsInstalled {
+    param([string]$RepoLocal)
+
+    $parentPom = Join-Path $RepoLocal "com\platform\now-demo-parent\1.0.0\now-demo-parent-1.0.0.pom"
+    $commonPom = Join-Path $RepoLocal "com\platform\common\1.0.0\common-1.0.0.pom"
+    $commonJar = Join-Path $RepoLocal "com\platform\common\1.0.0\common-1.0.0.jar"
+
+    return @{
+        ParentPom = (Test-Path $parentPom)
+        CommonPom = (Test-Path $commonPom)
+        CommonJar = (Test-Path $commonJar)
+    }
+}
+
+function Get-ServiceCurrentState {
+    param([string]$Service)
+
+    $port = $servicePorts[$Service]
+    $listeningPids = @(Get-ListeningPidsForPort -Port $port)
+    $listening = $listeningPids.Count -gt 0
+
+    $healthReady = $false
+    $infoReady = $false
+    if ($listening) {
+        $healthReady = Test-ServiceHealthEndpoint -Port $port
+        $infoReady = Test-ServiceInfoEndpoint -Port $port
+    }
+
+    return @{
+        Listening = $listening
+        ListeningPids = $listeningPids
+        ActivePid = ($listeningPids | Select-Object -First 1)
+        HealthReady = $healthReady
+        InfoReady = $infoReady
+        Ready = ($listening -and $healthReady -and $infoReady)
+    }
+}
+
+function Start-ServiceLaunch {
+    param(
+        [string]$Service,
+        [string]$RepoRoot,
+        [string]$LogRoot,
+        [string]$PidRoot,
+        [string]$MavenCommand,
+        [string[]]$MavenCommonArguments,
+        [string]$RunProfile
+    )
+
+    $pidFile = Join-Path $PidRoot "$Service.pid"
+    Stop-ServiceProcesses -Service $Service -PidFile $pidFile
+    Start-Sleep -Seconds 1
+
+    $stdoutLog = Join-Path $LogRoot "$Service.out.log"
+    $stderrLog = Join-Path $LogRoot "$Service.err.log"
     Reset-LogFile -Path $stdoutLog
     Reset-LogFile -Path $stderrLog
 
-    $command = Get-ServiceCommand -MavenCommand $mavenCommand -RepoRoot $repoRoot -Service $service -RunProfile $RunProfile
-    Write-Step "Starting $service"
+    $command = Get-ServiceCommand -MavenCommand $MavenCommand -RepoRoot $RepoRoot -Service $Service -RunProfile $RunProfile
+    Write-Step "Starting $Service"
 
-    $serviceArguments = $mavenCommonArguments + @(
+    $serviceArguments = $MavenCommonArguments + @(
         "-f",
         $command.ModulePom,
         "spring-boot:run",
@@ -377,15 +804,413 @@ foreach ($service in $Services) {
 
     $process = Start-Process -FilePath "powershell.exe" `
         -ArgumentList "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $encodedScript `
-        -WorkingDirectory $repoRoot `
+        -WorkingDirectory $RepoRoot `
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `
         -PassThru
 
     Set-Content -Path $pidFile -Value $process.Id -NoNewline
+
+    return @{
+        Process = $process
+        PidFile = $pidFile
+        StdoutLog = $stdoutLog
+        StderrLog = $stderrLog
+    }
 }
+
+function New-ServiceResult {
+    param(
+        [string]$Service,
+        [string]$Action,
+        [double]$Seconds
+    )
+
+    return [pscustomobject]@{
+        Service = $Service
+        Action = $Action
+        Seconds = [math]::Round($Seconds, 2)
+    }
+}
+
+function Invoke-ServiceStartupPass {
+    param(
+        [string[]]$TargetServices,
+        [string]$RepoRoot,
+        [string]$LogRoot,
+        [string]$PidRoot,
+        [string]$MavenCommand,
+        [string[]]$MavenCommonArguments,
+        [string]$RunProfile,
+        [hashtable]$ForcedRestartReasons,
+        [bool]$AllowParallelBatch,
+        [System.Collections.Generic.List[object]]$ServiceResults,
+        [System.Collections.Generic.List[string]]$ReusedServices,
+        [System.Collections.Generic.List[string]]$RestartedServices
+    )
+
+    $batchWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $pending = New-Object System.Collections.Generic.List[object]
+
+    foreach ($service in $TargetServices) {
+        $serviceWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $pidFile = Join-Path $PidRoot "$service.pid"
+        $forceRestart = $ForcedRestartReasons.ContainsKey($service)
+        $reuseAllowed = -not $forceRestart
+
+        if ($reuseAllowed) {
+            $state = Get-ServiceCurrentState -Service $service
+            if ($state.Ready) {
+                Set-Content -Path $pidFile -Value $state.ActivePid -NoNewline
+                Write-Step "$service is already running with PID $($state.ActivePid)"
+                $serviceWatch.Stop()
+                $ServiceResults.Add((New-ServiceResult -Service $service -Action "reused" -Seconds $serviceWatch.Elapsed.TotalSeconds))
+                $ReusedServices.Add($service)
+                continue
+            }
+
+            if ($state.Listening) {
+                Write-Step "$service is listening on port $($servicePorts[$service]) but failed readiness checks and will be restarted"
+            }
+        }
+        else {
+            Write-Step "$service will be restarted: $($ForcedRestartReasons[$service])"
+        }
+
+        $launchInfo = Start-ServiceLaunch `
+            -Service $service `
+            -RepoRoot $RepoRoot `
+            -LogRoot $LogRoot `
+            -PidRoot $PidRoot `
+            -MavenCommand $MavenCommand `
+            -MavenCommonArguments $MavenCommonArguments `
+            -RunProfile $RunProfile
+
+        $pending.Add([pscustomobject]@{
+            Service = $service
+            Watch = $serviceWatch
+            LaunchInfo = $launchInfo
+        })
+
+        if (-not $AllowParallelBatch) {
+            $pendingItem = $pending[0]
+            Wait-ForServiceReadiness `
+                -Service $pendingItem.Service `
+                -Port $servicePorts[$pendingItem.Service] `
+                -Process $pendingItem.LaunchInfo.Process `
+                -StdoutLog $pendingItem.LaunchInfo.StdoutLog `
+                -StderrLog $pendingItem.LaunchInfo.StderrLog
+
+            $activePid = Get-PrimaryListeningPidForService -Service $pendingItem.Service
+            if ($null -ne $activePid) {
+                Set-Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
+            }
+
+            $pendingItem.Watch.Stop()
+            $ServiceResults.Add((New-ServiceResult -Service $pendingItem.Service -Action "restarted" -Seconds $pendingItem.Watch.Elapsed.TotalSeconds))
+            $RestartedServices.Add($pendingItem.Service)
+            $pending.Clear()
+        }
+    }
+
+    if ($AllowParallelBatch) {
+        foreach ($pendingItem in $pending) {
+            Wait-ForServiceReadiness `
+                -Service $pendingItem.Service `
+                -Port $servicePorts[$pendingItem.Service] `
+                -Process $pendingItem.LaunchInfo.Process `
+                -StdoutLog $pendingItem.LaunchInfo.StdoutLog `
+                -StderrLog $pendingItem.LaunchInfo.StderrLog
+
+            $activePid = Get-PrimaryListeningPidForService -Service $pendingItem.Service
+            if ($null -ne $activePid) {
+                Set-Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
+            }
+
+            $pendingItem.Watch.Stop()
+            $ServiceResults.Add((New-ServiceResult -Service $pendingItem.Service -Action "restarted" -Seconds $pendingItem.Watch.Elapsed.TotalSeconds))
+            $RestartedServices.Add($pendingItem.Service)
+        }
+    }
+
+    $batchWatch.Stop()
+    return [math]::Round($batchWatch.Elapsed.TotalSeconds, 2)
+}
+
+function Get-FastModeServiceBatches {
+    param([string[]]$RequestedServices)
+
+    $batches = New-Object System.Collections.Generic.List[object]
+    $groupDefinitions = @(
+        @("auth-service"),
+        @("content-service"),
+        @("review-service", "search-service", "notification-service", "file-service"),
+        @("gateway-service")
+    )
+
+    foreach ($group in $groupDefinitions) {
+        $batchServices = @($group | Where-Object { $RequestedServices -contains $_ })
+        if ($batchServices.Count -gt 0) {
+            $batches.Add([pscustomobject]@{
+                Services = $batchServices
+                Parallel = ($batchServices.Count -gt 1 -and ($group -contains "review-service"))
+            })
+        }
+    }
+
+    $knownServices = $groupDefinitions | ForEach-Object { $_ } | Select-Object -Unique
+    $extraServices = @($RequestedServices | Where-Object { $knownServices -notcontains $_ })
+    if ($extraServices.Count -gt 0) {
+        foreach ($service in $extraServices) {
+            $batches.Add([pscustomobject]@{
+                Services = @($service)
+                Parallel = $false
+            })
+        }
+    }
+
+    return $batches
+}
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$composePath = Join-Path $repoRoot "docker-compose.yml"
+$runtimeRoot = Join-Path $repoRoot ".codex-runtime"
+$pidRoot = Join-Path $runtimeRoot "pids"
+$logRoot = Join-Path $runtimeRoot "logs"
+$statePath = Join-Path $runtimeRoot "dev-up-state.json"
+
+New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $pidRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+
+$mavenRuntimeConfig = Ensure-MavenRuntimeConfig -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot
+$mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
+$mavenCommonArguments = @(Get-MavenCommonArguments `
+    -SettingsPath $mavenRuntimeConfig.SettingsPath `
+    -RepoLocal $mavenRuntimeConfig.RepoLocal)
+$launcherState = Get-LauncherState -Path $statePath
+
+$phaseDurations = [ordered]@{}
+$serviceResults = New-Object System.Collections.Generic.List[object]
+$reusedServices = New-Object System.Collections.Generic.List[string]
+$restartedServices = New-Object System.Collections.Generic.List[string]
+$forcedRestartReasons = @{}
+$rebuiltCommon = $false
+$commonBuildReason = ""
+$fingerprintChanged = $false
+
+Write-Step "Startup mode: $StartupMode"
+Write-Step "Using Maven command: $mavenCommand"
+Write-Step "Using Maven settings: $($mavenRuntimeConfig.SettingsPath)"
+Write-Step "Using Maven local repository: $($mavenRuntimeConfig.RepoLocal)"
+
+if ([System.IO.Path]::GetFileName($mavenCommand).Equals("mvnw.cmd", [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Warning "Falling back to mvnw.cmd. Prefer setting MAVEN_CMD to a real mvn.cmd path for stable Windows startup."
+}
+
+$dockerWatch = [System.Diagnostics.Stopwatch]::StartNew()
+if (-not $SkipDocker) {
+    if (-not (Test-Path $composePath)) {
+        throw "Cannot find docker-compose.yml at $composePath"
+    }
+
+    Assert-InfrastructurePortsAvailable -RepoRoot $repoRoot
+
+    Write-Step "Starting Docker middleware from docker-compose.yml"
+    Push-Location $repoRoot
+    try {
+        docker compose up -d
+        if ($LASTEXITCODE -ne 0) {
+            throw "docker compose up -d failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    foreach ($infraService in $infrastructureServices) {
+        if ($StartupMode -eq "fast") {
+            $containerId = Get-DockerServiceContainerId -RepoRoot $repoRoot -Service $infraService.Name
+            $health = Get-DockerServiceHealth -ContainerId $containerId
+            if ($health -eq "healthy" -or $health -eq "running") {
+                Write-Step "Infrastructure service $($infraService.Name) is already $health"
+                continue
+            }
+        }
+
+        Wait-ForDockerServiceHealth -RepoRoot $repoRoot -Service $infraService.Name
+    }
+
+    if ($StartupMode -eq "fast" -and (Test-TcpPortOpen -TargetHost "127.0.0.1" -Port 8848)) {
+        Write-Step "Nacos HTTP is already accepting TCP connections on 127.0.0.1:8848"
+    }
+    else {
+        Wait-ForTcpPort -Name "Nacos HTTP" -TargetHost "127.0.0.1" -Port 8848 -TimeoutSeconds 120
+    }
+
+    if ($StartupMode -eq "fast" -and (Test-TcpPortOpen -TargetHost "127.0.0.1" -Port 9848)) {
+        Write-Step "Nacos gRPC is already accepting TCP connections on 127.0.0.1:9848"
+    }
+    else {
+        Wait-ForTcpPort -Name "Nacos gRPC" -TargetHost "127.0.0.1" -Port 9848 -TimeoutSeconds 120
+    }
+}
+else {
+    Write-Step "Skipping Docker startup"
+}
+$dockerWatch.Stop()
+$phaseDurations["docker"] = [math]::Round($dockerWatch.Elapsed.TotalSeconds, 2)
+
+$currentFingerprint = Get-CommonBuildFingerprint -RepoRoot $repoRoot
+$installedArtifacts = Test-MavenArtifactsInstalled -RepoLocal $mavenRuntimeConfig.RepoLocal
+$previousFingerprint = Get-LauncherStateValue -State $launcherState -PropertyName "commonBuildFingerprint"
+$fingerprintChanged = ($previousFingerprint -ne $currentFingerprint)
+
+$mavenWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$shouldBuildCommon = $true
+
+if ($StartupMode -eq "fast") {
+    $shouldBuildCommon = $false
+    if ($ForceRebuildCommon) {
+        $shouldBuildCommon = $true
+        $commonBuildReason = "forced by -ForceRebuildCommon"
+    }
+    elseif (-not $installedArtifacts.ParentPom) {
+        $shouldBuildCommon = $true
+        $commonBuildReason = "local Maven repository is missing now-demo-parent"
+    }
+    elseif (-not $installedArtifacts.CommonPom -or -not $installedArtifacts.CommonJar) {
+        $shouldBuildCommon = $true
+        $commonBuildReason = "local Maven repository is missing common artifacts"
+    }
+    elseif ($fingerprintChanged) {
+        $shouldBuildCommon = $true
+        $commonBuildReason = "root/common sources changed"
+    }
+}
+
+if ($shouldBuildCommon) {
+    if ($StartupMode -eq "stable") {
+        Write-Step "Installing parent POM and common module into local Maven repository"
+    }
+    else {
+        Write-Step "Installing parent POM and common module into local Maven repository ($commonBuildReason)"
+    }
+
+    Invoke-Maven -MavenCommand $mavenCommand `
+        -Arguments ($mavenCommonArguments + @("-N", "install")) `
+        -WorkingDirectory $repoRoot
+    Invoke-Maven -MavenCommand $mavenCommand `
+        -Arguments ($mavenCommonArguments + @("-f", (Join-Path $repoRoot "common\pom.xml"), "install", "-DskipTests")) `
+        -WorkingDirectory $repoRoot
+
+    Save-LauncherState -Path $statePath -CommonBuildFingerprint $currentFingerprint
+    $rebuiltCommon = $true
+}
+else {
+    Write-Step "Skipping parent/common install in fast mode (no changes detected)"
+}
+$mavenWatch.Stop()
+$phaseDurations["maven"] = [math]::Round($mavenWatch.Elapsed.TotalSeconds, 2)
+
+if ($RestartServices) {
+    foreach ($service in $Services) {
+        $forcedRestartReasons[$service] = "forced by -RestartServices"
+    }
+}
+elseif ($rebuiltCommon -and $fingerprintChanged) {
+    foreach ($service in $Services) {
+        $forcedRestartReasons[$service] = "common sources changed"
+    }
+}
+
+$servicesWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+if ($StartupMode -eq "stable") {
+    foreach ($service in $Services) {
+        if (-not (Test-Path (Join-Path $repoRoot $service))) {
+            throw "Cannot find module directory: $(Join-Path $repoRoot $service)"
+        }
+
+        Invoke-ServiceStartupPass `
+            -TargetServices @($service) `
+            -RepoRoot $repoRoot `
+            -LogRoot $logRoot `
+            -PidRoot $pidRoot `
+            -MavenCommand $mavenCommand `
+            -MavenCommonArguments $mavenCommonArguments `
+            -RunProfile $RunProfile `
+            -ForcedRestartReasons $forcedRestartReasons `
+            -AllowParallelBatch:$false `
+            -ServiceResults $serviceResults `
+            -ReusedServices $reusedServices `
+            -RestartedServices $restartedServices | Out-Null
+    }
+}
+else {
+    $fastBatches = Get-FastModeServiceBatches -RequestedServices $Services
+    foreach ($batch in $fastBatches) {
+        foreach ($service in $batch.Services) {
+            if (-not (Test-Path (Join-Path $repoRoot $service))) {
+                throw "Cannot find module directory: $(Join-Path $repoRoot $service)"
+            }
+        }
+
+        if (($batch.Services -contains "gateway-service") -and -not $forcedRestartReasons.ContainsKey("gateway-service")) {
+            $nonGatewayRestarted = @($restartedServices | Where-Object { $_ -ne "gateway-service" })
+            if ($nonGatewayRestarted.Count -gt 0) {
+                $forcedRestartReasons["gateway-service"] = "downstream services restarted in fast mode"
+            }
+        }
+
+        $batchName = ($batch.Services -join ", ")
+        if ($batch.Parallel) {
+            Write-Step "Fast mode batch start: $batchName"
+        }
+
+        $batchSeconds = Invoke-ServiceStartupPass `
+            -TargetServices $batch.Services `
+            -RepoRoot $repoRoot `
+            -LogRoot $logRoot `
+            -PidRoot $pidRoot `
+            -MavenCommand $mavenCommand `
+            -MavenCommonArguments $mavenCommonArguments `
+            -RunProfile $RunProfile `
+            -ForcedRestartReasons $forcedRestartReasons `
+            -AllowParallelBatch:$batch.Parallel `
+            -ServiceResults $serviceResults `
+            -ReusedServices $reusedServices `
+            -RestartedServices $restartedServices
+
+        if ($batch.Parallel) {
+            $phaseDurations["services:$batchName"] = $batchSeconds
+        }
+    }
+}
+
+$servicesWatch.Stop()
+$phaseDurations["services_total"] = [math]::Round($servicesWatch.Elapsed.TotalSeconds, 2)
 
 Write-Step "Started services: $($Services -join ', ')"
 Write-Host "Logs: $logRoot" -ForegroundColor Green
 Write-Host "PIDs: $pidRoot" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "Startup summary" -ForegroundColor Green
+foreach ($phaseName in $phaseDurations.Keys) {
+    Write-StageTiming -Name $phaseName -Seconds $phaseDurations[$phaseName]
+}
+
+Write-Host ""
+Write-Host ("reused services: {0}" -f ($(if ($reusedServices.Count -gt 0) { $reusedServices -join ", " } else { "none" }))) -ForegroundColor Yellow
+Write-Host ("restarted services: {0}" -f ($(if ($restartedServices.Count -gt 0) { $restartedServices -join ", " } else { "none" }))) -ForegroundColor Yellow
+Write-Host ("rebuilt common: {0}" -f ($(if ($rebuiltCommon) { "yes" } else { "no" }))) -ForegroundColor Yellow
+
+if ($serviceResults.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Per-service timing" -ForegroundColor Green
+    foreach ($serviceResult in $serviceResults | Sort-Object Service) {
+        Write-Host ("    {0}: {1} ({2:N2}s)" -f $serviceResult.Service, $serviceResult.Action, $serviceResult.Seconds) -ForegroundColor DarkGray
+    }
+}

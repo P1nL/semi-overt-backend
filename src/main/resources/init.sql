@@ -137,4 +137,126 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notification deliveries';
 
 INSERT IGNORE INTO users (username, nickname, email, password, role)
-VALUES ('admin', 'admin', 'admin@example.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'ADMIN');
+VALUES ('admin', 'admin', 'admin@example.com', '$2b$12$pzkMHEpkHa791fwQIMJoJezNQjWfqfyYyH4PSsiHrLuf6N5s9M3zi', 'ADMIN');
+
+INSERT IGNORE INTO users (username, nickname, email, password, role, avatar_url, signature)
+VALUES (
+    'demo_author',
+    'Demo Author',
+    'demo-author@example.com',
+    '$2b$12$pzkMHEpkHa791fwQIMJoJezNQjWfqfyYyH4PSsiHrLuf6N5s9M3zi',
+    'USER',
+    'https://api.dicebear.com/7.x/shapes/svg?seed=demo-author',
+    'Local demo content author'
+);
+
+INSERT INTO articles (
+    author_id,
+    title,
+    content,
+    summary,
+    cover_url,
+    cover_color,
+    word_count,
+    read_minutes,
+    duration_category,
+    status,
+    submit_count,
+    last_submitted_at,
+    published_at,
+    deleted
+)
+SELECT
+    u.id,
+    'Demo Quick Start: Distributed Refactor',
+    'This quick article is seeded for the local demo environment. It explains the gateway, auth, content, review, notification, search, and file service split in a concise way so the home page and category views always have at least one approved article to render.',
+    'A seeded QUICK article for the local demo home page.',
+    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
+    '#1D4ED8',
+    62,
+    3.5,
+    'QUICK',
+    'APPROVED',
+    1,
+    DATE_SUB(NOW(), INTERVAL 3 DAY),
+    DATE_SUB(NOW(), INTERVAL 3 DAY),
+    0
+FROM users u
+WHERE u.username = 'demo_author'
+  AND NOT EXISTS (
+      SELECT 1 FROM articles a WHERE a.title = 'Demo Quick Start: Distributed Refactor'
+  );
+
+INSERT INTO articles (
+    author_id,
+    title,
+    content,
+    summary,
+    cover_url,
+    cover_color,
+    word_count,
+    read_minutes,
+    duration_category,
+    status,
+    submit_count,
+    last_submitted_at,
+    published_at,
+    deleted
+)
+SELECT
+    u.id,
+    'Demo Short Read: Event Outbox and Review Flow',
+    'This seeded short article walks through how the content service writes to event_outbox, how review-service consumes the submission intent, and how notification-service and search-service observe approved status changes. It is long enough to behave like a realistic article in the interview demo.',
+    'A seeded SHORT article describing outbox and review flow.',
+    'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
+    '#0F766E',
+    128,
+    6.0,
+    'SHORT',
+    'APPROVED',
+    1,
+    DATE_SUB(NOW(), INTERVAL 2 DAY),
+    DATE_SUB(NOW(), INTERVAL 2 DAY),
+    0
+FROM users u
+WHERE u.username = 'demo_author'
+  AND NOT EXISTS (
+      SELECT 1 FROM articles a WHERE a.title = 'Demo Short Read: Event Outbox and Review Flow'
+  );
+
+INSERT INTO articles (
+    author_id,
+    title,
+    content,
+    summary,
+    cover_url,
+    cover_color,
+    word_count,
+    read_minutes,
+    duration_category,
+    status,
+    submit_count,
+    last_submitted_at,
+    published_at,
+    deleted
+)
+SELECT
+    u.id,
+    'Demo Deep Dive: Local Delivery and Operations Baseline',
+    'This seeded deep article explains the local middleware stack, one-click startup script, service health checks, TraceId propagation, and the minimal smoke test workflow. It exists to keep the DEEP category populated after a fresh database initialization and to give the interview demo a complete home page.',
+    'A seeded DEEP article covering the local delivery and operations baseline.',
+    'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80',
+    '#7C2D12',
+    236,
+    11.5,
+    'DEEP',
+    'APPROVED',
+    1,
+    DATE_SUB(NOW(), INTERVAL 1 DAY),
+    DATE_SUB(NOW(), INTERVAL 1 DAY),
+    0
+FROM users u
+WHERE u.username = 'demo_author'
+  AND NOT EXISTS (
+      SELECT 1 FROM articles a WHERE a.title = 'Demo Deep Dive: Local Delivery and Operations Baseline'
+  );

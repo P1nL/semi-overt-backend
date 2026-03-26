@@ -3,6 +3,8 @@ spring:
     name: gateway-service
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  webflux:
+    throw-exception-if-no-handler-found: true
   config:
     import:
       - optional:nacos:shared-common.yaml?group=NOW_DEMO
@@ -21,6 +23,10 @@ spring:
         group: NOW_DEMO
         namespace: ${NACOS_NAMESPACE:dev}
         file-extension: yaml
+    gateway:
+      httpclient:
+        connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:2000}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:6s}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -37,8 +43,24 @@ jwt:
     sign-key: ${JWT_SIGN_KEY:bXktc3VwZXItc2VjdXJlLWtleS1mb3Itand0LXNpZ25pbmctbmVlZHMtdG8tYmUtbG9uZy1lbm91Z2g=}
     refresh-threshold: ${JWT_REFRESH_THRESHOLD:30}
 
+platform:
+  gateway:
+    rate-limit:
+      replenish-rate: ${GATEWAY_RATE_LIMIT_REPLENISH_RATE:30}
+      burst-capacity: ${GATEWAY_RATE_LIMIT_BURST_CAPACITY:60}
+      requested-tokens: ${GATEWAY_RATE_LIMIT_REQUESTED_TOKENS:1}
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
