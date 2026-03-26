@@ -9,17 +9,14 @@ import com.platform.dto.req.SaveDraftReq;
 import com.platform.dto.resp.DraftItemResp;
 import com.platform.dto.resp.SaveDraftResp;
 import com.platform.entity.Article;
-import com.platform.entity.ReviewLog;
 import com.platform.enums.ArticleStatus;
 import com.platform.enums.DurationCategory;
 import com.platform.enums.ReviewAction;
 import com.platform.exception.BusinessException;
 import com.platform.mapper.ArticleMapper;
-import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.DraftService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,11 +44,8 @@ import java.util.stream.Collectors;
 public class DraftServiceImpl implements DraftService {
 
     private final ArticleMapper articleMapper;
-    private final ReviewLogMapper reviewLogMapper;
     private final StringRedisTemplate redisTemplate;
-
-    @Autowired(required = false)
-    private ReviewInternalClient reviewInternalClient;
+    private final ReviewInternalClient reviewInternalClient;
 
     /** 草稿 Redis Key 前缀 */
     private static final String DRAFT_KEY_PREFIX = "draft:";
@@ -113,6 +107,10 @@ public class DraftServiceImpl implements DraftService {
                 .set(Article::getReadMinutes, readMinutes)
                 .set(Article::getDurationCategory, durationCategory);
 
+        if (req.getContent() != null) {
+            updateWrapper.set(Article::getContent, req.getContent());
+        }
+
         if (req.getSummary() != null) {
             updateWrapper.set(Article::getSummary, normalizeNullableText(req.getSummary()));
         }
@@ -168,22 +166,9 @@ public class DraftServiceImpl implements DraftService {
         java.util.Map<Long, String> reasonMap = new java.util.HashMap<>();
         if (!returnedIds.isEmpty()) {
             for (Long artId : returnedIds) {
-                if (reviewInternalClient != null) {
-                    LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(artId));
-                    if (dto != null && dto.getAction() == ReviewAction.RETURN) {
-                        reasonMap.put(artId, dto.getReason());
-                    }
-                } else {
-                    ReviewLog latestLog = reviewLogMapper.selectOne(
-                            new LambdaQueryWrapper<ReviewLog>()
-                                    .eq(ReviewLog::getArticleId, artId)
-                                    .eq(ReviewLog::getAction, ReviewAction.RETURN)
-                                    .orderByDesc(ReviewLog::getCreatedAt)
-                                    .last("LIMIT 1")
-                    );
-                    if (latestLog != null) {
-                        reasonMap.put(artId, latestLog.getReason());
-                    }
+                LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(artId));
+                if (dto != null && dto.getAction() == ReviewAction.RETURN) {
+                    reasonMap.put(artId, dto.getReason());
                 }
             }
         }

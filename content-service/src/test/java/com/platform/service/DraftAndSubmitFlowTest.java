@@ -8,7 +8,6 @@ import com.platform.dto.resp.SubmitResp;
 import com.platform.entity.Article;
 import com.platform.enums.ArticleStatus;
 import com.platform.mapper.ArticleMapper;
-import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.impl.ArticleServiceImpl;
 import com.platform.service.impl.DraftServiceImpl;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,9 +36,6 @@ class DraftAndSubmitFlowTest {
     private ArticleMapper articleMapper;
 
     @Mock
-    private ReviewLogMapper reviewLogMapper;
-
-    @Mock
     private AuthInternalClient authInternalClient;
 
     @Mock
@@ -53,10 +49,9 @@ class DraftAndSubmitFlowTest {
 
     @Test
     void clearingTitleBeforeSubmitKeepsTitleEmpty() {
-        DraftServiceImpl draftService = new DraftServiceImpl(articleMapper, reviewLogMapper, redisTemplate);
+        DraftServiceImpl draftService = new DraftServiceImpl(articleMapper, redisTemplate, reviewInternalClient);
         ArticleServiceImpl articleService = new ArticleServiceImpl(
                 articleMapper,
-                reviewLogMapper,
                 redisTemplate,
                 authInternalClient,
                 reviewInternalClient
@@ -95,5 +90,6 @@ class DraftAndSubmitFlowTest {
 
         assertThat(article.getTitle()).isNull();
         assertThat(result.getStatus()).isEqualTo(ArticleStatus.PENDING);
+        org.mockito.Mockito.verify(redisTemplate).delete("draft:" + userId + ":" + articleId);
     }
 }

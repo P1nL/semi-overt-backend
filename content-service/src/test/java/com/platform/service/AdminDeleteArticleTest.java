@@ -6,7 +6,6 @@ import com.platform.entity.Article;
 import com.platform.enums.ArticleStatus;
 import com.platform.exception.BusinessException;
 import com.platform.mapper.ArticleMapper;
-import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.impl.ArticleServiceImpl;
 import com.platform.util.SecurityUtils;
 import org.junit.jupiter.api.Test;
@@ -30,9 +29,6 @@ class AdminDeleteArticleTest {
     private ArticleMapper articleMapper;
 
     @Mock
-    private ReviewLogMapper reviewLogMapper;
-
-    @Mock
     private AuthInternalClient authInternalClient;
 
     @Mock
@@ -44,7 +40,7 @@ class AdminDeleteArticleTest {
     @Test
     void adminCanDeletePendingArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, reviewLogMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
         Article article = buildArticle(12L, 3L, ArticleStatus.PENDING);
         when(articleMapper.selectById(12L)).thenReturn(article);
 
@@ -62,7 +58,7 @@ class AdminDeleteArticleTest {
     @Test
     void adminCanDeleteApprovedArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, reviewLogMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
         Article article = buildArticle(13L, 4L, ArticleStatus.APPROVED);
         when(articleMapper.selectById(13L)).thenReturn(article);
 
@@ -80,7 +76,7 @@ class AdminDeleteArticleTest {
     @Test
     void nonAdminCannotDeleteThroughAdminCapability() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, reviewLogMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
 
         try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
             securityUtils.when(SecurityUtils::isAdmin).thenReturn(false);

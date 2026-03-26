@@ -19,7 +19,19 @@
 - `POST /internal/users/batch`
 - `GET /internal/articles/{id}/review-snapshot`
 - `POST /internal/articles/{id}/apply-review-result`
+- `POST /internal/articles/profile-page`
 - `GET /internal/reviews/articles/{id}/latest`
+
+内容域线程已固定的事实如下，后续线程不得回退：
+
+- `content-service` 已不再跨表直查 `users` / `review_logs`
+- `content-service` 已不再本地写 `review_logs`
+- `articles.status` 最终只能由 `content-service` 写入
+- `POST /api/v1/articles/{articleId}/cancel-review` 当前语义固定为：`content-service` 只负责 `PENDING -> DRAFT` 状态回退，不负责本地补写 `CANCEL` 审核日志
+- 如需恢复“取消审核也有审核日志”这条业务语义，必须由后续审核域线程或事件线程负责把日志真源收口回 `review-service`
+- 草稿 Redis Key `draft:{userId}:{articleId}` 只归 `content-service`
+- 草稿保存会同步刷新 `articles.content` 持久化快照；提交审核成功后会删除对应 draft key
+- 用户主页聚合已固定为 `auth-service -> POST /internal/articles/profile-page -> content-service`，viewer 身份只能来自网关透传的 `X-User-*`
 
 推荐使用顺序：
 
@@ -280,7 +292,8 @@
 2. 设计 review_tasks，支撑分页待审核队列
 3. 保持 review_logs 作为审核留痕真源
 4. 让审核服务不再成为文章状态真源
-5. 为后续 MQ 异步审核链路做好事件接口准备
+5. 设计“取消审核(CANCEL)日志”如何重新收口到 review-service
+6. 为后续 MQ 异步审核链路做好事件接口准备
 
 必须遵守：
 1. 外部接口保持兼容：
@@ -297,6 +310,10 @@
    - POST /internal/users/batch
 5. 管理员不能审核自己提交的文章
 6. RETURN/REJECT 必须保留 reason 语义
+7. 必须接受以下新增事实已经固定，不得回退：
+   - `content-service` 已不再本地写 `review_logs`
+   - `POST /api/v1/articles/{articleId}/cancel-review` 当前只做文章状态回退
+   - 如需保留 `CANCEL` 审核日志，必须由 `review-service` 作为日志真源承接
 
 参考文档：
 - E:\code\now-demo\docs\distributed-refactor\01-overall-distributed-design.md
@@ -323,9 +340,12 @@
 - `review-service` 继续只依赖固定 4 个内部头和既定内部接口边界，不得新增身份头或额外的内部鉴权协议。
 - `review-service` 需要继续保证 `GET /internal/reviews/articles/{id}/latest` 可被 `content-service` 用于用户主页文章聚合，不得因为 `review_tasks`、outbox 或日志重构而破坏该用途。
 - 后续若调整审核日志查询或审核投影实现，不得破坏 `content-service -> review-service -> auth-service` 这条既定依赖方向。
+- 审核域线程必须显式处理 `CANCEL` 语义的归属问题：内容域已不再本地补写 `CANCEL` 日志，因此后续若要恢复该留痕，只能由审核域自己定义同步补写或等待事件线程定义异步补写方案。
+- 但无论采用同步内部接口还是异步事件，`review_logs` 的最终真源都必须仍在 `review-service`，不得把 `CANCEL` 日志写回 `content-service`。
 - 审核域线程的回归重点应显式覆盖：
   - 普通用户访问审核接口时返回真实 HTTP `403`
   - 审核原因查询兼容用户主页聚合场景，不因 `review_tasks` / outbox 改造而中断
+  - 若恢复 `CANCEL` 审核日志，该日志必须由 `review-service` 生成且不破坏 `PENDING -> DRAFT` 既有外部语义
 
 ## 6. 事件与派生能力线程提示词
 ```text
@@ -369,6 +389,9 @@
 5. 搜索与通知失败不回滚文章主状态
 6. search-service 仅索引 APPROVED 文章
 7. notification-service 负责站内信与邮件通知
+8. 必须接受以下新增事实已经固定，不得回退：
+   - `content-service` 已不再本地写 `review_logs`
+   - `cancel-review` 当前只完成文章状态回退；如要恢复 `CANCEL` 留痕，必须通过事件链路把日志写回 `review-service`
 
 参考文档：
 - E:\code\now-demo\docs\distributed-refactor\01-overall-distributed-design.md
@@ -396,9 +419,15 @@
 - 事件线程改造后不得破坏 `GET /api/v1/articles/{id}`、`GET /api/v1/users/{username}/profile` 的身份感知语义；失效、解析失败或黑名单 token 仍必须由网关在入口处返回真实 HTTP `401`。
 - 不得把 `logout`、JWT 黑名单、token 解析回迁到 MQ 消费服务或任何业务服务。
 - 后续搜索结果、通知内容、投影补数若需要用户摘要，仍应走 `POST /internal/users/batch`，不得重新跨服务直查用户真源表。
+- 若事件线程承担“取消审核补日志”职责，必须明确：
+  - 触发方仍是 `content-service`
+  - `review-service` 才是 `review_logs` 的最终写入方
+  - 该链路失败不能回滚文章主状态，只能按最终一致性补偿
+- `ArticleStatusChangedEvent` 若覆盖 `PENDING -> DRAFT` 的取消审核场景，必须保留足够字段让 `review-service` 判断是否需要生成 `CANCEL` 留痕，但不得让消费方反向改写 `articles.status`
 - 事件与派生能力线程的回归重点应显式覆盖：
   - 异步链路失败不影响公开接口的既定鉴权语义
   - 搜索或通知改造后，公开文章详情和公开主页的身份感知行为保持不变
+  - 若引入取消审核补日志链路，`CANCEL` 留痕最终落在 `review-service`，且文章状态仍只由 `content-service` 写
 
 ## 7. 交付与运维线程提示词
 ```text
@@ -483,6 +512,7 @@
 - 后续线程默认建立在已落地的认证模型之上：网关统一鉴权、下游只认头、鉴权失败返回真实 HTTP `401/403`
 - 后续线程默认建立在已落地的 Linux 运行基线之上：`java -jar`、`run-service.sh`、`/actuator/health`、`/actuator/info`
 - 后续线程只能做增量收敛，不得把已落地的 `POST /internal/articles/profile-page`、`run-service.sh`、`scripts/env/server.env.example`、`06-cloud-readiness-baseline.md` 视为不存在
+- 后续线程必须接受：`content-service` 不再本地写 `review_logs`；如需补齐 `CANCEL` 留痕，只能由审核域或事件链路把日志真源收口回 `review-service`
 - 若线程涉及启动/回归说明，Windows 本地优先使用 `MAVEN_CMD`，Linux 运行优先使用打包产物，不混用两套入口
 
 ## 9. 默认假设

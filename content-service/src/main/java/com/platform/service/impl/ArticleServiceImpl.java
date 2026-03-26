@@ -19,12 +19,10 @@ import com.platform.dto.resp.ArticleDetailResp;
 import com.platform.dto.resp.SubmitCooldownResp;
 import com.platform.dto.resp.SubmitResp;
 import com.platform.entity.Article;
-import com.platform.entity.ReviewLog;
 import com.platform.enums.ArticleStatus;
 import com.platform.enums.ReviewAction;
 import com.platform.exception.BusinessException;
 import com.platform.mapper.ArticleMapper;
-import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.ArticleService;
 import com.platform.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -63,7 +61,6 @@ public class ArticleServiceImpl implements ArticleService {
     private static final long SUBMIT_COOLDOWN_MINUTES = 30;
 
     private final ArticleMapper articleMapper;
-    private final ReviewLogMapper reviewLogMapper;
     private final StringRedisTemplate redisTemplate;
     private final AuthInternalClient authInternalClient;
     private final ReviewInternalClient reviewInternalClient;
@@ -174,6 +171,7 @@ public class ArticleServiceImpl implements ArticleService {
         article.setSubmitCount(article.getSubmitCount() + 1);
         article.setLastSubmittedAt(now);
         articleMapper.updateById(article);
+        redisTemplate.delete(buildDraftKey(userId, articleId));
 
         log.info("Submit article for review: articleId={}, userId={}, submitCount={}",
                 articleId, userId, article.getSubmitCount());
@@ -199,12 +197,6 @@ public class ArticleServiceImpl implements ArticleService {
 
         article.setStatus(ArticleStatus.DRAFT);
         articleMapper.updateById(article);
-
-        writeReviewLog(articleId, userId,
-                ReviewAction.CANCEL,
-                ArticleStatus.PENDING,
-                ArticleStatus.DRAFT,
-                null);
 
         log.info("Cancel article review: articleId={}, userId={}", articleId, userId);
         return Map.of("status", ArticleStatus.DRAFT);
@@ -317,7 +309,7 @@ public class ArticleServiceImpl implements ArticleService {
 
         IPage<Article> pageResult = articleMapper.selectPage(new Page<>(page, pageSize), query);
         List<Article> articles = pageResult.getRecords();
-        Map<Long, String> rejectReasonMap = buildRejectReasonMap(filterStatus, articles);
+        Map<Long, String> rejectReasonMap = buildReviewReasonMap(articles);
 
         List<UserProfileArticleItemDto> list = articles.stream()
                 .map(article -> UserProfileArticleItemDto.builder()
@@ -445,30 +437,18 @@ public class ArticleServiceImpl implements ArticleService {
         };
     }
 
-    private Map<Long, String> buildRejectReasonMap(ArticleStatus filterStatus, List<Article> articles) {
-        if (filterStatus != ArticleStatus.REJECTED || articles.isEmpty()) {
+    private Map<Long, String> buildReviewReasonMap(List<Article> articles) {
+        if (articles.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        return articles.stream().collect(Collectors.toMap(
-                Article::getId,
-                article -> getLatestReviewReason(article.getId())
-        ));
-    }
-
-    private void writeReviewLog(Long articleId, Long operatorId,
-                                ReviewAction action,
-                                ArticleStatus fromStatus,
-                                ArticleStatus toStatus,
-                                String reason) {
-        ReviewLog log = new ReviewLog();
-        log.setArticleId(articleId);
-        log.setOperatorId(operatorId);
-        log.setAction(action);
-        log.setFromStatus(fromStatus);
-        log.setToStatus(toStatus);
-        log.setReason(reason);
-        reviewLogMapper.insert(log);
+        return articles.stream()
+                .filter(article -> article.getStatus() == ArticleStatus.RETURNED
+                        || article.getStatus() == ArticleStatus.REJECTED)
+                .collect(Collectors.toMap(
+                        Article::getId,
+                        article -> getLatestReviewReason(article.getId())
+                ));
     }
 
     private String buildDraftKey(Long userId, Long articleId) {

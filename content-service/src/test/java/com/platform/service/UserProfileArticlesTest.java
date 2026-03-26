@@ -8,10 +8,8 @@ import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
 import com.platform.common.dto.internal.UserProfileArticlesResp;
 import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.entity.Article;
-import com.platform.entity.ReviewLog;
 import com.platform.enums.ArticleStatus;
 import com.platform.mapper.ArticleMapper;
-import com.platform.mapper.ReviewLogMapper;
 import com.platform.service.impl.ArticleServiceImpl;
 import com.platform.util.Result;
 import com.platform.util.SecurityUtils;
@@ -37,14 +35,11 @@ class UserProfileArticlesTest {
 
     @BeforeAll
     static void initMybatisPlus() {
-        MybatisPlusTestSupport.initLambdaCache(Article.class, ReviewLog.class);
+        MybatisPlusTestSupport.initLambdaCache(Article.class);
     }
 
     @Mock
     private ArticleMapper articleMapper;
-
-    @Mock
-    private ReviewLogMapper reviewLogMapper;
 
     @Mock
     private AuthInternalClient authInternalClient;
@@ -58,7 +53,7 @@ class UserProfileArticlesTest {
     @Test
     void anonymousViewerOnlyGetsApprovedArticles() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, reviewLogMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
 
         Article approved = buildArticle(11L, 8L, ArticleStatus.APPROVED);
         approved.setContent("approved content");
@@ -99,7 +94,7 @@ class UserProfileArticlesTest {
     @Test
     void ownerCanViewRejectedArticlesWithLatestReason() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, reviewLogMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
 
         Article rejected = buildArticle(12L, 8L, ArticleStatus.REJECTED);
         rejected.setContent("rejected content");
@@ -138,6 +133,47 @@ class UserProfileArticlesTest {
             assertThat(resp.getList()).hasSize(1);
             assertThat(resp.getList().get(0).getStatus()).isEqualTo(ArticleStatus.REJECTED);
             assertThat(resp.getList().get(0).getRejectReason()).isEqualTo("needs more detail");
+        }
+    }
+
+    @Test
+    void ownerGetsReturnedReasonInAllTab() {
+        ArticleServiceImpl service = new ArticleServiceImpl(
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+
+        Article returned = buildArticle(13L, 8L, ArticleStatus.RETURNED);
+        returned.setContent("returned content");
+
+        Page<Article> pageResult = new Page<>(1, 10, 1);
+        pageResult.setRecords(List.of(returned));
+
+        when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
+                UserSummaryDto.builder().id(8L).username("writer").nickname("Writer").avatarUrl("/a.png").build()
+        )));
+        when(articleMapper.selectCount(any())).thenReturn(2L, 0L, 1L, 0L, 1L);
+        when(articleMapper.selectList(any())).thenReturn(List.of(returned));
+        when(articleMapper.selectPage(any(), any())).thenReturn(pageResult);
+        when(reviewInternalClient.latestReason(13L)).thenReturn(Result.ok(LatestReviewReasonDto.builder()
+                .articleId(13L)
+                .reason("revise intro")
+                .build()));
+
+        try (MockedStatic<SecurityUtils> securityUtils = mockStatic(SecurityUtils.class)) {
+            securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(8L);
+            securityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
+
+            UserProfileArticlesResp resp = service.getUserProfileArticles(
+                    UserProfileArticlesQueryReq.builder()
+                            .authorId(8L)
+                            .tab("all")
+                            .page(1)
+                            .pageSize(10)
+                            .build()
+            );
+
+            assertThat(resp.getList()).hasSize(1);
+            assertThat(resp.getList().get(0).getStatus()).isEqualTo(ArticleStatus.RETURNED);
+            assertThat(resp.getList().get(0).getRejectReason()).isEqualTo("revise intro");
         }
     }
 
