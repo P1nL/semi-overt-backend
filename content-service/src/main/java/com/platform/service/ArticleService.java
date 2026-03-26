@@ -4,6 +4,7 @@ import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
 import com.platform.common.dto.internal.UserProfileArticlesResp;
+import com.platform.common.event.ReviewDecidedEvent;
 import com.platform.dto.resp.ArticleDetailResp;
 import com.platform.dto.resp.SubmitResp;
 
@@ -97,6 +98,8 @@ public interface ArticleService {
      * 由 review-service 调用，统一在内容服务内落文章状态变更。
      */
     void applyReviewResult(Long articleId, ApplyReviewResultReq req);
+
+    void applyReviewDecisionEvent(ReviewDecidedEvent event);
 
     UserProfileArticlesResp getUserProfileArticles(UserProfileArticlesQueryReq req);
 }

@@ -2,6 +2,7 @@ package com.platform.service;
 
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
+import com.platform.common.support.EventOutboxService;
 import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.dto.resp.ArticleDetailResp;
 import com.platform.entity.Article;
@@ -44,10 +45,13 @@ class ArticleDetailAccessTest {
     @Mock
     private ReviewInternalClient reviewInternalClient;
 
+    @Mock
+    private EventOutboxService eventOutboxService;
+
     @Test
     void authorCanReadOwnDraftWithout404AndGetsRedisContent() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         Article article = new Article();
         article.setId(15L);
@@ -73,7 +77,7 @@ class ArticleDetailAccessTest {
     @Test
     void anonymousCanReadApprovedButNotReturnedArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         Article approved = new Article();
         approved.setId(16L);

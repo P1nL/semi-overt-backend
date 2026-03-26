@@ -7,6 +7,7 @@ import com.platform.common.dto.internal.LatestReviewReasonDto;
 import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
 import com.platform.common.dto.internal.UserProfileArticlesResp;
 import com.platform.common.dto.internal.UserSummaryDto;
+import com.platform.common.support.EventOutboxService;
 import com.platform.entity.Article;
 import com.platform.enums.ArticleStatus;
 import com.platform.mapper.ArticleMapper;
@@ -50,10 +51,13 @@ class UserProfileArticlesTest {
     @Mock
     private StringRedisTemplate redisTemplate;
 
+    @Mock
+    private EventOutboxService eventOutboxService;
+
     @Test
     void anonymousViewerOnlyGetsApprovedArticles() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         Article approved = buildArticle(11L, 8L, ArticleStatus.APPROVED);
         approved.setContent("approved content");
@@ -94,7 +98,7 @@ class UserProfileArticlesTest {
     @Test
     void ownerCanViewRejectedArticlesWithLatestReason() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         Article rejected = buildArticle(12L, 8L, ArticleStatus.REJECTED);
         rejected.setContent("rejected content");
@@ -139,7 +143,7 @@ class UserProfileArticlesTest {
     @Test
     void ownerGetsReturnedReasonInAllTab() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         Article returned = buildArticle(13L, 8L, ArticleStatus.RETURNED);
         returned.setContent("returned content");

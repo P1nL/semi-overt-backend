@@ -5,12 +5,15 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ContentInternalClient;
 import com.platform.common.api.ResultUtils;
+import com.platform.common.constant.EventConstants;
 import com.platform.common.context.TraceContextHolder;
 import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.BatchUserQueryReq;
 import com.platform.common.dto.internal.ReviewDecisionPayload;
 import com.platform.common.dto.internal.UserSummaryDto;
+import com.platform.common.event.ReviewDecidedEvent;
+import com.platform.common.support.EventOutboxService;
 import com.platform.dto.req.ReviewActionReq;
 import com.platform.dto.resp.ReviewActionResp;
 import com.platform.dto.resp.ReviewListItemResp;
@@ -34,6 +37,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,6 +49,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewLogMapper reviewLogMapper;
     private final AuthInternalClient authInternalClient;
     private final ContentInternalClient contentInternalClient;
+    private final EventOutboxService eventOutboxService;
 
     @Override
     public Page<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
@@ -117,12 +122,12 @@ public class ReviewServiceImpl implements ReviewService {
         reviewLogMapper.insert(toReviewLog(decision));
         reviewTaskMapper.delete(new LambdaQueryWrapper<ReviewTask>()
                 .eq(ReviewTask::getArticleId, articleId));
-
-        ResultUtils.requireOk(contentInternalClient.applyReviewResult(articleId, new ApplyReviewResultReq(
-                decision.getAdminId(),
-                decision.getAction(),
-                decision.getReason()
-        )));
+        eventOutboxService.saveEvent(
+                "review",
+                String.valueOf(articleId),
+                EventConstants.REVIEW_DECIDED,
+                ReviewDecidedEvent.fromPayload(newEventId(articleId), decision)
+        );
 
         log.info("Review decided: articleId={}, adminId={}, action={}, toStatus={}, traceId={}",
                 articleId, currentAdminId, action, toStatus, decision.getTraceId());
@@ -228,5 +233,9 @@ public class ReviewServiceImpl implements ReviewService {
         return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(ids.stream().toList())))
                 .stream()
                 .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
+    }
+
+    private String newEventId(Long articleId) {
+        return "review-decided:" + articleId + ":" + UUID.randomUUID();
     }
 }

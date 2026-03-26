@@ -25,6 +25,14 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        acknowledge-mode: manual
 
 server:
   port: ${SERVER_PORT:8083}
@@ -35,6 +43,12 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+platform:
+  events:
+    outbox-publish-delay-ms: ${EVENT_OUTBOX_PUBLISH_DELAY_MS:5000}
+    retry-delay-ms: ${EVENT_RETRY_DELAY_MS:30000}
+    consumer-max-retries: ${EVENT_CONSUMER_MAX_RETRIES:3}
 
 management:
   endpoints:

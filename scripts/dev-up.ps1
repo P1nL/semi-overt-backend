@@ -156,6 +156,10 @@ function Resolve-AbsolutePath {
 function Get-DefaultMavenRepoLocal {
     param([string]$RepoRoot)
 
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        return (Join-Path $env:USERPROFILE ".m2\repository")
+    }
+
     return (Join-Path $RepoRoot ".cache\m2\repository")
 }
 

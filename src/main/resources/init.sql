@@ -7,6 +7,7 @@ USE content_platform;
 CREATE TABLE IF NOT EXISTS users (
     id          BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     username    VARCHAR(20) NOT NULL COMMENT 'unique username',
+    nickname    VARCHAR(30) NOT NULL COMMENT 'display nickname',
     email       VARCHAR(100) NOT NULL COMMENT 'unique email',
     password    VARCHAR(100) NOT NULL COMMENT 'bcrypt password hash',
     role        ENUM('USER','ADMIN') NOT NULL DEFAULT 'USER' COMMENT 'user role',
@@ -77,5 +78,63 @@ CREATE TABLE IF NOT EXISTS review_tasks (
     KEY idx_review_tasks_author_id (author_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='review pending task projection';
 
-INSERT IGNORE INTO users (username, email, password, role)
-VALUES ('admin', 'admin@example.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'ADMIN');
+CREATE TABLE IF NOT EXISTS event_outbox (
+    event_id        VARCHAR(64) NOT NULL COMMENT 'event id',
+    aggregate_type  VARCHAR(64) NOT NULL COMMENT 'aggregate type',
+    aggregate_id    VARCHAR(64) NOT NULL COMMENT 'aggregate id',
+    event_type      VARCHAR(64) NOT NULL COMMENT 'event type',
+    payload         LONGTEXT NOT NULL COMMENT 'json payload',
+    status          ENUM('PENDING','PUBLISHED','DEAD') NOT NULL DEFAULT 'PENDING' COMMENT 'outbox status',
+    retry_count     INT NOT NULL DEFAULT 0 COMMENT 'publish retry count',
+    next_retry_at   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'next retry time',
+    published_at    DATETIME COMMENT 'published time',
+    last_error      VARCHAR(500) COMMENT 'last publish error',
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
+    PRIMARY KEY (event_id),
+    KEY idx_event_outbox_type_status_retry (event_type, status, next_retry_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='event outbox';
+
+CREATE TABLE IF NOT EXISTS event_consume_log (
+    id              BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+    event_id        VARCHAR(64) NOT NULL COMMENT 'event id',
+    consumer        VARCHAR(128) NOT NULL COMMENT 'consumer id',
+    status          ENUM('PROCESSING','SUCCESS','FAILED') NOT NULL DEFAULT 'PROCESSING' COMMENT 'consume status',
+    consumed_at     DATETIME COMMENT 'consumed time',
+    error_message   VARCHAR(500) COMMENT 'last consume error',
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_event_consume_log (event_id, consumer),
+    KEY idx_event_consume_log_consumer_status (consumer, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='event consume log';
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id              BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+    user_id         BIGINT NOT NULL COMMENT 'target user id',
+    type            VARCHAR(32) NOT NULL COMMENT 'notification type',
+    title           VARCHAR(120) NOT NULL COMMENT 'notification title',
+    content         VARCHAR(500) NOT NULL COMMENT 'notification content',
+    biz_id          BIGINT NOT NULL COMMENT 'related business id',
+    read_status     TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'read flag',
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+    PRIMARY KEY (id),
+    KEY idx_notifications_user_created (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notifications';
+
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+    id                  BIGINT NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+    notification_id     BIGINT NOT NULL COMMENT 'notification id',
+    channel             VARCHAR(32) NOT NULL COMMENT 'delivery channel',
+    status              VARCHAR(32) NOT NULL COMMENT 'delivery status',
+    retry_count         INT NOT NULL DEFAULT 0 COMMENT 'delivery retry count',
+    last_error          VARCHAR(500) COMMENT 'last delivery error',
+    sent_at             DATETIME COMMENT 'sent time',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_delivery_channel (notification_id, channel),
+    KEY idx_notification_deliveries_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notification deliveries';
+
+INSERT IGNORE INTO users (username, nickname, email, password, role)
+VALUES ('admin', 'admin', 'admin@example.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'ADMIN');

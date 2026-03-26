@@ -2,6 +2,7 @@ package com.platform.service;
 
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
+import com.platform.common.support.EventOutboxService;
 import com.platform.entity.Article;
 import com.platform.enums.ArticleStatus;
 import com.platform.exception.BusinessException;
@@ -37,10 +38,13 @@ class AdminDeleteArticleTest {
     @Mock
     private StringRedisTemplate redisTemplate;
 
+    @Mock
+    private EventOutboxService eventOutboxService;
+
     @Test
     void adminCanDeletePendingArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
         Article article = buildArticle(12L, 3L, ArticleStatus.PENDING);
         when(articleMapper.selectById(12L)).thenReturn(article);
 
@@ -58,7 +62,7 @@ class AdminDeleteArticleTest {
     @Test
     void adminCanDeleteApprovedArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
         Article article = buildArticle(13L, 4L, ArticleStatus.APPROVED);
         when(articleMapper.selectById(13L)).thenReturn(article);
 
@@ -76,7 +80,7 @@ class AdminDeleteArticleTest {
     @Test
     void nonAdminCannotDeleteThroughAdminCapability() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
 
         try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
             securityUtils.when(SecurityUtils::isAdmin).thenReturn(false);

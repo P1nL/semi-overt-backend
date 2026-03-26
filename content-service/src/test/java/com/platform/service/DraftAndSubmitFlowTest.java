@@ -3,8 +3,9 @@ package com.platform.service;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
-import com.platform.common.dto.internal.ReviewTaskRemoveReq;
-import com.platform.common.dto.internal.ReviewTaskUpsertReq;
+import com.platform.common.event.ArticleStatusChangedEvent;
+import com.platform.common.event.ArticleSubmittedEvent;
+import com.platform.common.support.EventOutboxService;
 import com.platform.dto.req.SaveDraftReq;
 import com.platform.dto.resp.SubmitResp;
 import com.platform.entity.Article;
@@ -55,6 +56,9 @@ class DraftAndSubmitFlowTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private EventOutboxService eventOutboxService;
+
     @Test
     void clearingTitleBeforeSubmitKeepsTitleEmptyAndCreatesProjectionTask() {
         DraftServiceImpl draftService = new DraftServiceImpl(articleMapper, redisTemplate, reviewInternalClient);
@@ -62,7 +66,8 @@ class DraftAndSubmitFlowTest {
                 articleMapper,
                 redisTemplate,
                 authInternalClient,
-                reviewInternalClient
+                reviewInternalClient,
+                eventOutboxService
         );
 
         Long articleId = 8L;
@@ -80,8 +85,6 @@ class DraftAndSubmitFlowTest {
         when(articleMapper.selectById(articleId)).thenReturn(article);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("draft:" + userId + ":" + articleId)).thenReturn(latestContent);
-        when(reviewInternalClient.upsertTask(any())).thenReturn(Result.ok());
-
         doAnswer(invocation -> {
             LambdaUpdateWrapper<Article> wrapper = invocation.getArgument(1);
             assertThat(wrapper.getSqlSet()).contains("title");
@@ -97,15 +100,15 @@ class DraftAndSubmitFlowTest {
         draftService.saveDraft(articleId, userId, req);
         SubmitResp result = articleService.submitForReview(articleId, userId);
 
-        ArgumentCaptor<ReviewTaskUpsertReq> taskCaptor = ArgumentCaptor.forClass(ReviewTaskUpsertReq.class);
+        ArgumentCaptor<ArticleSubmittedEvent> eventCaptor = ArgumentCaptor.forClass(ArticleSubmittedEvent.class);
 
         assertThat(article.getTitle()).isNull();
         assertThat(result.getStatus()).isEqualTo(ArticleStatus.PENDING);
         verify(redisTemplate).delete("draft:" + userId + ":" + articleId);
-        verify(reviewInternalClient).upsertTask(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getArticleId()).isEqualTo(articleId);
-        assertThat(taskCaptor.getValue().getAuthorId()).isEqualTo(userId);
-        assertThat(taskCaptor.getValue().getStatus()).isEqualTo(ArticleStatus.PENDING);
+        verify(eventOutboxService).saveEvent(any(), any(), any(), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getArticleId()).isEqualTo(articleId);
+        assertThat(eventCaptor.getValue().getAuthorId()).isEqualTo(userId);
+        assertThat(eventCaptor.getValue().getSubmitCount()).isEqualTo(1);
     }
 
     @Test
@@ -114,7 +117,8 @@ class DraftAndSubmitFlowTest {
                 articleMapper,
                 redisTemplate,
                 authInternalClient,
-                reviewInternalClient
+                reviewInternalClient,
+                eventOutboxService
         );
 
         Long articleId = 18L;
@@ -128,16 +132,15 @@ class DraftAndSubmitFlowTest {
         article.setLastSubmittedAt(java.time.LocalDateTime.parse("2026-03-26T10:15:30"));
 
         when(articleMapper.selectById(articleId)).thenReturn(article);
-        when(reviewInternalClient.removeTask(any())).thenReturn(Result.ok());
-
         Map<String, Object> result = articleService.cancelReview(articleId, userId);
 
-        ArgumentCaptor<ReviewTaskRemoveReq> removeCaptor = ArgumentCaptor.forClass(ReviewTaskRemoveReq.class);
+        ArgumentCaptor<ArticleStatusChangedEvent> eventCaptor = ArgumentCaptor.forClass(ArticleStatusChangedEvent.class);
 
         assertThat(result).containsEntry("status", ArticleStatus.DRAFT);
         assertThat(article.getStatus()).isEqualTo(ArticleStatus.DRAFT);
-        verify(reviewInternalClient).removeTask(removeCaptor.capture());
-        assertThat(removeCaptor.getValue().getArticleId()).isEqualTo(articleId);
-        assertThat(removeCaptor.getValue().getLastEventId()).startsWith("cancel-sync:");
+        verify(eventOutboxService).saveEvent(any(), any(), any(), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getArticleId()).isEqualTo(articleId);
+        assertThat(eventCaptor.getValue().getFromStatus()).isEqualTo(ArticleStatus.PENDING);
+        assertThat(eventCaptor.getValue().getToStatus()).isEqualTo(ArticleStatus.DRAFT);
     }
 }

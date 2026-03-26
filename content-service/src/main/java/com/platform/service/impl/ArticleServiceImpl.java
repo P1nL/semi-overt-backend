@@ -6,23 +6,25 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ReviewInternalClient;
 import com.platform.common.api.ResultUtils;
-import com.platform.common.dto.internal.ApplyReviewResultReq;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.BatchUserQueryReq;
 import com.platform.common.dto.internal.LatestReviewReasonDto;
-import com.platform.common.dto.internal.ReviewTaskRemoveReq;
-import com.platform.common.dto.internal.ReviewTaskUpsertReq;
+import com.platform.common.constant.EventConstants;
 import com.platform.common.dto.internal.UserProfileArticleItemDto;
 import com.platform.common.dto.internal.UserProfileArticleStatsDto;
 import com.platform.common.dto.internal.UserProfileArticlesQueryReq;
 import com.platform.common.dto.internal.UserProfileArticlesResp;
 import com.platform.common.dto.internal.UserSummaryDto;
+import com.platform.common.context.TraceContextHolder;
+import com.platform.common.event.ArticleStatusChangedEvent;
+import com.platform.common.event.ArticleSubmittedEvent;
+import com.platform.common.event.ReviewDecidedEvent;
+import com.platform.common.support.EventOutboxService;
 import com.platform.dto.resp.ArticleDetailResp;
 import com.platform.dto.resp.SubmitCooldownResp;
 import com.platform.dto.resp.SubmitResp;
 import com.platform.entity.Article;
 import com.platform.enums.ArticleStatus;
-import com.platform.enums.ReviewAction;
 import com.platform.exception.BusinessException;
 import com.platform.mapper.ArticleMapper;
 import com.platform.service.ArticleService;
@@ -40,6 +42,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -67,6 +70,7 @@ public class ArticleServiceImpl implements ArticleService {
     private final StringRedisTemplate redisTemplate;
     private final AuthInternalClient authInternalClient;
     private final ReviewInternalClient reviewInternalClient;
+    private final EventOutboxService eventOutboxService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -175,8 +179,19 @@ public class ArticleServiceImpl implements ArticleService {
         article.setLastSubmittedAt(now);
         articleMapper.updateById(article);
         redisTemplate.delete(buildDraftKey(userId, articleId));
-
-        syncReviewTaskUpsert(article);
+        eventOutboxService.saveEvent(
+                "article",
+                String.valueOf(articleId),
+                EventConstants.ARTICLE_SUBMITTED,
+                ArticleSubmittedEvent.builder()
+                        .eventId(newEventId("article-submitted", articleId))
+                        .traceId(TraceContextHolder.get())
+                        .articleId(articleId)
+                        .authorId(article.getAuthorId())
+                        .submitCount(article.getSubmitCount())
+                        .submittedAt(now)
+                        .build()
+        );
 
         log.info("Submit article for review: articleId={}, userId={}, submitCount={}",
                 articleId, userId, article.getSubmitCount());
@@ -200,11 +215,15 @@ public class ArticleServiceImpl implements ArticleService {
                     "Only pending articles can cancel review, current status: " + article.getStatus());
         }
 
-        String taskEventId = buildCancelTaskEventId(article);
+        ArticleStatus fromStatus = article.getStatus();
         article.setStatus(ArticleStatus.DRAFT);
         articleMapper.updateById(article);
-
-        syncReviewTaskRemove(articleId, taskEventId);
+        eventOutboxService.saveEvent(
+                "article",
+                String.valueOf(articleId),
+                EventConstants.ARTICLE_STATUS_CHANGED,
+                buildStatusChangedEvent(article, fromStatus, ArticleStatus.DRAFT)
+        );
 
         log.info("Cancel article review: articleId={}, userId={}", articleId, userId);
         return Map.of("status", ArticleStatus.DRAFT);
@@ -269,25 +288,14 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void applyReviewResult(Long articleId, ApplyReviewResultReq req) {
+    public void applyReviewResult(Long articleId, com.platform.common.dto.internal.ApplyReviewResultReq req) {
         Article article = getArticleByIdForWrite(articleId);
         if (article.getStatus() != ArticleStatus.PENDING) {
             throw BusinessException.conflict(
                     "Article status does not allow applying a review result: " + article.getStatus());
         }
 
-        ArticleStatus toStatus = switch (req.getAction()) {
-            case APPROVE -> ArticleStatus.APPROVED;
-            case RETURN -> ArticleStatus.RETURNED;
-            case REJECT -> ArticleStatus.REJECTED;
-            default -> throw BusinessException.badRequest("Unsupported review action");
-        };
-
-        article.setStatus(toStatus);
-        if (req.getAction() == ReviewAction.APPROVE) {
-            article.setPublishedAt(LocalDateTime.now());
-        }
-        articleMapper.updateById(article);
+        applyReviewDecision(article, req.getAction(), req.getAdminId(), req.getReason(), null);
     }
 
     @Override
@@ -394,35 +402,71 @@ public class ArticleServiceImpl implements ArticleService {
         return dto != null ? dto.getReason() : null;
     }
 
-    private void syncReviewTaskUpsert(Article article) {
-        ResultUtils.requireOk(reviewInternalClient.upsertTask(ReviewTaskUpsertReq.builder()
+    public void applyReviewDecisionEvent(ReviewDecidedEvent event) {
+        Article article = getArticleByIdForWrite(event.getArticleId());
+        if (article.getStatus() != ArticleStatus.PENDING) {
+            if (article.getStatus() == event.getToStatus()) {
+                return;
+            }
+            throw BusinessException.conflict(
+                    "Article status does not allow applying a review result: " + article.getStatus());
+        }
+        applyReviewDecision(article, event.getAction(), event.getAdminId(), event.getReason(), event);
+    }
+
+    private void applyReviewDecision(Article article,
+                                     com.platform.enums.ReviewAction action,
+                                     Long adminId,
+                                     String reason,
+                                     ReviewDecidedEvent event) {
+        ArticleStatus fromStatus = article.getStatus();
+        ArticleStatus toStatus = switch (action) {
+            case APPROVE -> ArticleStatus.APPROVED;
+            case RETURN -> ArticleStatus.RETURNED;
+            case REJECT -> ArticleStatus.REJECTED;
+            default -> throw BusinessException.badRequest("Unsupported review action");
+        };
+
+        article.setStatus(toStatus);
+        if (action == com.platform.enums.ReviewAction.APPROVE) {
+            article.setPublishedAt(event != null && event.getReviewedAt() != null
+                    ? event.getReviewedAt()
+                    : LocalDateTime.now());
+        }
+        articleMapper.updateById(article);
+        eventOutboxService.saveEvent(
+                "article",
+                String.valueOf(article.getId()),
+                EventConstants.ARTICLE_STATUS_CHANGED,
+                buildStatusChangedEvent(article, fromStatus, toStatus)
+        );
+        log.info("Apply review decision: articleId={}, adminId={}, action={}, toStatus={}",
+                article.getId(), adminId, action, toStatus);
+    }
+
+    private ArticleStatusChangedEvent buildStatusChangedEvent(Article article,
+                                                              ArticleStatus fromStatus,
+                                                              ArticleStatus toStatus) {
+        return ArticleStatusChangedEvent.builder()
+                .eventId(newEventId("article-status", article.getId()))
+                .traceId(TraceContextHolder.get())
                 .articleId(article.getId())
                 .authorId(article.getAuthorId())
+                .fromStatus(fromStatus)
+                .toStatus(toStatus)
                 .title(article.getTitle())
-                .wordCount(article.getWordCount())
-                .status(article.getStatus())
-                .submitCount(article.getSubmitCount())
-                .submittedAt(article.getLastSubmittedAt())
-                .lastEventId(buildSubmitTaskEventId(article))
-                .build()));
+                .summary(article.getSummary())
+                .coverUrl(article.getCoverUrl())
+                .coverColor(article.getCoverColor())
+                .readMinutes(article.getReadMinutes())
+                .durationCategory(article.getDurationCategory())
+                .publishedAt(article.getPublishedAt())
+                .updatedAt(LocalDateTime.now())
+                .build();
     }
 
-    private void syncReviewTaskRemove(Long articleId, String lastEventId) {
-        ResultUtils.requireOk(reviewInternalClient.removeTask(ReviewTaskRemoveReq.builder()
-                .articleId(articleId)
-                .lastEventId(lastEventId)
-                .build()));
-    }
-
-    private String buildSubmitTaskEventId(Article article) {
-        return "submit-sync:" + article.getId() + ":" + article.getSubmitCount();
-    }
-
-    private String buildCancelTaskEventId(Article article) {
-        String submittedAt = article.getLastSubmittedAt() == null
-                ? "unknown"
-                : article.getLastSubmittedAt().toString();
-        return "cancel-sync:" + article.getId() + ":" + submittedAt;
+    private String newEventId(String prefix, Long articleId) {
+        return prefix + ":" + articleId + ":" + UUID.randomUUID();
     }
 
     private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {

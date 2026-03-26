@@ -26,6 +26,14 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        acknowledge-mode: manual
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -47,6 +55,10 @@ platform:
   submit-review-cooldown-minutes: ${SUBMIT_REVIEW_COOLDOWN_MINUTES:30}
   draft-cache-ttl-days: ${DRAFT_CACHE_TTL_DAYS:7}
   draft-flush-interval-minutes: ${DRAFT_FLUSH_INTERVAL_MINUTES:5}
+  events:
+    outbox-publish-delay-ms: ${EVENT_OUTBOX_PUBLISH_DELAY_MS:5000}
+    retry-delay-ms: ${EVENT_RETRY_DELAY_MS:30000}
+    consumer-max-retries: ${EVENT_CONSUMER_MAX_RETRIES:3}
 
 management:
   endpoints:

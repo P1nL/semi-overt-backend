@@ -5,6 +5,8 @@ import com.platform.client.AuthInternalClient;
 import com.platform.client.ContentInternalClient;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.UserSummaryDto;
+import com.platform.common.event.ReviewDecidedEvent;
+import com.platform.common.support.EventOutboxService;
 import com.platform.dto.req.ReviewActionReq;
 import com.platform.dto.resp.ReviewActionResp;
 import com.platform.dto.resp.ReviewListItemResp;
@@ -51,13 +53,17 @@ class ReviewServiceImplTest {
     @Mock
     private ContentInternalClient contentInternalClient;
 
+    @Mock
+    private EventOutboxService eventOutboxService;
+
     @Test
     void pendingListReadsReviewTaskProjection() {
         ReviewServiceImpl service = new ReviewServiceImpl(
                 reviewTaskMapper,
                 reviewLogMapper,
                 authInternalClient,
-                contentInternalClient
+                contentInternalClient,
+                eventOutboxService
         );
 
         ReviewTask task = new ReviewTask();
@@ -91,7 +97,8 @@ class ReviewServiceImplTest {
                 reviewTaskMapper,
                 reviewLogMapper,
                 authInternalClient,
-                contentInternalClient
+                contentInternalClient,
+                eventOutboxService
         );
 
         when(contentInternalClient.reviewSnapshot(33L)).thenReturn(Result.ok(ArticleReviewSnapshotDto.builder()
@@ -99,8 +106,6 @@ class ReviewServiceImplTest {
                 .authorId(7L)
                 .status(ArticleStatus.PENDING)
                 .build()));
-        when(contentInternalClient.applyReviewResult(any(), any())).thenReturn(Result.ok());
-
         ReviewActionReq req = new ReviewActionReq();
         req.setAction("RETURN");
         req.setReason("needs references");
@@ -112,7 +117,7 @@ class ReviewServiceImplTest {
         assertThat(resp.getStatus()).isEqualTo(ArticleStatus.RETURNED);
         verify(reviewLogMapper).insert(logCaptor.capture());
         verify(reviewTaskMapper).delete(any());
-        verify(contentInternalClient).applyReviewResult(any(), any());
+        verify(eventOutboxService).saveEvent(any(), any(), any(), any(ReviewDecidedEvent.class));
         assertThat(logCaptor.getValue().getArticleId()).isEqualTo(33L);
         assertThat(logCaptor.getValue().getOperatorId()).isEqualTo(101L);
         assertThat(logCaptor.getValue().getAction()).isEqualTo(ReviewAction.RETURN);
@@ -127,7 +132,8 @@ class ReviewServiceImplTest {
                 reviewTaskMapper,
                 reviewLogMapper,
                 authInternalClient,
-                contentInternalClient
+                contentInternalClient,
+                eventOutboxService
         );
 
         ReviewActionReq req = new ReviewActionReq();

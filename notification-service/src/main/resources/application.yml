@@ -6,6 +6,7 @@ spring:
   config:
     import:
       - optional:nacos:shared-common.yaml?group=NOW_DEMO
+      - optional:nacos:shared-db.yaml?group=NOW_DEMO
       - optional:nacos:${spring.application.name}.yaml?group=NOW_DEMO
       - optional:nacos:${spring.application.name}-${spring.profiles.active}.yaml?group=NOW_DEMO
   cloud:
@@ -19,9 +20,34 @@ spring:
         group: NOW_DEMO
         namespace: ${NACOS_NAMESPACE:dev}
         file-extension: yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        acknowledge-mode: manual
 
 server:
   port: ${SERVER_PORT:8086}
+
+mybatis-plus:
+  type-aliases-package: com.platform.entity,com.platform.common.entity
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+platform:
+  events:
+    retry-delay-ms: ${EVENT_RETRY_DELAY_MS:30000}
+    consumer-max-retries: ${EVENT_CONSUMER_MAX_RETRIES:3}
 
 management:
   endpoints:

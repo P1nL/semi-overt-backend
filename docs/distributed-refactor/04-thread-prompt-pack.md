@@ -465,6 +465,35 @@
 - `CANCEL` 留痕目前仍未恢复，且同步链路没有新增补日志接口；这件事已固定留给后续事件线程通过 `ArticleStatusChangedEvent(PENDING -> DRAFT)` 异步补写到 `review-service`。
 - 对外鉴权失败语义已实际改为真实 HTTP `401/403`；后续线程不得再退回到 HTTP `200 + code` 的兼容包装模式。
 
+### 6.3 已落地事件与联调事实
+- RabbitMQ、`event_outbox`、`event_consume_log`、`notifications`、`notification_deliveries`、`review_tasks` 已全部落地到代码与本地联调环境。
+- 三类事件当前已实际跑通：
+  - `ArticleSubmittedEvent`
+  - `ReviewDecidedEvent`
+  - `ArticleStatusChangedEvent`
+- 当前真实异步链路已固定为：
+  - `content-service` 提审时写 `event_outbox` 并发布 `ArticleSubmittedEvent`
+  - `review-service` 消费后投影 `review_tasks`
+  - 管理员审核时 `review-service` 本地写 `review_logs` 后写 `ReviewDecidedEvent`
+  - `content-service` 消费 `ReviewDecidedEvent` 后应用文章状态，并继续发布 `ArticleStatusChangedEvent`
+  - `search-service`、`notification-service`、`review-service` 分别消费 `ArticleStatusChangedEvent` 做搜索索引、通知落库、`CANCEL` 补日志
+- `CANCEL` 留痕已经不再是“待实现事项”，而是已通过 `ArticleStatusChangedEvent(PENDING -> DRAFT)` 由 `review-service` 异步补写到 `review_logs`；后续线程不得再把该职责退回同步内部接口或 `content-service` 本地补写。
+- `ReviewDecisionPayload` 已被当前事件链路复用；后续若补 outbox 增强、重试、补偿或对外事件演进，必须继续沿用这组字段语义。
+- `search-service` 当前只为 `APPROVED` 文章维护 Elasticsearch `articles` 索引；非 `APPROVED` 状态事件会删除对应索引文档。
+- `notification-service` 当前已固定在 `ArticleStatusChangedEvent` 上生成通知主记录与两条投递记录：
+  - `IN_APP`
+  - `EMAIL`
+- 当前本地联调已实测通过两条真实链路：
+  - 提审 -> 待审核 -> 审核通过 -> 内容状态更新 -> ES 可见 -> 通知落库
+  - 提审 -> 取消审核 -> `review_tasks` 清理 -> `CANCEL` 日志异步补写
+- 事件链路当前是“定时 outbox 发布 + 最终一致性”模型，发布存在秒级延迟；后续线程不得把这种延迟误判为链路未通，除非 `event_outbox` 长时间停留在 `PENDING/DEAD`。
+- 当前事件 DTO 已补齐 Jackson 反序列化所需的无参/全参构造；后续线程若调整事件类，不得再次破坏 MQ 消费端反序列化。
+
+### 6.4 网关与公共装配补充事实
+- `gateway-service` 当前已明确排除 JDBC 自动配置，不参与数据库真源访问；后续线程不得把网关重新改造成依赖 `DataSource` 的服务。
+- `common` 中事件基础设施相关 Bean 已改为按条件装配，避免 `gateway-service`、`auth-service` 等不需要 outbox / consume-log 的服务因为公共模块注入失败而启动失败；后续线程若继续扩展 `common`，必须保持这种“按能力装配”的边界。
+- 当前首页 `GET /api/v1/home` 已通过 `gateway-service -> content-service` 实际联调成功；后续线程若修改网关、公共配置或启动脚本，不得破坏该公开聚合链路。
+
 ## 7. 交付与运维线程提示词
 ```text
 你现在负责这个项目的“交付与运维线程”，目标是让分布式改造后的项目具备本地演示、联调、运行说明和基础可观测性，而不是只停留在服务拆分层面。
@@ -531,6 +560,14 @@
   - 如需在受限环境重定向 Maven settings 或本地仓库，统一通过 `MAVEN_SETTINGS`、`MAVEN_REPO_LOCAL` 注入，不要在脚本外再包一层 `cmd.exe`
   - `-Dspring-boot.run.profiles=local`、`-Dmaven.repo.local=...` 这类参数必须作为单个参数传递，不能再被拆坏
   - 服务是否“已启动”必须以目标端口是否真实监听为准，不能只依赖残留 PID
+- 运维线程需要接受当前本地联调基线已经验证通过：
+  - `gateway-service`、`content-service`、`review-service`、`search-service`、`notification-service` 可以在本机同时运行
+  - `GET /api/v1/home` 已通过网关成功返回真实文章数据
+  - MQ 业务闭环已实测跑通，验证范围覆盖审核通过与取消审核两条链路
+- 运维线程后续若梳理启动顺序、健康检查或故障排查说明，必须把以下排障结论写入运行文档：
+  - 若首页返回 `500`，先确认 `gateway-service` 是否真正启动成功，而不是先怀疑文章表无数据
+  - 若网关启动失败，优先检查是否错误引入了 `DataSource` 依赖或被 `common` 中非条件化 Bean 拖挂
+  - 若事件链路看似未触发，先查看 `event_outbox.status` 与定时发布窗口，而不是直接判定 RabbitMQ 或消费者不可用
 - 运维线程的回归重点应显式覆盖：
   - 单模块启动不再出现 `Unknown lifecycle phase ".run.profiles=local"`
   - 服务启动失败后再次执行启动脚本，不会因为残留 launcher PID 被误判为“已运行”
