@@ -1,3 +1,4 @@
+# Local Windows development launcher. Not intended for Linux/cloud deployment.
 param(
     [string]$RunProfile = "local",
     [string[]]$Services = @(
@@ -135,6 +136,85 @@ function Resolve-MavenCommand {
     throw "Cannot resolve Maven command. Set MAVEN_CMD or install Maven."
 }
 
+function Resolve-AbsolutePath {
+    param(
+        [string]$Path,
+        [string]$BasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $null
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
+}
+
+function Get-DefaultMavenRepoLocal {
+    param([string]$RepoRoot)
+
+    return (Join-Path $RepoRoot ".cache\m2\repository")
+}
+
+function Ensure-MavenRuntimeConfig {
+    param(
+        [string]$RepoRoot,
+        [string]$RuntimeRoot
+    )
+
+    $repoLocal = if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_REPO_LOCAL)) {
+        Resolve-AbsolutePath -Path $env:MAVEN_REPO_LOCAL -BasePath $RepoRoot
+    }
+    else {
+        Get-DefaultMavenRepoLocal -RepoRoot $RepoRoot
+    }
+
+    New-Item -ItemType Directory -Force -Path $repoLocal | Out-Null
+
+    $settingsPath = if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_SETTINGS)) {
+        Resolve-AbsolutePath -Path $env:MAVEN_SETTINGS -BasePath $RepoRoot
+    }
+    else {
+        Join-Path $RuntimeRoot "maven-settings.xml"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_SETTINGS)) {
+        if (-not (Test-Path $settingsPath)) {
+            throw "Cannot find Maven settings file: $settingsPath"
+        }
+    }
+    else {
+        $escapedRepoLocal = [System.Security.SecurityElement]::Escape($repoLocal)
+        $settingsContent = @"
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <localRepository>$escapedRepoLocal</localRepository>
+</settings>
+"@
+        [System.IO.File]::WriteAllText(
+            $settingsPath,
+            $settingsContent,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:MAVEN_SETTINGS)) {
+        $env:MAVEN_SETTINGS = $settingsPath
+    }
+    if ([string]::IsNullOrWhiteSpace($env:MAVEN_REPO_LOCAL)) {
+        $env:MAVEN_REPO_LOCAL = $repoLocal
+    }
+
+    return @{
+        SettingsPath = $settingsPath
+        RepoLocal = $repoLocal
+    }
+}
+
 function Invoke-Maven {
     param(
         [string]$MavenCommand,
@@ -156,14 +236,15 @@ function Invoke-Maven {
 }
 
 function Get-MavenCommonArguments {
-    $arguments = @()
+    param(
+        [string]$SettingsPath,
+        [string]$RepoLocal
+    )
 
-    if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_SETTINGS)) {
-        $arguments += @("-s", $env:MAVEN_SETTINGS)
-    }
+    $arguments = @("-s", $SettingsPath)
 
     if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_REPO_LOCAL)) {
-        $arguments += "-Dmaven.repo.local=$($env:MAVEN_REPO_LOCAL)"
+        $arguments += "-Dmaven.repo.local=$RepoLocal"
     }
 
     return $arguments
@@ -200,17 +281,20 @@ $composePath = Join-Path $repoRoot "docker-compose.yml"
 $runtimeRoot = Join-Path $repoRoot ".codex-runtime"
 $pidRoot = Join-Path $runtimeRoot "pids"
 $logRoot = Join-Path $runtimeRoot "logs"
-$mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
-$mavenCommonArguments = @(Get-MavenCommonArguments)
 
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $pidRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 
+$mavenRuntimeConfig = Ensure-MavenRuntimeConfig -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot
+$mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
+$mavenCommonArguments = @(Get-MavenCommonArguments `
+    -SettingsPath $mavenRuntimeConfig.SettingsPath `
+    -RepoLocal $mavenRuntimeConfig.RepoLocal)
+
 Write-Step "Using Maven command: $mavenCommand"
-if ($mavenCommonArguments.Count -gt 0) {
-    Write-Step "Using extra Maven arguments: $($mavenCommonArguments -join ' ')"
-}
+Write-Step "Using Maven settings: $($mavenRuntimeConfig.SettingsPath)"
+Write-Step "Using Maven local repository: $($mavenRuntimeConfig.RepoLocal)"
 
 if (-not $SkipDocker) {
     if (-not (Test-Path $composePath)) {

@@ -250,10 +250,19 @@
   - 有效 token：下游能拿到 `X-User-*`，因此作者本人可以读取自己的草稿、退回稿、待审核稿详情
   - 失效、解析失败或黑名单 token：网关直接返回 `401`
 - 内容域线程不得用“把私有稿件改成公开可见”这种方式规避鉴权问题，必须继续依赖网关注入的用户头做作者视角权限判断。
+- 内容域线程必须接受以下新增事实已经固定，不得在后续设计中回退：
+  - `content-service` 除既有内部接口外，还必须提供 `POST /internal/articles/profile-page`
+  - 该接口专门服务 `auth-service` 的 `GET /api/v1/users/{username}/profile` 聚合，`auth-service` 不再直查 `articles` / `review_logs`
+  - viewer 身份只能来自网关透传的 `X-User-Id`、`X-Username`、`X-User-Role`
+  - `content-service` 内部自行判定 `isSelf || isAdmin`，不得让调用方传 `canViewAll` 一类权限参数
+  - 用户主页文章聚合必须继续复用 `GET /internal/reviews/articles/{id}/latest` 获取最新退回/拒绝原因
+- 用户主页与文章详情继续共用“公开但身份感知”语义：匿名可访问公开内容，有效 token 透传身份，失效或黑名单 token 由网关直接返回真实 HTTP `401`。
 - 内容域线程的回归重点应显式覆盖：
   - 登录作者点击草稿箱中的草稿，不再跳 `404`
   - 匿名访问公开文章详情仍然正常
   - 旧 token 访问文章详情时返回 `401`，而不是静默降级为匿名
+  - `GET /api/v1/users/{username}/profile` 对本人或管理员可见非 `APPROVED` 状态，对他人只能看到 `APPROVED`
+  - `POST /internal/articles/profile-page` 不得成为绕过身份判断的后门接口
 
 ## 5. 审核域线程提示词
 ```text
@@ -307,6 +316,16 @@
 - 审核服务与内容服务的边界清晰
 - 后续可以无缝接入 ReviewDecidedEvent
 ```
+
+### 5.1 审核域线程补充说明
+- 审核域线程必须建立在已落地的认证与内容聚合边界之上：`review-service` 不得解析 JWT，身份恢复继续只基于 `HeaderAuthenticationFilter`。
+- 对外鉴权失败语义已经固定为真实 HTTP `401/403`，不得回退为 HTTP `200 + code` 的兼容包装模式。
+- `review-service` 继续只依赖固定 4 个内部头和既定内部接口边界，不得新增身份头或额外的内部鉴权协议。
+- `review-service` 需要继续保证 `GET /internal/reviews/articles/{id}/latest` 可被 `content-service` 用于用户主页文章聚合，不得因为 `review_tasks`、outbox 或日志重构而破坏该用途。
+- 后续若调整审核日志查询或审核投影实现，不得破坏 `content-service -> review-service -> auth-service` 这条既定依赖方向。
+- 审核域线程的回归重点应显式覆盖：
+  - 普通用户访问审核接口时返回真实 HTTP `403`
+  - 审核原因查询兼容用户主页聚合场景，不因 `review_tasks` / outbox 改造而中断
 
 ## 6. 事件与派生能力线程提示词
 ```text
@@ -371,6 +390,16 @@
 - 搜索和通知作为派生数据处理，不影响文章主状态真源
 ```
 
+### 6.1 事件与派生能力线程补充说明
+- 事件线程必须建立在已落地的同步认证链路之上：认证模型仍固定为“gateway 校验 JWT + auth-service 签发 JWT + 下游只认头”，不得在事件线程中重新引入服务内 token 校验。
+- 搜索、通知、投影都属于派生能力，不得反向成为文章状态、用户资料或鉴权结果的真源。
+- 事件线程改造后不得破坏 `GET /api/v1/articles/{id}`、`GET /api/v1/users/{username}/profile` 的身份感知语义；失效、解析失败或黑名单 token 仍必须由网关在入口处返回真实 HTTP `401`。
+- 不得把 `logout`、JWT 黑名单、token 解析回迁到 MQ 消费服务或任何业务服务。
+- 后续搜索结果、通知内容、投影补数若需要用户摘要，仍应走 `POST /internal/users/batch`，不得重新跨服务直查用户真源表。
+- 事件与派生能力线程的回归重点应显式覆盖：
+  - 异步链路失败不影响公开接口的既定鉴权语义
+  - 搜索或通知改造后，公开文章详情和公开主页的身份感知行为保持不变
+
 ## 7. 交付与运维线程提示词
 ```text
 你现在负责这个项目的“交付与运维线程”，目标是让分布式改造后的项目具备本地演示、联调、运行说明和基础可观测性，而不是只停留在服务拆分层面。
@@ -423,6 +452,15 @@
 ### 7.1 交付与运维线程补充说明
 - 本机启动方案必须把 `MAVEN_CMD` 作为一等入口，优先允许显式指定真实 `mvn.cmd`；不要默认信任 `mvnw.cmd` 在所有 Windows 机器上都稳定可用。
 - 当前这台开发机的已知可用示例路径为：`C:\Users\PINKING\.m2\wrapper\dists\apache-maven-3.9.12-bin\5nmfsn99br87k5d4ajlekdq10k\apache-maven-3.9.12\bin\mvn.cmd`
+- 本地开发入口与服务器运行入口已经分层固定：
+  - Windows 本地开发继续使用 `scripts/dev-up.ps1` / `scripts/dev-up.cmd`
+  - 上述脚本只用于本地开发，不是服务器运行入口
+  - Linux 服务器基线入口固定为 `scripts/run-service.sh <service-name> [profile] [env-file]`
+  - 服务器运行形态固定为 `java -jar target/<service>-1.0.0.jar`，不再把 `spring-boot:run` 当成云上运行方式
+- 所有服务都已统一暴露 `GET /actuator/health` 和 `GET /actuator/info`，运维线程必须在这个基线上继续补运行说明和检查项，而不是重新定义健康检查入口。
+- 云上配置基线已经固定为“环境变量 + Nacos”，示例样板在 `scripts/env/server.env.example`；后续线程不得再默认依赖本地 profile 文件或本地路径。
+- `content-service` 当前默认单实例运行，因为仍存在定时任务且尚未做分布式协调；交付说明必须显式保留这条运行限制。
+- 上云前置文档已经固定在 `docs/distributed-refactor/06-cloud-readiness-baseline.md`，后续交付与运维线程必须在该基线上增量推进，而不是从 Docker / K8s 反推当前运行模型。
 - 启动脚本和运行说明需要明确：
   - `MAVEN_CMD` 指向的 `mvn.cmd` 优先通过 PowerShell 直接调用，并使用参数数组传递参数，不再额外套 `cmd.exe /d /c call ...`
   - 如需在受限环境重定向 Maven settings 或本地仓库，统一通过 `MAVEN_SETTINGS`、`MAVEN_REPO_LOCAL` 注入，不要在脚本外再包一层 `cmd.exe`
@@ -432,6 +470,8 @@
   - 单模块启动不再出现 `Unknown lifecycle phase ".run.profiles=local"`
   - 服务启动失败后再次执行启动脚本，不会因为残留 launcher PID 被误判为“已运行”
   - `gateway-service` 重启后，公开接口仍满足“无 token 匿名放行、有效 token 透传身份、坏 token 返回 `401`”这条既定语义
+  - Linux `run-service.sh` 方式启动后，各服务 `/actuator/health`、`/actuator/info` 可访问
+  - 运行说明明确区分“本地开发脚本”“Linux 服务器启动脚本”“后续正式部署方案”三层职责
 
 ## 8. 验收要求
 所有新线程都必须满足以下共性要求：
@@ -440,6 +480,10 @@
 - 必须重复固定约束：`先拆服务后拆库`、`外部 API 兼容`、`不引入 Seata`
 - 不得在线程内改写已固定的内部接口边界
 - 默认只有当现有代码事实与设计文档直接冲突时，线程才允许提出修订建议
+- 后续线程默认建立在已落地的认证模型之上：网关统一鉴权、下游只认头、鉴权失败返回真实 HTTP `401/403`
+- 后续线程默认建立在已落地的 Linux 运行基线之上：`java -jar`、`run-service.sh`、`/actuator/health`、`/actuator/info`
+- 后续线程只能做增量收敛，不得把已落地的 `POST /internal/articles/profile-page`、`run-service.sh`、`scripts/env/server.env.example`、`06-cloud-readiness-baseline.md` 视为不存在
+- 若线程涉及启动/回归说明，Windows 本地优先使用 `MAVEN_CMD`，Linux 运行优先使用打包产物，不混用两套入口
 
 ## 9. 默认假设
 - 默认所有新线程都在同一个仓库上下文内工作

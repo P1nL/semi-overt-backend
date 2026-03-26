@@ -47,3 +47,9 @@ platform:
   submit-review-cooldown-minutes: ${SUBMIT_REVIEW_COOLDOWN_MINUTES:30}
   draft-cache-ttl-days: ${DRAFT_CACHE_TTL_DAYS:7}
   draft-flush-interval-minutes: ${DRAFT_FLUSH_INTERVAL_MINUTES:5}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

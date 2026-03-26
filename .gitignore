@@ -34,6 +34,12 @@ build/
 
 # Local Spring profile overrides
 src/main/resources/application-local.yml
+.codex-runtime/
+.runtime/
+.cache/m2/
+.cache/m2-settings.xml
+scripts/env/*.env
+!scripts/env/server.env.example
 
 # Compiled class file
 *.class

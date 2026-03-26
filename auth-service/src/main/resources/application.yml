@@ -61,3 +61,9 @@ jwt:
 platform:
   reset-pwd-token-ttl-minutes: ${RESET_PWD_TOKEN_TTL_MINUTES:15}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
