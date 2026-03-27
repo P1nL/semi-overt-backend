@@ -1,5 +1,6 @@
 package com.platform.dto.resp;
 
+import com.platform.enums.UserRole;
 import lombok.Builder;
 import lombok.Data;
 
@@ -43,6 +44,7 @@ public class UserProfileResp {
         private Long id;
         private String username;
         private String nickname;
+        private UserRole role;
         private String avatarUrl;
         private String coverUrl;
         private String signature;

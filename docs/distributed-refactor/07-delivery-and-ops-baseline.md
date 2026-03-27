@@ -8,6 +8,7 @@ It keeps the runtime model lightweight:
 - infrastructure is started through `docker-compose.yml`
 - local business services are started through `scripts/dev-up.ps1`
 - Linux baseline still uses `scripts/run-service.sh`
+- optional Linux Nginx serves frontend assets and proxies public traffic to `gateway-service`
 - observability stays at the level of health endpoints, logs, queue visibility, and a smoke script
 
 The goal is to let a new teammate clone the repo, start the stack quickly, and demo the full chain:
@@ -26,6 +27,13 @@ The three runtime layers are fixed:
    - purpose: packaged jar startup through `java -jar`
 3. Later formal deployment
    - intentionally not implemented in this stage
+
+An optional Nginx entry layer may be added only on Linux-facing environments:
+
+4. External HTTP entry
+   - entry: Nginx on port `80`
+   - purpose: serve frontend static files and reverse proxy `/api/v1/**` plus `/static/uploads/**`
+   - does not replace the plain Spring Boot process baseline
 
 Do not mix these responsibilities.
 
@@ -155,6 +163,36 @@ Current runtime restriction:
 
 - `content-service` must remain single-instance because draft flush scheduling has not been made distributed-safe yet
 
+## Linux Nginx Entry Baseline
+
+The optional Nginx baseline is intentionally lightweight:
+
+- config asset: `deploy/nginx/now-demo.conf`
+- runbook: `deploy/nginx/README.md`
+- public port: `80`
+- upstream gateway: `http://127.0.0.1:8080`
+- static root: `/srv/now-demo/frontend/dist`
+
+Nginx responsibilities are fixed:
+
+- serve built frontend files
+- proxy `/api/v1/**` to `gateway-service`
+- proxy `/static/uploads/**` to `gateway-service`
+- keep SPA refreshes working through `index.html`
+- add basic security headers, static cache headers, and access logs
+
+Nginx does not:
+
+- proxy directly to internal services
+- replace gateway auth, TraceId generation, rate limiting, or route dispatch
+- replace direct actuator checks on service ports
+
+Important error-handling rule:
+
+- gateway responses keep their own JSON body semantics
+- if Nginx itself generates `500/502/503/504` for `/api/**`, it must return JSON instead of the default HTML error page
+- `/static/uploads/**` keeps normal static-resource failure semantics and is not forced into JSON
+
 ## TraceId And Logging Rules
 
 The unified request trace header is:
@@ -202,6 +240,13 @@ Direct service endpoint checks:
 - `http://127.0.0.1:8084/actuator/health`
 - `http://127.0.0.1:8085/actuator/health`
 - `http://127.0.0.1:8086/actuator/health`
+
+If Nginx is enabled, public HTTP verification can additionally use:
+
+- `http://127.0.0.1/`
+- `http://127.0.0.1/api/v1/home`
+
+But direct service health checks still remain mandatory.
 
 Infrastructure checks:
 
@@ -268,6 +313,8 @@ Health-only usage:
 ./scripts/smoke-test.ps1 -SkipE2E
 ```
 
+The smoke script remains a direct gateway check and does not switch to Nginx by default.
+
 ## Demo Flow
 
 Recommended 8-minute interview demo:
@@ -296,12 +343,20 @@ Fast repeat-start example:
 ./scripts/dev-up.ps1 -StartupMode fast
 ```
 
-4. Show actuator checks and service registration in Nacos.
-5. Run the smoke script or replay its steps manually through the gateway.
-6. Show notification rows and search results after review approval.
-7. Explain:
+4. If demonstrating the Linux-facing entry pattern, build the frontend in the separate frontend repo and place the output under `/srv/now-demo/frontend/dist`.
+5. Start or reload Nginx with `deploy/nginx/now-demo.conf`.
+6. Show actuator checks and service registration in Nacos.
+7. Run the smoke script or replay its steps manually through the gateway.
+8. Manually verify through Nginx:
+   - homepage loads on `/`
+   - `GET /api/v1/home` works
+   - an SPA route refresh such as `/review` does not 404
+   - uploaded image URLs under `/static/uploads/**` still resolve
+9. Show notification rows and search results after review approval.
+10. Explain:
    - local infra is compose-managed
    - business services stay as plain Spring Boot processes
+   - Nginx is only an external HTTP entry layer
    - `content-service` is still single-instance
    - observability is intentionally lightweight but enough for a demo project
 
@@ -310,9 +365,11 @@ Fast repeat-start example:
 These checks must stay in the runbook:
 
 - if the home page returns `500`, first confirm `gateway-service` actually started successfully
+- if `/api/**` returns `502` JSON from Nginx, first confirm `gateway-service` is listening on `127.0.0.1:8080`
 - if the gateway fails to start, first inspect whether a `DataSource` dependency was accidentally pulled in or a non-conditional bean from `common` dragged it down
 - if an event chain appears idle, inspect `event_outbox.status` and the scheduled publish window before blaming RabbitMQ or the consumer
 - if a local relaunch says a service is already running, verify the actual listening port instead of trusting a stale PID file
+- if the frontend loads but assets are stale, confirm `/assets/**` cache invalidation follows the built file hashes and that `index.html` was replaced with the latest build
 
 ## Regression Focus
 
@@ -324,5 +381,7 @@ The delivery and ops regression focus must explicitly cover:
   - public routes still allow anonymous access
   - valid tokens still propagate user identity
   - invalid tokens still return `401`
+- Nginx `/api/**` does not replace gateway JSON responses, but still returns JSON when it generates `500/502/503/504` itself
+- Nginx `/static/uploads/**` keeps resource semantics and is not forced into JSON
 - Linux `run-service.sh` startup leaves `/actuator/health` and `/actuator/info` reachable
 - the runbook keeps local scripts, Linux baseline, and later formal deployment clearly separated

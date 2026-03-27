@@ -11,6 +11,7 @@ Current baseline goals:
 - Linux startup is handled by `scripts/run-service.sh <service-name> [profile] [env-file]`
 - runtime configuration is provided through environment variables plus Nacos
 - local Windows development keeps using `scripts/dev-up.ps1` and `scripts/dev-up.cmd`
+- optional Linux-facing Nginx can be added as an external entry layer without changing service startup mode
 
 `docs/distributed-refactor/07-delivery-and-ops-baseline.md` extends this baseline with local demo orchestration, smoke checks, startup order, and troubleshooting guidance.
 
@@ -38,6 +39,13 @@ The project now has three clearly separated runtime entry layers:
    - intentionally deferred
    - do not treat `spring-boot:run` as a cloud runtime mode
 
+An optional external entry enhancement may be added in front of this baseline:
+
+4. Linux external entry layer
+   - Nginx serves frontend static assets and proxies public traffic to `gateway-service`
+   - does not replace `scripts/run-service.sh`
+   - does not change direct service health verification rules
+
 ## Linux Runtime Flow
 
 1. Install JDK 17 or newer.
@@ -46,6 +54,8 @@ The project now has three clearly separated runtime entry layers:
 4. Prepare runtime environment variables or an env file from `scripts/env/server.env.example`.
 5. Start a service with `scripts/run-service.sh <service-name> [profile] [env-file]`.
 6. Verify the service directly on its own port through `/actuator/health` and `/actuator/info`.
+
+If Nginx is used on a Linux host, start it only after middleware and Spring services are already healthy.
 
 Example:
 
@@ -141,6 +151,10 @@ Not every service uses every dependency directly, but the environment should pro
 - All runtime health checks should target the service port directly, not go through the gateway.
 - Logs stay on stdout/stderr and are redirected by the launcher to `.runtime/logs/`.
 - Chain tracing uses `X-Trace-Id` as the single request trace header.
+- When Nginx is added, it is only an external HTTP entry layer.
+- Nginx should serve the built frontend, proxy `/api/v1/**` plus `/static/uploads/**` to `gateway-service`, and leave auth plus routing semantics to the gateway.
+- Do not treat Nginx as a replacement for direct service verification on `8080-8086`.
+- Public exposure of `8080-8086` must still be blocked through firewall rules, security groups, or equivalent network policy.
 
 ## Single-Instance Constraint
 
@@ -164,6 +178,7 @@ For now, treat `content-service` as single-instance in server environments and d
 The following are intentionally deferred:
 
 - Docker image build pipeline for services
+- containerized Nginx as the primary server runtime model
 - server-side process manager templates
 - rolling deployment and rollback workflow
 - multi-instance scheduling safety
