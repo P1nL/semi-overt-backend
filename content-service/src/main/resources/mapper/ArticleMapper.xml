@@ -111,13 +111,13 @@
     </select>
 
     <!-- ================================================================
-         搜索（P2 占位，一期简单 LIKE 实现）
+         历史保留的数据库模糊搜索 SQL
          ================================================================ -->
 
     <!--
-        按关键词模糊搜索标题和摘要（仅 APPROVED 文章）
-        一期使用 LIKE，后续可替换为 FULLTEXT 或 Elasticsearch
-        注意：LIKE '%keyword%' 无法利用索引，数据量大时需加全文索引或搜索引擎
+        历史保留的标题/摘要 LIKE 搜索 SQL（仅 APPROVED 文章）
+        当前公开搜索主链路已经迁移到 search-service + Elasticsearch。
+        这里保留是为了兼容旧的内容侧调用，不作为当前对外搜索能力的真实实现说明。
     -->
     <select id="searchByKeyword" resultMap="ArticleBaseMap">
         SELECT a.*

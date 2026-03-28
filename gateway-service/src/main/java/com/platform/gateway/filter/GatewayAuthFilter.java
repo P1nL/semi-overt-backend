@@ -142,7 +142,13 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                         return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
                     }
 
-                    JwtUser jwtUser = jwtHelper.parse(token);
+                    JwtUser jwtUser;
+                    try {
+                        jwtUser = jwtHelper.parse(token);
+                    }
+                    catch (RuntimeException ex) {
+                        return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
+                    }
                     if (jwtUser == null) {
                         return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
                     }

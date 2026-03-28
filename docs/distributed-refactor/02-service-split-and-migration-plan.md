@@ -31,7 +31,7 @@
 | `controller/article/home/category + service/article/draft/home/category + mapper/article` | `content-service` | 首页、分类、文章、草稿 |
 | `controller/review + service/review + mapper/review_log` | `review-service` | 待审核、审核动作、审核日志 |
 | `controller/upload + service/upload` | `file-service` | 图片上传与元数据 |
-| `controller/search + service/search` | `search-service` | 搜索服务，替换现有占位实现 |
+| `controller/search + service/search` | `search-service` | 搜索服务，承载当前基础 ES 检索 |
 | 网关与统一鉴权能力 | `gateway-service` | 统一入口、鉴权、路由 |
 | 审核后通知相关新增能力 | `notification-service` | 站内信与邮件通知 |
 
@@ -261,7 +261,7 @@
 
 边界说明：
 
-- 替换当前搜索占位实现
+- 承载当前基础 Elasticsearch 搜索
 - 仅索引 `APPROVED` 内容
 - 不回写文章主状态
 
@@ -399,7 +399,7 @@
 - 提交审核和审核结果改为事件驱动
 - 新增 `notification-service`
 - 新增 `search-service`
-- 将当前搜索占位实现替换为 Elasticsearch 真实检索
+- 保持当前 Elasticsearch 搜索链路并继续增强
 - 新增 `review_tasks` 审核任务投影
 
 阶段二交付结果：

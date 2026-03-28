@@ -48,10 +48,10 @@
 
 项目背景：
 - 当前项目是一个 Spring Boot 单体内容平台
-- 已有能力包括：注册登录、草稿、文章提交审核、审核日志、首页聚合、分类、上传、搜索占位
+- 已有能力包括：注册登录、草稿、文章提交审核、审核日志、首页聚合、分类、上传、基础搜索
 - 现有核心表：users、articles、review_logs
 - Redis 当前用途：jwt:blacklist、pwd:reset、pwd:reset:lock、draft:{userId}:{articleId}、home:hero:{yyyy-MM-dd}
-- 当前搜索仍是占位实现，后续要接入 Elasticsearch
+- 当前仓库已接入 `search-service` + Elasticsearch；本文件中的部分提示词写于搜索链路落地之前
 
 本线程目标：
 1. 将当前单体工程规划为 Maven 父工程 + 多模块结构
@@ -352,7 +352,7 @@
 你现在负责这个项目的“事件与派生能力线程”，目标是为分布式改造补齐 RabbitMQ、event_outbox、event_consume_log，并新增 notification-service 与 search-service，打通“提交 -> 审核 -> 通知 -> 搜索”的异步链路。
 
 项目背景：
-- 当前搜索仍是占位实现，SearchServiceImpl 返回空结果
+- 这些提示词编写时搜索仍是占位；当前仓库已实现基础 Elasticsearch 搜索
 - 当前没有 MQ、没有事件表、没有通知表、没有审核任务投影表
 - 设计文档已经固定三类事件：
   - ArticleSubmittedEvent

@@ -29,7 +29,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 首页 | `/api/v1/home` | `GET` | 公开 | 首页 Hero 和分区聚合 | `HomeServiceImpl` |
 | 分类 | `/api/v1/categories/{category}/articles` | `GET` | 公开 | 分类文章分页 | `CategoryServiceImpl` |
-| 搜索 | `/api/v1/search/articles` | `GET` | 公开 | 搜索文章，当前为占位实现 | `SearchServiceImpl` |
+| 搜索 | `/api/v1/search/articles` | `GET` | 公开 | 基础关键词搜索，数据来自 Elasticsearch 文章投影 | `SearchServiceImpl` |
 | 认证 | `/api/v1/auth/register` | `POST` | 公开 | 注册并直接返回 token | `AuthServiceImpl` |
 | 认证 | `/api/v1/auth/login` | `POST` | 公开 | 登录并返回 token | `AuthServiceImpl` |
 | 认证 | `/api/v1/auth/forgot-password` | `POST` | 公开 | 发送重置密码邮件 | `AuthServiceImpl` |
@@ -71,7 +71,8 @@
 ### `SearchController`
 
 - 独立于分类页的搜索入口
-- 当前实现是占位版本，接口 shape 已稳定
+- 当前实现为基础 Elasticsearch 搜索，接口 shape 已稳定
+- 搜索范围固定为标题和摘要，只返回已发布文章投影
 
 ### `ArticleController`
 

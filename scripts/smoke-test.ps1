@@ -100,7 +100,12 @@ function Invoke-Api {
         }
 
         $statusCode = [int]$_.Exception.Response.StatusCode
-        $rawBody = $_.ErrorDetails.Message
+        $rawBody = if ($null -ne $_.ErrorDetails -and $null -ne $_.ErrorDetails.PSObject.Properties["Message"]) {
+            $_.ErrorDetails.Message
+        }
+        else {
+            $null
+        }
         if ([string]::IsNullOrWhiteSpace($rawBody)) {
             $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
             $rawBody = $reader.ReadToEnd()
@@ -188,8 +193,8 @@ function Test-InfrastructureHealth {
 
     Write-Step "Checking MySQL schema"
     $mysqlResult = Invoke-DockerCompose -Arguments @(
-        "exec", "-T", "mysql",
-        "mysql", "-uroot", "-p$mysqlRootPassword", "-Nse", "SHOW DATABASES LIKE '$mysqlDatabase';"
+        "exec", "-T", "-e", "MYSQL_PWD=$mysqlRootPassword", "mysql",
+        "mysql", "-uroot", "-Nse", "SHOW DATABASES LIKE '$mysqlDatabase';"
     )
     if (($mysqlResult -join "").Trim() -ne $mysqlDatabase) {
         throw "MySQL schema check failed: $($mysqlResult -join [Environment]::NewLine)"
@@ -223,7 +228,13 @@ function Test-ServiceEndpoints {
         $port = $servicePorts[$service]
         $health = Invoke-Api -Method Get -Uri "http://$ServiceHost`:$port/actuator/health"
         Assert-StatusCode -Response $health -ExpectedStatus 200 -Context "$service actuator health"
-        if ($null -ne $health.Json -and $null -ne $health.Json.status -and $health.Json.status -ne "UP") {
+        $healthStatus = if ($null -ne $health.Json -and $null -ne $health.Json.PSObject.Properties["status"]) {
+            $health.Json.status
+        }
+        else {
+            $null
+        }
+        if ($null -ne $healthStatus -and $healthStatus -ne "UP") {
             throw "$service /actuator/health returned non-UP status: $($health.Body)"
         }
 
@@ -231,8 +242,8 @@ function Test-ServiceEndpoints {
         Assert-StatusCode -Response $info -ExpectedStatus 200 -Context "$service actuator info"
     }
 
-    $home = Invoke-Api -Method Get -Uri "$GatewayBaseUrl/api/v1/home" -Headers @{ "X-Trace-Id" = $TraceId }
-    Assert-StatusCode -Response $home -ExpectedStatus 200 -Context "Gateway public home endpoint"
+    $homeResponse = Invoke-Api -Method Get -Uri "$GatewayBaseUrl/api/v1/home" -Headers @{ "X-Trace-Id" = $TraceId }
+    Assert-StatusCode -Response $homeResponse -ExpectedStatus 200 -Context "Gateway public home endpoint"
 
     $invalidToken = Invoke-Api -Method Get -Uri "$GatewayBaseUrl/api/v1/articles/drafts" -Headers @{
         "X-Trace-Id" = $TraceId
@@ -245,8 +256,8 @@ function Invoke-MySqlScalar {
     param([string]$Query)
 
     $result = Invoke-DockerCompose -Arguments @(
-        "exec", "-T", "mysql",
-        "mysql", "-uroot", "-p$mysqlRootPassword", "-D", $mysqlDatabase, "-Nse", $Query
+        "exec", "-T", "-e", "MYSQL_PWD=$mysqlRootPassword", "mysql",
+        "mysql", "-uroot", "-D", $mysqlDatabase, "-Nse", $Query
     )
     return ($result -join "").Trim()
 }
@@ -269,9 +280,9 @@ function Assert-ResultCode {
 function Invoke-E2ESmoke {
     Write-Step "Running gateway E2E smoke flow"
 
-    $suffix = Get-Date -Format "yyyyMMddHHmmss"
-    $authorUsername = "demo_author_$suffix"
-    $adminUsername = "ops_reviewer_$suffix"
+    $suffix = Get-Date -Format "MMddHHmmss"
+    $authorUsername = "author_$suffix"
+    $adminUsername = "review_$suffix"
     $authorEmail = "$authorUsername@example.com"
     $adminEmail = "$adminUsername@example.com"
     $password = "Passw0rd!123"
@@ -393,7 +404,7 @@ WHERE n.user_id = $authorId
             return $false
         }
         $list = @($search.Json.data.list)
-        return ($list | Where-Object { $_.articleId -eq $articleId }).Count -gt 0
+        return @($list | Where-Object { $_.articleId -eq $articleId }).Count -gt 0
     }
 
     Wait-Until -Description "traceId in service logs" -TimeoutSeconds 30 -Condition {

@@ -100,7 +100,7 @@
 
 ## 4. `SearchController.java`
 
-文件：`src/main/java/com/platform/controller/SearchController.java`
+文件：`search-service/src/main/java/com/platform/controller/SearchController.java`
 
 职责：
 
@@ -117,9 +117,9 @@
 特点：
 
 - 参数校验已经加了 `@NotBlank`
-- 当前 Service 还是占位实现，Controller 已经稳定
+- 当前 Service 已接入 Elasticsearch，Controller 仍保持公开搜索入口不变
 
-这类设计的价值是：以后替换搜索实现时，前端 API 不用改。
+这类设计的价值是：搜索实现可以继续演进，但前端 API 不用改。
 
 ## 5. `ArticleController.java`
 

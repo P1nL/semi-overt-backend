@@ -6,31 +6,30 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 搜索结果响应（P2 占位）
- * 对应接口：GET /api/v1/search/articles
+ * Response payload for {@code GET /api/v1/search/articles}.
  *
- * 一期保留结构定义，后期接入全文检索时直接复用此 DTO。
- * list 中的卡片结构与首页/分类页完全一致（ArticleCardResp 复用）。
+ * <p>The card structure intentionally reuses {@link ArticleCardResp} so search,
+ * home, and category pages can consume a consistent article list model.</p>
  */
 @Data
 @Builder
 public class SearchResp {
 
-    /** 搜索关键词（原样回传，便于前端高亮） */
+    /** Echoes the keyword back to the client for search state display. */
     private String keyword;
 
-    /** 当前页文章卡片列表 */
+    /** Current page of article cards. */
     private List<ArticleCardResp> list;
 
-    /** 总记录数 */
+    /** Total hit count. */
     private Long total;
 
-    /** 当前页码（从 1 开始） */
+    /** Current page number, starting from 1. */
     private Integer page;
 
-    /** 每页条数 */
+    /** Requested page size after normalization. */
     private Integer pageSize;
 
-    /** 总页数 */
+    /** Total page count. */
     private Long pages;
 }

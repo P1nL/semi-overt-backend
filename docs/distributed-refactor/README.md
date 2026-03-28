@@ -60,5 +60,5 @@
 补充说明：
 
 - 这组文档默认服务拆分仍在同一个仓库中推进，采用 Maven 多模块
-- 当前搜索仍是占位实现，因此 `search-service` 是第二阶段的重要落点
+- 当前仓库已经落地基础 `search-service` + Elasticsearch 链路，后续重点是继续增强而不是从零补齐
 - 当前 Redis 中的草稿正文缓存仍然是关键事实，拆分后只归 `content-service` 所有

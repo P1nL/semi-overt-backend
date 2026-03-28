@@ -342,19 +342,19 @@ Redis key：
 
 ## 8. `SearchServiceImpl.java`
 
-文件：`src/main/java/com/platform/service/impl/SearchServiceImpl.java`
+文件：`search-service/src/main/java/com/platform/service/impl/SearchServiceImpl.java`
 
 职责：
 
-- 搜索接口的占位实现
+- 搜索接口的基础 Elasticsearch 实现
 
 当前状态：
 
-- 固定返回空列表
-- API 已经稳定
-- 未来可以直接替换为 LIKE 查询或 Elasticsearch
+- 查询 Elasticsearch 中的文章投影
+- 搜索范围固定为 `title` 和 `summary`
+- 结果按相关性优先，`publishedAt` 倒序兜底，API 保持稳定
 
-这说明项目在“接口先行、实现后补”。
+这说明项目已经从“接口先行”走到“基础实现已落地”，后续只需要继续增强搜索能力。
 
 ## 9. `UploadServiceImpl.java`
 

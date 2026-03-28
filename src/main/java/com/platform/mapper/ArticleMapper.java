@@ -11,10 +11,13 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * 文章 Mapper
- * 简单 CRUD 由 MyBatis Plus BaseMapper 提供
- * 以下方法为需要 JOIN 或聚合的复杂查询，在 ArticleMapper.xml 中实现
+ * Historical single-app article mapper residue.
+ *
+ * <p>This root src tree is not part of the active multi-module runtime. Search in
+ * the current system is provided by search-service backed by Elasticsearch. The
+ * SQL search method below is retained only as legacy reference.</p>
  */
+@Deprecated
 @Mapper
 public interface ArticleMapper extends BaseMapper<Article> {
 
@@ -63,7 +66,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
     );
 
     /**
-     * 搜索文章（P2 占位）：按关键词模糊匹配标题/摘要，仅 APPROVED 文章
+     * Legacy database LIKE search retained in the historical single-app residue.
      *
      * @param page    分页对象
      * @param keyword 搜索关键词

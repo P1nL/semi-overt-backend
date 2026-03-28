@@ -1,5 +1,6 @@
 package com.platform.service.impl;
 
+import co.elastic.clients.elasticsearch._types.SortOrder;
 import com.platform.client.AuthInternalClient;
 import com.platform.common.api.ResultUtils;
 import com.platform.common.dto.internal.BatchUserQueryReq;
@@ -9,12 +10,12 @@ import com.platform.dto.resp.ArticleCardResp;
 import com.platform.dto.resp.SearchResp;
 import com.platform.service.SearchService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.Criteria;
-import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -23,9 +24,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Public article search backed by Elasticsearch article projections.
+ *
+ * <p>The query is intentionally scoped to title and summary only. Visibility is
+ * controlled by the index projection pipeline, so the search index only contains
+ * APPROVED articles.</p>
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
+
+    private static final int MAX_PAGE_SIZE = 50;
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final AuthInternalClient authInternalClient;
@@ -33,11 +44,8 @@ public class SearchServiceImpl implements SearchService {
     @Override
     public SearchResp search(String keyword, int page, int pageSize) {
         int safePage = Math.max(1, page);
-        int safePageSize = Math.max(1, Math.min(pageSize, 50));
-
-        Criteria criteria = new Criteria("title").matches(keyword)
-                .or(new Criteria("summary").matches(keyword));
-        CriteriaQuery query = new CriteriaQuery(criteria, PageRequest.of(safePage - 1, safePageSize));
+        int safePageSize = Math.max(1, Math.min(pageSize, MAX_PAGE_SIZE));
+        NativeQuery query = buildSearchQuery(keyword, safePage, safePageSize);
 
         SearchHits<ArticleSearchDocument> hits = elasticsearchOperations.search(query, ArticleSearchDocument.class);
         List<ArticleSearchDocument> documents = hits.getSearchHits().stream()
@@ -80,12 +88,37 @@ public class SearchServiceImpl implements SearchService {
                 .build();
     }
 
+    static NativeQuery buildSearchQuery(String keyword, int page, int pageSize) {
+        return NativeQuery.builder()
+                .withQuery(query -> query.bool(bool -> bool
+                        .should(should -> should.match(match -> match
+                                .field("title")
+                                .query(keyword)))
+                        .should(should -> should.match(match -> match
+                                .field("summary")
+                                .query(keyword)))
+                        .minimumShouldMatch("1")))
+                .withPageable(PageRequest.of(page - 1, pageSize))
+                .withSort(sort -> sort.score(score -> score.order(SortOrder.Desc)))
+                .withSort(sort -> sort.field(field -> field
+                        .field("publishedAt")
+                        .order(SortOrder.Desc)))
+                .build();
+    }
+
     private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> userIds) {
         if (userIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(userIds.stream().toList())))
-                .stream()
-                .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
+
+        try {
+            return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(userIds.stream().toList())))
+                    .stream()
+                    .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
+        }
+        catch (Exception ex) {
+            log.warn("Failed to enrich search results with author summaries for {} users", userIds.size(), ex);
+            return Collections.emptyMap();
+        }
     }
 }

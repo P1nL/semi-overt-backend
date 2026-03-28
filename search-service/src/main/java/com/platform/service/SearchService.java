@@ -3,19 +3,20 @@ package com.platform.service;
 import com.platform.dto.resp.SearchResp;
 
 /**
- * 搜索服务接口（P2 占位）
- * 一期不实现，接口定义提前约定，方便后续扩展。
+ * Search service for public article discovery.
  */
 public interface SearchService {
 
     /**
-     * 按关键词搜索 APPROVED 文章（P2 占位）
-     * 一期实现：返回"暂未开放"提示
-     * 后期可替换为全文检索或 Elasticsearch 实现
+     * Search approved article projections by keyword.
      *
-     * @param keyword  搜索关键词
-     * @param page     页码，从 1 开始
-     * @param pageSize 每页条数
+     * <p>The current implementation searches the Elasticsearch article projection
+     * index and matches the keyword against article title and summary.</p>
+     *
+     * @param keyword search keyword
+     * @param page page number, starting from 1
+     * @param pageSize page size
+     * @return paged search results
      */
     SearchResp search(String keyword, int page, int pageSize);
 }
