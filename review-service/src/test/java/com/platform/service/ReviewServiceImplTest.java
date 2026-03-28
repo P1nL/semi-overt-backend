@@ -3,6 +3,7 @@ package com.platform.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ContentInternalClient;
+import com.platform.common.api.PageResponse;
 import com.platform.common.dto.internal.ArticleReviewSnapshotDto;
 import com.platform.common.dto.internal.UserSummaryDto;
 import com.platform.common.event.ReviewDecidedEvent;
@@ -83,12 +84,12 @@ class ReviewServiceImplTest {
                 UserSummaryDto.builder().id(9L).username("writer9").build()
         )));
 
-        Page<ReviewListItemResp> result = service.getPendingList(100L, 1, 10);
+        PageResponse<ReviewListItemResp> result = service.getPendingList(100L, 1, 10);
 
         assertThat(result.getTotal()).isEqualTo(1);
-        assertThat(result.getRecords()).hasSize(1);
-        assertThat(result.getRecords().get(0).getId()).isEqualTo(21L);
-        assertThat(result.getRecords().get(0).getAuthor().getUsername()).isEqualTo("writer9");
+        assertThat(result.getList()).hasSize(1);
+        assertThat(result.getList().get(0).getId()).isEqualTo(21L);
+        assertThat(result.getList().get(0).getAuthor().getUsername()).isEqualTo("writer9");
     }
 
     @Test

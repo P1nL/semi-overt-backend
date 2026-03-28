@@ -87,7 +87,15 @@ public class UserServiceImpl implements UserService {
                 .total(articlesResp != null ? articlesResp.getTotal() : 0)
                 .page(articlesResp != null ? articlesResp.getPage() : page)
                 .pageSize(articlesResp != null ? articlesResp.getPageSize() : pageSize)
+                .pages(resolvePages(articlesResp, pageSize))
                 .build();
+    }
+
+    private long resolvePages(UserProfileArticlesResp articlesResp, int fallbackPageSize) {
+        long total = articlesResp != null ? articlesResp.getTotal() : 0;
+        int pageSize = articlesResp != null ? articlesResp.getPageSize() : fallbackPageSize;
+        int safePageSize = Math.max(1, pageSize);
+        return total == 0 ? 0 : (total + safePageSize - 1) / safePageSize;
     }
 
     private UserProfileResp.ArticleStats toArticleStats(UserProfileArticlesResp articlesResp) {

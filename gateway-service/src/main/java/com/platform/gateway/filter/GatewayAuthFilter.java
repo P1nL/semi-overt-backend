@@ -113,7 +113,8 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                         || PATH_MATCHER.match("/api/v1/categories/**", path)
                         || PATH_MATCHER.match("/api/v1/search/**", path)
                         || path.matches("/api/v1/articles/\\d+")
-                        || path.matches("/api/v1/users/[^/]+/profile"))) {
+                        || path.matches("/api/v1/users/[^/]+/profile")
+                        || path.matches("/api/v1/reviews/\\d+/logs"))) {
             return true;
         }
         return false;

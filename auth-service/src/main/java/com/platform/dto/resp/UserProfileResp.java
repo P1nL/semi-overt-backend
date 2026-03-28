@@ -35,6 +35,7 @@ public class UserProfileResp {
 
     private int page;
     private int pageSize;
+    private long pages;
 
     // ==================== 嵌套类 ====================
 

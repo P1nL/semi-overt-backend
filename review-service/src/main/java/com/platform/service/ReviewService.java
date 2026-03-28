@@ -1,6 +1,6 @@
 package com.platform.service;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.platform.common.api.PageResponse;
 import com.platform.dto.req.ReviewActionReq;
 import com.platform.dto.resp.ReviewActionResp;
 import com.platform.dto.resp.ReviewListItemResp;
@@ -26,7 +26,7 @@ public interface ReviewService {
      * @param pageSize       每页条数
      * @return 分页结果（包含列表 + 总数）
      */
-    Page<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize);
+    PageResponse<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize);
 
     /**
      * 提交审核动作（仅 ADMIN 可调用）

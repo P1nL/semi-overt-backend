@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.client.ContentInternalClient;
+import com.platform.common.api.PageResponse;
 import com.platform.common.api.ResultUtils;
 import com.platform.common.constant.EventConstants;
 import com.platform.common.context.TraceContextHolder;
@@ -52,7 +53,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final EventOutboxService eventOutboxService;
 
     @Override
-    public Page<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
+    public PageResponse<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
         Page<ReviewTask> pageResult = reviewTaskMapper.selectPage(
                 new Page<>(page, pageSize),
                 new LambdaQueryWrapper<ReviewTask>()
@@ -83,9 +84,13 @@ public class ReviewServiceImpl implements ReviewService {
                 })
                 .toList();
 
-        Page<ReviewListItemResp> result = new Page<>(page, pageSize, pageResult.getTotal());
-        result.setRecords(list);
-        return result;
+        return PageResponse.<ReviewListItemResp>builder()
+                .list(list)
+                .total(pageResult.getTotal())
+                .page(pageResult.getCurrent())
+                .pageSize(pageResult.getSize())
+                .pages(pageResult.getPages())
+                .build();
     }
 
     @Override

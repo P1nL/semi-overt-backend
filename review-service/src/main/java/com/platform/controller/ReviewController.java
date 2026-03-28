@@ -1,6 +1,6 @@
 package com.platform.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.platform.common.api.PageResponse;
 import com.platform.dto.req.ReviewActionReq;
 import com.platform.dto.resp.ReviewActionResp;
 import com.platform.dto.resp.ReviewListItemResp;
@@ -33,7 +33,7 @@ public class ReviewController {
      * 仅管理员（SecurityConfig 已全局拦截）
      */
     @GetMapping("/pending")
-    public Result<Page<ReviewListItemResp>> getPendingList(
+    public Result<PageResponse<ReviewListItemResp>> getPendingList(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
 
