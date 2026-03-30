@@ -78,7 +78,7 @@ public class UserServiceImpl implements UserService {
     public UserProfileResp getUserProfile(String username, Long currentUserId, String tab, int page, int pageSize) {
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
         if (user == null) {
-            throw new BusinessException(404, "鐢ㄦ埛涓嶅瓨鍦?");
+            throw new BusinessException(404, "用户不存在");
         }
 
         UserProfileArticlesResp articlesResp = ResultUtils.requireOk(contentInternalClient.profilePage(
@@ -188,7 +188,7 @@ public class UserServiceImpl implements UserService {
     private User getUserById(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
-            throw new BusinessException(404, "鐢ㄦ埛涓嶅瓨鍦?");
+            throw new BusinessException(404, "用户不存在");
         }
         return user;
     }

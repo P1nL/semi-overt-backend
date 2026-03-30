@@ -33,7 +33,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 new LambdaQueryWrapper<User>().eq(User::getUsername, username)
         );
         if (user == null) {
-            throw new UsernameNotFoundException("鐢ㄦ埛涓嶅瓨鍦? " + username);
+            throw new UsernameNotFoundException("用户不存在: " + username);
         }
 
         // 将项目内的用户角色转换为 Spring Security 可识别的 GrantedAuthority。

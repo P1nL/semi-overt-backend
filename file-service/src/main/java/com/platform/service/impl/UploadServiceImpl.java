@@ -22,8 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 图片上传服务实现。
- * 负责校验图片格式、写入本地磁盘、生成访问 URL，并在封面图场景下提取主色。
+ * 图片上传业务实现类，负责校验图片格式、写入本地磁盘并生成访问地址。
  */
 @Slf4j
 @Service
@@ -56,47 +55,49 @@ public class UploadServiceImpl implements UploadService {
     private static final int SAMPLE_SIZE = 20;
 
     /**
-     * 上传图片。
-     * 顺序为：参数校验 -> 图片解码 -> 主色提取 -> 文件落盘 -> 生成访问地址。
+     * 上传图片，校验格式后落盘，并在封面图场景下提取主色。
      */
     @Override
     public UploadResp upload(MultipartFile file, String bizType, Long articleId) {
         if (file == null || file.isEmpty()) {
-            throw BusinessException.badRequest("涓婁紶鏂囦欢涓嶈兘涓虹┖");
+            throw BusinessException.badRequest("上传文件不能为空");
         }
 
         BizType biz;
         try {
             biz = BizType.valueOf(bizType.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw BusinessException.badRequest("鏃犳晥鐨勪笟鍔＄被鍨嬶細" + bizType
-                    + "锛屾敮鎸侊細AVATAR / COVER / ARTICLE_IMAGE");
+            throw BusinessException.badRequest(
+                    "不支持的业务类型：" + bizType + "，可选值为 AVATAR / COVER / ARTICLE_IMAGE"
+            );
         }
 
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw BusinessException.badRequest("鏂囦欢瓒呰繃 5MB 闄愬埗锛屽綋鍓嶅ぇ灏忥細" + (file.getSize() / 1024) + "KB");
+            throw BusinessException.badRequest(
+                    "文件大小不能超过 5MB，当前大小为 " + (file.getSize() / 1024) + "KB"
+            );
         }
 
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase())) {
-            throw BusinessException.badRequest("涓嶆敮鎸佺殑鏂囦欢绫诲瀷锛屼粎鍏佽 JPG / PNG / WebP");
+            throw BusinessException.badRequest("仅支持 JPG / PNG / WebP 格式图片");
         }
 
         String originalName = file.getOriginalFilename();
         String ext = extractExtension(originalName);
         if (!ALLOWED_EXTENSIONS.contains(ext)) {
-            throw BusinessException.badRequest("涓嶆敮鎸佺殑鏂囦欢鎵╁睍鍚嶏細." + ext);
+            throw BusinessException.badRequest("不支持的文件扩展名：" + ext);
         }
 
         BufferedImage image;
         try (InputStream is = file.getInputStream()) {
             image = ImageIO.read(is);
         } catch (IOException e) {
-            log.warn("璇诲彇鍥剧墖澶辫触锛屾枃浠跺悕锛歿}", originalName, e);
-            throw BusinessException.badRequest("鍥剧墖鏂囦欢鎹熷潖鎴栨牸寮忎笉姝ｇ‘");
+            log.warn("图片解码失败，文件名={}", originalName, e);
+            throw BusinessException.badRequest("图片解析失败，请确认文件内容是否有效");
         }
         if (image == null) {
-            throw BusinessException.badRequest("鏃犳硶瑙ｆ瀽鍥剧墖鍐呭锛岃纭鏂囦欢鏍煎紡");
+            throw BusinessException.badRequest("上传文件不是有效的图片内容");
         }
 
         int width = image.getWidth();
@@ -115,7 +116,7 @@ public class UploadServiceImpl implements UploadService {
         Path uploadRoot = Paths.get(uploadBaseDir).toAbsolutePath().normalize();
         Path physicalPath = uploadRoot.resolve(relativePath).normalize();
         if (!physicalPath.startsWith(uploadRoot)) {
-            throw BusinessException.serverError("鏂囦欢瀛樺偍璺緞闈炴硶");
+            throw BusinessException.serverError("文件存储路径非法");
         }
         try {
             Files.createDirectories(physicalPath.getParent());
@@ -123,13 +124,13 @@ public class UploadServiceImpl implements UploadService {
                 Files.copy(inputStream, physicalPath, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            log.error("鏂囦欢鍐欏叆纾佺洏澶辫触锛岃矾寰勶細{}", physicalPath, e);
-            throw BusinessException.serverError("鏂囦欢淇濆瓨澶辫触锛岃绋嶅悗閲嶈瘯");
+            log.error("图片写入磁盘失败，路径={}", physicalPath, e);
+            throw BusinessException.serverError("图片保存失败，请稍后重试");
         }
 
         String accessUrl = staticUrlPrefix + "/" + relativePath;
 
-        log.info("鏂囦欢涓婁紶鎴愬姛: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
+        log.info("文件上传成功: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
 
         return UploadResp.builder()
                 .url(accessUrl)
@@ -151,8 +152,7 @@ public class UploadServiceImpl implements UploadService {
     }
 
     /**
-     * 通过中心区域降采样估算图片主色。
-     * 该实现追求轻量和稳定，不依赖额外图像分析库。
+     * 通过中心区域采样估算图片主色，避免引入额外图像分析依赖。
      */
     private String extractDominantColor(BufferedImage image) {
         try {
@@ -192,7 +192,7 @@ public class UploadServiceImpl implements UploadService {
 
             return String.format("#%02X%02X%02X", avgR, avgG, avgB);
         } catch (Exception e) {
-            log.warn("涓昏壊鎻愬彇澶辫触", e);
+            log.warn("提取图片主色失败", e);
             return null;
         }
     }

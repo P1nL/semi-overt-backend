@@ -7,15 +7,13 @@ import com.platform.dto.req.ResetPasswordReq;
 import com.platform.dto.resp.AuthResp;
 import com.platform.service.AuthService;
 import com.platform.util.Result;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 认证控制器，对外提供相关 HTTP 接口。
+ * 认证控制器，对外提供注册、登录和密码找回相关接口。
  */
-
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -24,8 +22,7 @@ public class AuthController {
     private final AuthService authService;
 
     /**
-     * 注册
-     * 成功后直接返回 Token，前端无需再次登录
+     * 处理 POST /register 请求。
      */
     @PostMapping("/register")
     public Result<AuthResp> register(@Valid @RequestBody RegisterReq req) {
@@ -33,8 +30,7 @@ public class AuthController {
     }
 
     /**
-     * 登录
-     * account 支持用户名或邮箱
+     * 处理 POST /login 请求。
      */
     @PostMapping("/login")
     public Result<AuthResp> login(@Valid @RequestBody LoginReq req) {
@@ -42,21 +38,7 @@ public class AuthController {
     }
 
     /**
-     * 登出
-     * 将当前 Token 加入黑名单，即使 Token 未过期也会失效
-     * 前端登出后应同时清除本地存储的 Token
-     */
-    @PostMapping("/logout")
-    public Result<Void> logout(HttpServletRequest request) {
-        String token = extractToken(request);
-        authService.logout(token);
-        return Result.ok();
-    }
-
-    /**
-     * 找回密码第一步：发送重置邮件
-     * 无论邮箱是否存在，接口均返回成功（防止邮箱枚举攻击）
-     * 同一邮箱 15 分钟内重复请求返回 429
+     * 处理 POST /forgot-password 请求。
      */
     @PostMapping("/forgot-password")
     public Result<Void> forgotPassword(@Valid @RequestBody ForgotPasswordReq req) {
@@ -65,24 +47,11 @@ public class AuthController {
     }
 
     /**
-     * 找回密码第二步：重置密码
-     * token 来自邮件链接参数，一次性有效
+     * 处理 POST /reset-password 请求。
      */
     @PostMapping("/reset-password")
     public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordReq req) {
         authService.resetPassword(req);
         return Result.ok();
-    }
-
-    /**
-     * 从请求头提取 Token（不含 "Bearer " 前缀）
-     * 与 JwtAuthFilter 保持一致的提取逻辑
-     */
-    private String extractToken(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
-            return header.substring(7).trim();
-        }
-        return null;
     }
 }

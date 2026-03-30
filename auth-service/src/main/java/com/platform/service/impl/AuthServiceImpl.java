@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 认证服务实现。
- * 负责注册、登录、登出占位、找回密码邮件发送与密码重置。
- * 同时维护认证域中的 Redis key 约定，包括 JWT 黑名单和重置密码令牌。
+ * 负责注册、登录、找回密码邮件发送与密码重置。
+ * 同时维护认证域中的 Redis key 约定，主要包括重置密码令牌与发送频率锁。
  */
 @Slf4j
 @Service
@@ -56,8 +56,6 @@ public class AuthServiceImpl implements AuthService {
     @Value("${platform.frontend-base-url:http://localhost:5173}")
     private String frontendBaseUrl;
 
-    /** JWT 黑名单 key 前缀。 */
-    private static final String KEY_JWT_BLACKLIST  = "jwt:blacklist:";
     /** 重置密码令牌 key 前缀。 */
     private static final String KEY_PWD_RESET      = "pwd:reset:";
     /** 重置密码邮件发送频率锁 key 前缀。 */
@@ -130,16 +128,6 @@ public class AuthServiceImpl implements AuthService {
                 user.getId(), user.getUsername(), req.isRememberMe());
         return buildAuthResp(token, user);
     }
-
-    @Override
-    /**
-     * 登出由 gateway-service 统一处理。
-     * auth-service 保留空实现以满足接口约定。
-     */
-    public void logout(String token) {
-        log.debug("logout 由 gateway-service 统一处理，auth-service 保持空操作");
-    }
-
 
     @Override
     /**
