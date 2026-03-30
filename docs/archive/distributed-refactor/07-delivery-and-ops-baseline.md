@@ -46,7 +46,7 @@ Default services:
 
 - MySQL `8.0.36`
   - host port: `3306`
-  - schema init: `src/main/resources/init.sql`
+  - schema init: `deploy/sql/init.sql`
   - default local root password: `1234`
 - Redis `7.2`
   - host port: `6379`

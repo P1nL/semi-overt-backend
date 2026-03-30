@@ -1,239 +1,411 @@
-# 支撑模块与公共类型逐文件讲解
+# 10 支撑文件逐文件讲解
 
-这一篇讲那些“不一定直接暴露为主接口，但不懂它们就容易误判系统行为”的文件。
+## 为什么读这篇
 
-## 1. `WebMvcConfig.java`
+很多“代码没问题但系统就是跑不起来”的问题，根源都不在业务类里，而是在脚本、配置样例、反向代理或共享支撑层。这篇专门讲这些文件解决什么问题，以及为什么它们对联调、上线和排障重要。
 
-文件：`src/main/java/com/platform/config/WebMvcConfig.java`
+## 本篇覆盖哪些文件
 
-职责：
+- `docker-compose.yml`
+- `scripts/dev-up.ps1`
+- `scripts/dev-down.ps1`
+- `scripts/smoke-test.ps1`
+- `scripts/run-service.sh`
+- `scripts/env/server.env.example`
+- `deploy/nginx/now-demo.conf`
+- `deploy/nginx/README.md`
+- `common` 中的支撑类
 
-- 配置跨域
-- 配置本地静态资源映射
+## `docker-compose.yml`
 
-### 跨域配置
+文件位置：
 
-当前放行的前端开发地址：
+- [../../docker-compose.yml](../../docker-compose.yml)
 
-- `http://localhost:5173`
-- `http://localhost:3000`
-- `http://127.0.0.1:5173`
+文件职责：
 
-并且显式暴露了响应头：
+- 在本地一次性拉起 MySQL、Redis、RabbitMQ、Elasticsearch、Nacos 这些中间件
 
-- `New-Token`
-- `Authorization`
+关键行为：
 
-这就是前端为什么能在浏览器里读取续签 token。
+- 让业务服务不必各自内嵌依赖
+- 为本地联调提供统一基线环境
 
-### 静态资源映射
+依赖关系：
 
-把：
+- 被 `scripts/dev-up.ps1` 和本地开发流程依赖
 
-- `/static/uploads/**`
+修改风险：
 
-映射到：
+- 端口、用户名、密码改动会直接影响所有本地服务默认配置
 
-- `storage.upload-path` 指向的本地目录
+常见改动入口：
 
-这条映射是“文件明明上传成功了，但浏览器访问 404”时最先检查的地方。
+- 调整本地中间件版本
+- 调整挂载目录和端口
 
-## 2. `RedisConfig.java`
+## `scripts/dev-up.ps1`
 
-文件：`src/main/java/com/platform/config/RedisConfig.java`
+文件位置：
 
-职责：
+- [../../scripts/dev-up.ps1](../../scripts/dev-up.ps1)
 
-- 提供 `StringRedisTemplate`
-- 提供支持 `LocalDateTime` 的 `ObjectMapper`
+文件职责：
 
-### 设计风格
+- 在 Windows 本地按顺序启动服务并做健康检查
 
-项目明确把 Redis 当成“字符串键值存储”在用，没有上复杂对象模板。这使得：
+关键行为：
 
-- key 可读性高
-- 调试容易
-- 代价是复杂结构需要手动序列化
+- 控制启动顺序
+- 检查端口监听、`/actuator/health` 和 `/actuator/info`
 
-首页 Hero 的文章 ID 列表就是这样手工 JSON 化的。
+依赖关系：
 
-## 3. `StorageConfig.java`
+- 依赖各模块构建产物和本地中间件
 
-文件：`src/main/java/com/platform/config/StorageConfig.java`
+修改风险：
 
-职责：
+- 健康检查规则改动会直接影响本地联调稳定性
 
-- 把 `application.yml` 中的 `storage.*` 绑定成配置对象
+常见改动入口：
 
-当前特点：
+- 增加新服务
+- 调整启动顺序
+- 调整健康检查超时
 
-- 是典型的配置载体类
-- 当前上传主流程主要用的是 `@Value`
-- 这个类更像为后续抽象统一文件存储服务做准备
+## `scripts/dev-down.ps1`
 
-## 4. `MybatisPlusConfig.java`
+文件位置：
 
-文件：`src/main/java/com/platform/config/MybatisPlusConfig.java`
+- [../../scripts/dev-down.ps1](../../scripts/dev-down.ps1)
 
-职责：
+文件职责：
 
-- 分页插件
-- 防全表更新/删除
-- 自动填充时间字段
+- 关闭本地开发启动的服务进程
 
-### 关键点
+关键行为：
 
-- `PaginationInnerInterceptor`
-  - 支持分页查询。
-- `BlockAttackInnerInterceptor`
-  - 防止无条件 `UPDATE / DELETE`。
-- `AutoFillHandler`
-  - 自动填 `createdAt / updatedAt`。
+- 清理本地运行状态，避免端口残留
 
-这解释了为什么很多实体没有手写更新时间逻辑，但字段仍然会变。
+依赖关系：
 
-## 5. `DraftFlushTask.java`
+- 与 `dev-up.ps1` 配套
 
-文件：`src/main/java/com/platform/task/DraftFlushTask.java`
+修改风险：
 
-职责：
+- 清理规则写得过宽会误杀无关进程
 
-- 定时调用 `draftService.flushAllDrafts()`
+常见改动入口：
 
-调度方式：
+- 新增服务进程管理策略时
 
-- `@Scheduled(fixedDelay = 5 * 60 * 1000L)`
+## `scripts/smoke-test.ps1`
 
-注意：
+文件位置：
 
-- 当前间隔写死在代码里，不是从配置读取。
-- 顶层 try-catch 是为了避免一次异常让整个定时任务停摆。
+- [../../scripts/smoke-test.ps1](../../scripts/smoke-test.ps1)
 
-这是草稿最终一致性的最后一道保险。
+文件职责：
 
-## 6. `ArticleUtils.java`
+- 执行当前仓库的端到端烟雾验证
 
-文件：`src/main/java/com/platform/util/ArticleUtils.java`
+关键行为：
 
-职责：
+- 验证中间件健康
+- 验证服务健康接口
+- 验证网关公开路由
+- 验证无效 token 返回 `401`
+- 验证“注册 -> 提审 -> 审核通过 -> 通知 -> 搜索”链路
 
-- 统计字数
-- 计算阅读时长
-- 计算阅读时长分类
-- 生成纯文本预览
+依赖关系：
 
-### 它在项目里的角色
+- 依赖网关和各业务服务已启动
 
-- 首页
-- 分类页
-- 用户主页文章卡片
+修改风险：
 
-都依赖它生成预览文本。
+- 这里不是随便写脚本，它定义了当前仓库“主链路可用”的最低验收线
 
-### 维护时要注意
+常见改动入口：
 
-- `DraftServiceImpl` 里有一套相似但不完全相同的字数计算逻辑。
-- 如果将来统一“字数口径”，这两个地方需要一起看。
+- 新增主链路断言
+- 修复脚本兼容性问题
 
-## 7. DTO 目录应该怎么理解
+## `scripts/run-service.sh`
 
-目录：
+文件位置：
 
-- `src/main/java/com/platform/dto/req`
-- `src/main/java/com/platform/dto/resp`
+- [../../scripts/run-service.sh](../../scripts/run-service.sh)
 
-### `req DTO`
+文件职责：
 
-它们是“前端发给后端”的格式，例如：
+- 作为 Linux 主机上的 `java -jar` 启动脚本
 
-- `LoginReq`
-- `RegisterReq`
-- `SaveDraftReq`
-- `ReviewActionReq`
-- `UpdateProfileReq`
+关键行为：
 
-特点：
+- 加载环境变量
+- 启动指定服务 Jar
+- 支持服务化运行的基本参数组织
 
-- 经常带 `@NotBlank`、`@Email` 等校验
-- 字段只保留接口真正需要的内容
+依赖关系：
 
-### `resp DTO`
+- 依赖构建出的 Jar
+- 依赖 `server.env`
 
-它们是“后端返回给前端”的格式，例如：
+修改风险：
 
-- `AuthResp`
-- `HomeResp`
-- `ArticleDetailResp`
-- `UserProfileResp`
-- `UploadResp`
+- 这是正式发布基线脚本，改错会直接影响线上可启动性
 
-特点：
+常见改动入口：
 
-- 面向页面结构，不一定等于数据库表结构
-- 可能嵌套作者信息、分页信息、统计信息
+- 调整 JVM 参数
+- 调整日志目录和运行参数
 
-最典型的例子是：
+## `scripts/env/server.env.example`
 
-- `ArticleDetailResp` 里有嵌套 `author`
-- `UserProfileResp` 里同时有 `profile / stats / list`
+文件位置：
 
-这都不是单表能直接表达的结构。
+- [../../scripts/env/server.env.example](../../scripts/env/server.env.example)
 
-## 8. 枚举是业务词典
+文件职责：
 
-目录：
+- 提供 Linux 启动所需环境变量样例
 
-- `src/main/java/com/platform/enums`
+关键行为：
 
-### `ArticleStatus`
+- 集中列出数据库、Redis、RabbitMQ、Nacos、JWT、文件存储等关键环境变量
 
-- `DRAFT`
-- `PENDING`
-- `APPROVED`
-- `RETURNED`
-- `REJECTED`
+依赖关系：
 
-它定义了文章状态机。
+- 被 `run-service.sh` 使用
 
-### `ReviewAction`
+修改风险：
 
-- `APPROVE`
-- `RETURN`
-- `REJECT`
-- `CANCEL`
+- 如果样例和真实代码要求脱节，新同学最容易按错变量名
 
-它定义了审核动作词汇表。
+常见改动入口：
 
-### `DurationCategory`
+- 新增跨服务必需环境变量
 
-- `QUICK`
-- `SHORT`
-- `DEEP`
+## `deploy/nginx/now-demo.conf`
 
-它定义了阅读时长分类，不是用户手工选的栏目。
+文件位置：
 
-### `UserRole`
+- [../../deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf)
 
-- `USER`
-- `ADMIN`
+文件职责：
 
-权限模型非常简单，项目里没有更细粒度角色树。
+- 为生产或预发环境提供可选的外层 Nginx 入口配置
 
-### `BizType`
+关键行为：
 
-- `AVATAR`
-- `COVER`
-- `ARTICLE_IMAGE`
+- 反向代理到网关
+- 处理静态资源或外层 HTTP 入口规则
 
-它决定上传接口的业务场景。
+依赖关系：
 
-## 9. 这些支撑文件一起看时的判断方法
+- 依赖网关服务的可访问地址
 
-遇到问题时可以快速定位：
+修改风险：
 
-- 跨域问题：先看 `WebMvcConfig`
-- 图片访问不到：先看 `WebMvcConfig + UploadServiceImpl + application.yml`
-- 分页异常：先看 `MybatisPlusConfig`
-- 草稿丢失或不落库：先看 `DraftServiceImpl + DraftFlushTask + Redis`
-- DTO 看不懂：先分清 `req` 和 `resp`
-- 状态名看不懂：先看 `enums`
+- Nginx 路由改错会让外部访问与服务实际路由不一致
+
+常见改动入口：
+
+- 切换正式域名
+- 增加 HTTPS 和反向代理规则
+
+## `deploy/nginx/README.md`
+
+文件位置：
+
+- [../../deploy/nginx/README.md](../../deploy/nginx/README.md)
+
+文件职责：
+
+- 解释当前 Nginx 配置如何使用
+
+关键行为：
+
+- 帮助运维或接手同学理解 Nginx 不在当前仓库里承担业务逻辑，只承担外层入口职责
+
+依赖关系：
+
+- 与 `now-demo.conf` 配套
+
+修改风险：
+
+- 文档与配置不一致时，上线人员最容易执行错误步骤
+
+常见改动入口：
+
+- 更新域名、证书或代理说明
+
+## `HeaderNames`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/constant/HeaderNames.java](../../common/src/main/java/com/platform/common/constant/HeaderNames.java)
+
+文件职责：
+
+- 统一定义跨服务内部头协议
+
+关键行为：
+
+- 保证网关写什么、下游读什么是一致的
+
+依赖关系：
+
+- 被网关、服务安全层、Feign 透传共同使用
+
+修改风险：
+
+- 属于跨服务协议，轻易不要改名
+
+常见改动入口：
+
+- 新增内部头
+
+## `EventConstants`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/constant/EventConstants.java](../../common/src/main/java/com/platform/common/constant/EventConstants.java)
+
+文件职责：
+
+- 统一定义事件类型、交换机路由和队列名
+
+关键行为：
+
+- 约束内容、审核、通知、搜索之间的事件协作
+
+依赖关系：
+
+- 被多个服务的 MQ 生产和消费代码共享
+
+修改风险：
+
+- 它是异步链路协议面，变更必须检查所有生产者和消费者
+
+常见改动入口：
+
+- 新增事件队列
+- 调整事件消费者标识
+
+## `RabbitEventConfig`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/config/RabbitEventConfig.java](../../common/src/main/java/com/platform/common/config/RabbitEventConfig.java)
+
+文件职责：
+
+- 统一声明 RabbitMQ 事件基础设施配置
+
+关键行为：
+
+- 根据事件常量构造交换机、队列、重试队列、死信队列等基础拓扑
+
+依赖关系：
+
+- 被内容、审核、通知、搜索这些依赖 MQ 的服务使用
+
+修改风险：
+
+- 这里的拓扑一旦变化，最容易出现“消息发了但没人消费”或“消息无限重试”
+
+常见改动入口：
+
+- 新增事件路由
+- 调整重试与死信策略
+
+## `EventOutboxService`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/support/EventOutboxService.java](../../common/src/main/java/com/platform/common/support/EventOutboxService.java)
+
+文件职责：
+
+- 提供事件发件箱写入能力
+
+关键行为：
+
+- 在本地事务内先落一条待发布事件记录，再由异步发布器发送到 MQ
+
+依赖关系：
+
+- 被内容域、审核域等需要可靠发事件的服务使用
+
+修改风险：
+
+- 发件箱是最终一致性的关键支点，改坏后最容易出现“数据库状态改了，但事件没出去”
+
+常见改动入口：
+
+- 调整发件箱记录字段
+- 新增通用事件写入能力
+
+## `OutboxPublisherSupport`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/support/OutboxPublisherSupport.java](../../common/src/main/java/com/platform/common/support/OutboxPublisherSupport.java)
+
+文件职责：
+
+- 封装发件箱记录的批量发布通用逻辑
+
+关键行为：
+
+- 查询待发送事件
+- 发布到 MQ
+- 回写发送结果
+
+依赖关系：
+
+- 被各服务自己的 outbox publisher 任务使用
+
+修改风险：
+
+- 发布批次和失败处理改动会联动所有发件箱型服务
+
+常见改动入口：
+
+- 调整批量大小
+- 调整发布失败处理
+
+## `EventConsumeService`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/support/EventConsumeService.java](../../common/src/main/java/com/platform/common/support/EventConsumeService.java)
+
+文件职责：
+
+- 提供消费去重、消费日志和幂等支持
+
+关键行为：
+
+- 记录某个消费者是否已经处理过某条事件
+
+依赖关系：
+
+- 被通知、搜索、内容、审核等消费方共用
+
+修改风险：
+
+- 改坏幂等逻辑会导致重复通知、重复建索引或重复落状态
+
+常见改动入口：
+
+- 调整消费日志保留或幂等键策略
+
+## 为什么这些文件重要
+
+- 它们决定系统能否稳定启动
+- 它们决定联调和上线有没有统一脚本与统一基线
+- 它们决定跨服务事件和内部协议是不是可维护
+
+业务类看的是“想做什么”，这些支撑文件解决的是“怎样稳定地做成、跑起来、排查掉”。

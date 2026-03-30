@@ -1,401 +1,420 @@
-# 核心 Service 逐文件讲解
+# 08 Core Service 逐文件讲解
 
-这一篇是整个项目最重要的一篇。真正的业务规则几乎都写在 `service/impl` 里。
+## 为什么读这篇
 
-## 先看 Service 分层
+这篇是当前仓库的业务核心。Controller 只是入口，真正决定“文章怎样流转、审核怎样落地、搜索怎样投影、上传怎样存、通知怎样生成”的地方都在这里。
 
-主业务 Service：
+## 本篇覆盖哪些文件
 
-- `AuthServiceImpl`
-- `ArticleServiceImpl`
-- `DraftServiceImpl`
-- `ReviewServiceImpl`
-- `UserServiceImpl`
-- `HomeServiceImpl`
-- `CategoryServiceImpl`
-- `SearchServiceImpl`
-- `UploadServiceImpl`
+- `auth-service`：`AuthServiceImpl`、`UserServiceImpl`
+- `content-service`：`ArticleServiceImpl`、`HomeServiceImpl`、`CategoryServiceImpl`
+- `review-service`：`ReviewServiceImpl`、`ReviewEventServiceImpl`、`ReviewTaskServiceImpl`
+- `search-service`：`SearchServiceImpl`、`SearchEventServiceImpl`、`SearchIndexSyncServiceImpl`
+- `file-service`：`UploadServiceImpl`
+- `notification-service`：`NotificationEventServiceImpl`
 
-支撑型 Service：
+## `AuthServiceImpl`
 
-- `UserDetailsServiceImpl`
+文件位置：
 
-下面优先讲主线最强的几个。
+- [../../auth-service/src/main/java/com/platform/service/impl/AuthServiceImpl.java](../../auth-service/src/main/java/com/platform/service/impl/AuthServiceImpl.java)
 
-## 1. `AuthServiceImpl.java`
+文件职责：
 
-文件：`src/main/java/com/platform/service/impl/AuthServiceImpl.java`
+- 承接注册、登录、找回密码和重置密码的核心业务
 
-职责：
+关键行为：
 
-- 注册
-- 登录
-- 登出
-- 找回密码邮件
-- 重置密码
+- 校验账号注册约束
+- 生成 JWT
+- 处理密码重置令牌和邮件链路
 
-依赖：
+依赖关系：
 
-- `UserMapper`
-- `PasswordEncoder`
-- `JwtHelper`
-- `StringRedisTemplate`
-- `JavaMailSender`
+- 依赖用户 Mapper、密码编码器、Redis、邮件能力和 JWT 工具
 
-### 你应该抓住的 5 个关键点
+修改风险：
 
-1. 注册时直接创建 `User` 并发 token
-2. 登录支持用户名或邮箱
-3. 登出不是删 token，而是把 token 放进 Redis 黑名单
-4. 忘记密码分两步：发邮件、重置密码
-5. Redis key 命名已经形成规范
+- 改错会同时影响注册、登录态、密码找回
 
-### Redis Key 规范
+常见改动入口：
 
-- `jwt:blacklist:{token}`
-- `pwd:reset:{uuid}`
-- `pwd:reset:lock:{email}`
+- 调整登录返回
+- 调整密码策略
+- 调整找回密码 token 行为
 
-### 读这个文件时最值得学的设计
+## `UserServiceImpl`
 
-- “邮箱不存在也返回成功”防止邮箱枚举攻击
-- 重置邮件发送失败时会把 Redis 里的临时状态回滚
-- 注册后的默认昵称就是用户名，减少前端首屏空状态
+文件位置：
 
-### 修改风险点
+- [../../auth-service/src/main/java/com/platform/service/impl/UserServiceImpl.java](../../auth-service/src/main/java/com/platform/service/impl/UserServiceImpl.java)
 
-- 改 token 结构会同时影响 `JwtHelper`、前端存储、续签逻辑
-- 改重置密码链接路径会影响前端路由
-- 改用户名规则时，记得保留系统保留词校验
+文件职责：
 
-## 2. `ArticleServiceImpl.java`
+- 处理用户资料查询、更新和内部用户摘要读取
 
-文件：`src/main/java/com/platform/service/impl/ArticleServiceImpl.java`
+关键行为：
 
-职责：
+- 读取当前用户资料
+- 更新头像、昵称等资料
+- 组装给其他服务使用的用户摘要
 
-- 创建空文章
-- 文章详情读取
-- 提交审核
-- 取消审核
-- 删除文章
-- 管理员删除文章
+依赖关系：
 
-依赖：
+- 依赖用户表 Mapper
+- 被 `UserController` 和 `InternalUserController` 调用
 
-- `ArticleMapper`
-- `ReviewLogMapper`
-- `UserMapper`
-- `StringRedisTemplate`
+修改风险：
 
-### 这个文件真正控制的业务规则
+- 用户摘要一旦变化，会联动搜索作者信息和其他引用方
 
-- 谁能读一篇文章
-- 谁能提交审核
-- 哪些状态能取消审核
-- 哪些状态能删除
-- 是否命中提交审核冷却时间
+常见改动入口：
 
-### 最关键的方法
+- 新增公开资料字段
+- 调整内部摘要字段
 
-#### `getArticleDetail`
+## `HomeServiceImpl`
 
-它不是简单查表，而是做了 4 件事：
+文件位置：
 
-1. 查文章
-2. 校验当前用户是否有权限看
-3. 如果状态是 `RETURNED / REJECTED`，补最近审核原因
-4. 如果文章仍在草稿态或退回态，优先读 Redis 里的最新正文
+- [../../content-service/src/main/java/com/platform/service/impl/HomeServiceImpl.java](../../content-service/src/main/java/com/platform/service/impl/HomeServiceImpl.java)
 
-这说明“文章详情”不是单纯数据库快照，而是“数据库 + Redis + 权限判断”的组合结果。
+文件职责：
 
-#### `submitForReview`
+- 提供首页文章流的查询与组装
 
-它是文章状态流最关键的方法。
+关键行为：
 
-它会依次做：
+- 查询首页展示文章
+- 组装首页卡片需要的作者、分类、摘要信息
 
-1. 查文章并校验作者身份
-2. 限制只能从 `DRAFT / RETURNED` 提交
-3. 读取最新正文，优先 Redis
-4. 检查正文最小长度
-5. 检查 30 分钟冷却时间
-6. 把 Redis 草稿正文刷回文章实体
-7. 状态改成 `PENDING`
-8. 更新 `submitCount` 和 `lastSubmittedAt`
+依赖关系：
 
-#### `cancelReview`
+- 依赖内容域 Mapper
+- 可能通过内部用户接口补作者信息
 
-它会：
+修改风险：
 
-- 把状态从 `PENDING` 改回 `DRAFT`
-- 写一条 `ReviewLog`，动作是 `CANCEL`
+- 首页性能和分页行为通常受这里影响最大
 
-这很重要，因为“取消审核”虽然是作者动作，但依然被放进统一审核历史里。
+常见改动入口：
 
-### 这个文件最容易踩的坑
+- 首页排序调整
+- 首页卡片字段调整
 
-- 读取权限判断不是只看登录，还和文章状态绑定。
-- 文章详情优先读 Redis 的分支只对 `DRAFT / RETURNED` 生效。
-- 删除文章走的是逻辑删除，别误以为表里数据真的消失。
+## `CategoryServiceImpl`
 
-## 3. `DraftServiceImpl.java`
+文件位置：
 
-文件：`src/main/java/com/platform/service/impl/DraftServiceImpl.java`
+- [../../content-service/src/main/java/com/platform/service/impl/CategoryServiceImpl.java](../../content-service/src/main/java/com/platform/service/impl/CategoryServiceImpl.java)
 
-职责：
+文件职责：
 
-- 自动保存草稿
-- 草稿箱列表
-- Redis 草稿刷盘
+- 提供分类查询和分类下内容查询
 
-依赖：
+关键行为：
 
-- `ArticleMapper`
-- `ReviewLogMapper`
-- `StringRedisTemplate`
+- 分类列表查询
+- 分类文章聚合展示
 
-### 这个文件的设计核心
+依赖关系：
 
-正文高频更新写 Redis，元数据写 MySQL。
+- 依赖分类与文章相关 Mapper
 
-对应策略：
+修改风险：
 
-- `content` 放 Redis
-- `title / summary / coverUrl / coverColor / wordCount / readMinutes / durationCategory` 放 MySQL
+- 分类查询条件变化会影响首页、分类页和文章归属展示
 
-这样做的原因：
+常见改动入口：
 
-- 编辑器会高频自动保存
-- MySQL 不适合每几秒刷一次大段正文
+- 分类排序和展示字段调整
 
-### `saveDraft` 的逻辑重点
+## `ArticleServiceImpl`
 
-- 只允许 `DRAFT / RETURNED` 状态编辑
-- 作者才能保存
-- `content` 进 Redis，并重置 TTL
-- 同时重新计算 `wordCount / readMinutes / durationCategory`
-- 只更新非 null 字段，支持前端“增量保存”
+文件位置：
 
-### `getDraftList`
+- [../../content-service/src/main/java/com/platform/service/impl/ArticleServiceImpl.java](../../content-service/src/main/java/com/platform/service/impl/ArticleServiceImpl.java)
 
-返回的是：
+文件职责：
 
-- `DRAFT`
-- `RETURNED`
+- 这是内容域最关键的业务服务，负责文章创建、更新、详情、提审和状态相关核心行为
 
-而不是所有未发布文章。因为 `PENDING` 已经锁定，不再属于“可编辑草稿”。
+关键行为：
 
-### `flushAllDrafts`
+- 创建和编辑文章
+- 保存草稿后的正式落库逻辑
+- 提交审核前的状态校验
+- 维护文章状态真源
+- 生成内容域需要发出的事件
 
-它扫描所有 `draft:*` key，把正文刷回 MySQL `articles.content`。
+依赖关系：
 
-这里是这个项目里 Redis 和 MySQL 一致性的关键补偿点。
+- 依赖 `ArticleMapper`
+- 依赖草稿服务、内部用户信息、事件发件箱或 MQ 支持
 
-### 风险点
+修改风险：
 
-- `DRAFT_TTL_DAYS` 写死成常量 7，没真正使用配置项。
-- 字数计算逻辑和 [ArticleUtils.java](./10-supporting-files-walkthrough.md) 有重复实现，后面维护时需要注意一致性。
+- 这里是最容易破坏全链路一致性的文件
+- 一旦文章状态推进逻辑改错，审核、通知、搜索都会连锁异常
 
-## 4. `ReviewServiceImpl.java`
+常见改动入口：
 
-文件：`src/main/java/com/platform/service/impl/ReviewServiceImpl.java`
+- 新增文章字段
+- 调整提审规则
+- 调整状态迁移规则
 
-职责：
+## `ReviewServiceImpl`
 
-- 获取待审核列表
-- 审核动作处理
-- 审核日志查询
+文件位置：
 
-依赖：
+- [../../review-service/src/main/java/com/platform/service/impl/ReviewServiceImpl.java](../../review-service/src/main/java/com/platform/service/impl/ReviewServiceImpl.java)
 
-- `ArticleMapper`
-- `ReviewLogMapper`
-- `UserMapper`
+文件职责：
 
-### `getPendingList`
+- 承接管理员执行审核动作的核心业务
 
-特点：
+关键行为：
 
-- 只查 `PENDING`
-- 排除当前管理员自己提交的文章
-- 返回审核列表 DTO，而不是直接返回 `Article`
+- 校验审核动作是否合法
+- 记录审核日志
+- 产出审核决定结果
 
-### `doReview`
+依赖关系：
 
-这是管理员审核的主入口。它做的事很明确：
+- 依赖 `ReviewLogMapper`、`ReviewTaskMapper`
+- 依赖 `ReviewEventServiceImpl` 发出后续结果
 
-1. 把 `req.action` 解析成枚举
-2. 禁止 `CANCEL`
-3. `RETURN / REJECT` 必须填写原因
-4. 校验文章还处于 `PENDING`
-5. 管理员不能审核自己的文章
-6. 按动作改状态
-7. `APPROVE` 时写 `publishedAt`
-8. 写 `review_logs`
+修改风险：
 
-### `getReviewLogs`
+- 如果直接在这里越界写内容真源，就会破坏服务边界
 
-权限规则：
+常见改动入口：
 
-- 管理员可以看任意文章日志
-- 作者可以看自己的文章日志
-- 其他用户不行
+- 新增审核动作
+- 调整审核备注、原因或决策规则
 
-注意：
+## `ReviewEventServiceImpl`
 
-- 日志按时间升序返回，是为了给前端做时间轴
+文件位置：
 
-## 5. `UserServiceImpl.java`
+- [../../review-service/src/main/java/com/platform/service/impl/ReviewEventServiceImpl.java](../../review-service/src/main/java/com/platform/service/impl/ReviewEventServiceImpl.java)
 
-文件：`src/main/java/com/platform/service/impl/UserServiceImpl.java`
+文件职责：
 
-职责：
+- 把审核决定转换为下游可消费的事件
 
-- 当前用户信息
-- 修改资料
-- 用户主页
+关键行为：
 
-依赖：
+- 生成审核决定事件
+- 交给发件箱或 MQ 发布链路
 
-- `UserMapper`
-- `ArticleMapper`
-- `ReviewLogMapper`
+依赖关系：
 
-### 这个文件最值得注意的是“同一个主页接口的双视图”
+- 依赖 `common` 中的事件模型和事件常量
+- 与 `ReviewOutboxPublisher` 配合
 
-变量：
+修改风险：
 
-- `isSelf`
-- `isAdmin`
-- `canViewAll`
+- 事件字段缺失或事件类型写错，会导致内容域无法正确消费审核结果
 
-决定了两件事：
+常见改动入口：
 
-- 统计数据是不是全量
-- 文章列表是不是只看 `APPROVED`
+- 调整审核决定事件结构
 
-### `getUserProfile`
+## `ReviewTaskServiceImpl`
 
-这一个方法同时完成：
+文件位置：
 
-1. 查目标用户
-2. 判断当前访问者身份
-3. 统计文章状态数量
-4. 解析 tab
-5. 分页查文章
-6. 如果当前看的是 `REJECTED`，批量补拒绝原因
-7. 组装用户主页响应
+- [../../review-service/src/main/java/com/platform/service/impl/ReviewTaskServiceImpl.java](../../review-service/src/main/java/com/platform/service/impl/ReviewTaskServiceImpl.java)
 
-它是一个典型的“页面聚合型 Service”。
+文件职责：
 
-### 风险点
+- 管理审核任务投影和审核任务列表查询
 
-- `resolveTabStatus` 对非法 tab 默认返回 `null`，相当于退回 `all` 逻辑，不会报错。
-- 统计和列表查询是分开的，后续如果要加复杂筛选，得保证两者口径一致。
+关键行为：
 
-## 6. `HomeServiceImpl.java`
+- 根据提审事件创建或更新待审任务
+- 提供审核列表查询能力
 
-文件：`src/main/java/com/platform/service/impl/HomeServiceImpl.java`
+依赖关系：
 
-职责：
+- 依赖 `ReviewTaskMapper`
+- 与 `ReviewEventListener` 这类 MQ 消费入口协作
 
-- 首页 Hero 和 3 个分类区块的数据聚合
+修改风险：
 
-依赖：
+- 它维护的是投影视图，不是真源；在这里写过多领域规则会让边界混乱
 
-- `ArticleMapper`
-- `UserMapper`
-- `StringRedisTemplate`
-- `ObjectMapper`
+常见改动入口：
 
-### 核心设计
+- 调整审核列表查询条件
+- 调整任务投影字段
 
-首页 Hero 不是每次随机，而是“每天随机一次，然后缓存”。
+## `SearchServiceImpl`
 
-Redis key：
+文件位置：
 
-- `home:hero:{yyyy-MM-dd}`
+- [../../search-service/src/main/java/com/platform/service/impl/SearchServiceImpl.java](../../search-service/src/main/java/com/platform/service/impl/SearchServiceImpl.java)
 
-流程：
+文件职责：
 
-1. 先查当天缓存
-2. 没缓存就随机取 5 篇 `APPROVED`
-3. 把文章 ID 缓存到当天结束
-4. 后续同一天的访问都看到同一组 Hero
+- 承接公开搜索请求并组装搜索结果
 
-这让首页“既有随机感，又不会每次刷新都变”。
+关键行为：
 
-## 7. `CategoryServiceImpl.java`
+- 对 `title` 和 `summary` 做关键词搜索
+- 归一化 `page` 与 `pageSize`
+- 使用“相关性优先 + `publishedAt` 倒序兜底”的排序
+- 尽力补全作者昵称和头像
 
-文件：`src/main/java/com/platform/service/impl/CategoryServiceImpl.java`
+依赖关系：
 
-职责：
+- 依赖 `ArticleSearchRepository`
+- 依赖内部用户摘要接口做作者信息补全
 
-- 分类页列表分页
+修改风险：
 
-特点：
+- 改查询结构会直接影响前端搜索效果和 smoke 断言
+- 作者补全如果从“尽力而为”改成强依赖，会增加搜索失败面
 
-- 先把字符串分类参数转成 `DurationCategory`
-- 非法分类直接抛 400
-- 文章和作者信息分两步查，再拼卡片响应
+常见改动入口：
 
-## 8. `SearchServiceImpl.java`
+- 调整搜索字段
+- 调整分页规则
+- 调整排序策略
 
-文件：`search-service/src/main/java/com/platform/service/impl/SearchServiceImpl.java`
+## `SearchEventServiceImpl`
 
-职责：
+文件位置：
 
-- 搜索接口的基础 Elasticsearch 实现
+- [../../search-service/src/main/java/com/platform/service/impl/SearchEventServiceImpl.java](../../search-service/src/main/java/com/platform/service/impl/SearchEventServiceImpl.java)
 
-当前状态：
+文件职责：
 
-- 查询 Elasticsearch 中的文章投影
-- 搜索范围固定为 `title` 和 `summary`
-- 结果按相关性优先，`publishedAt` 倒序兜底，API 保持稳定
+- 消费文章状态变化事件并维护搜索索引的增量同步
 
-这说明项目已经从“接口先行”走到“基础实现已落地”，后续只需要继续增强搜索能力。
+关键行为：
 
-## 9. `UploadServiceImpl.java`
+- `APPROVED` 时写入或刷新索引
+- 非 `APPROVED` 时删除索引
 
-文件：`src/main/java/com/platform/service/impl/UploadServiceImpl.java`
+依赖关系：
 
-职责：
+- 依赖 `ArticleSearchRepository`
+- 依赖搜索文档模型和内容索引读取能力
 
-- 图片上传
-- 格式校验
-- 路径生成
-- 封面图主色提取
+修改风险：
 
-### 主要步骤
+- 这里改错最容易出现“文章首页可见但搜索不到”或“搜索还能搜到已下线文章”
 
-1. 校验文件存在
-2. 校验 `bizType`
-3. 校验文件大小
-4. 校验 MIME 类型
-5. 校验扩展名
-6. 用 `ImageIO` 读图
-7. 必要时提取主色
-8. 按日期目录写入磁盘
-9. 返回 `/static/uploads/...` 访问地址
+常见改动入口：
 
-### 风险点
+- 调整索引写入字段
+- 调整索引删除条件
 
-- 文件大小这里写死 5MB，和配置不完全一致。
-- 只允许图片上传，没有抽象成通用文件上传。
+## `SearchIndexSyncServiceImpl`
 
-## 10. `UserDetailsServiceImpl.java`
+文件位置：
 
-文件：`src/main/java/com/platform/service/impl/UserDetailsServiceImpl.java`
+- [../../search-service/src/main/java/com/platform/service/impl/SearchIndexSyncServiceImpl.java](../../search-service/src/main/java/com/platform/service/impl/SearchIndexSyncServiceImpl.java)
 
-职责：
+文件职责：
 
-- 提供 Spring Security 兼容的 `UserDetailsService`
+- 在服务启动时执行已发布文章索引回填与对齐
 
-注意：
+关键行为：
 
-- 当前登录主链路实际上不靠它。
-- 认证主链路是 `AuthServiceImpl` 自己查库 + BCrypt 校验。
-- 这个类更像“满足框架要求 + 为未来扩展预留”。
+- 扫描当前数据库中的已发布文章
+- 补写缺失索引
+- 清理不该保留的旧索引文档
 
-这意味着如果你调试当前登录问题，先看 `AuthServiceImpl`，不是先看这个类。
+依赖关系：
+
+- 依赖 `SearchIndexMapper`
+- 依赖 `ArticleSearchRepository`
+
+修改风险：
+
+- 这是修复历史索引漂移的重要兜底，如果删掉或改坏，历史数据与搜索结果很难自动重新对齐
+
+常见改动入口：
+
+- 调整启动回填范围
+- 增加人工重建索引能力时
+
+## `UploadServiceImpl`
+
+文件位置：
+
+- [../../file-service/src/main/java/com/platform/service/impl/UploadServiceImpl.java](../../file-service/src/main/java/com/platform/service/impl/UploadServiceImpl.java)
+
+文件职责：
+
+- 承接上传校验、落盘和访问 URL 生成
+
+关键行为：
+
+- 校验 MIME 类型和大小
+- 生成文件名
+- 将文件写入配置目录
+- 返回外部访问路径
+
+依赖关系：
+
+- 依赖 `StorageConfig`
+- 受 `WebMvcConfig` 中的访问映射配合
+
+修改风险：
+
+- 这里只改存储路径不改访问映射，上传链路就会变成“写成功但访问不到”
+
+常见改动入口：
+
+- 放宽文件类型
+- 改成本地以外的存储方案
+
+## `NotificationEventServiceImpl`
+
+文件位置：
+
+- [../../notification-service/src/main/java/com/platform/service/impl/NotificationEventServiceImpl.java](../../notification-service/src/main/java/com/platform/service/impl/NotificationEventServiceImpl.java)
+
+文件职责：
+
+- 承接文章状态变化后的通知生成与投递记录落库
+
+关键行为：
+
+- 消费文章状态变化后的业务语义
+- 组装通知主记录
+- 组装通知投递记录
+
+依赖关系：
+
+- 依赖 `NotificationMapper`
+- 依赖 `NotificationDeliveryMapper`
+- 依赖 `common` 中的文章状态变更事件模型
+
+修改风险：
+
+- 它是派生服务，不能倒过来承担内容真源判断
+- 如果通知去重或投递记录逻辑改错，最容易出现重复通知或通知漏记
+
+常见改动入口：
+
+- 调整通知文案字段
+- 新增通知类型
+- 调整投递记录策略
+
+## Service 层应该承担什么
+
+- 领域状态推进
+- 事务与持久化协调
+- 外部依赖编排
+- 事件生成与派生数据同步入口
+
+它不应该变成：
+
+- 纯粹的 Controller 搬运层
+- 无边界的跨服务脚本
+- 到处直接拼装返回对象而没有稳定领域语义

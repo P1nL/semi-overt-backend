@@ -1,260 +1,358 @@
-# Controller 逐文件讲解
+# 07 Controller 逐文件讲解
 
-这一篇只看接口入口，不深入业务实现。目标是先搞清楚每个 Controller 的职责边界和它依赖哪个 Service。
+## 为什么读这篇
 
-## 先看整体分工
+这篇用来回答“请求真正落到哪个 Controller、Controller 只该做什么、不该做什么”。当前仓库已经不是单体 Controller 大杂烩，而是按服务拆分的入口层。你改接口时，通常第一眼要看的就是这里。
 
-当前仓库里实际有 9 个 Controller：
+## 本篇覆盖哪些文件
 
-- `AuthController`
-- `HomeController`
-- `CategoryController`
-- `SearchController`
-- `ArticleController`
-- `ReviewController`
-- `UserController`
-- `UploadController`
-- `AdminArticleController`
+- `gateway-service`：网关侧辅助入口
+- `auth-service`：认证与用户 Controller
+- `content-service`：首页、分类、文章与内部文章接口
+- `review-service`：审核与内部审核接口
+- `search-service`：公开搜索接口
+- `file-service`：上传接口
 
-它们的共同特征是：
+## `GatewayAuthController`
 
-- 只收参数
-- 调 Service
-- 包 `Result`
-- 很少自己写业务逻辑
+文件位置：
 
-## 1. `AuthController.java`
+- [../../gateway-service/src/main/java/com/platform/gateway/controller/GatewayAuthController.java](../../gateway-service/src/main/java/com/platform/gateway/controller/GatewayAuthController.java)
 
-文件：`src/main/java/com/platform/controller/AuthController.java`
+文件职责：
 
-职责：
-
-- 认证相关入口
-- 注册、登录、登出、忘记密码、重置密码
-
-依赖：
-
-- `AuthService`
+- 提供网关侧的认证辅助入口和调试性入口
+- 它不替代 `auth-service` 的真实认证业务
 
 关键接口：
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/logout`
-- `POST /api/v1/auth/forgot-password`
-- `POST /api/v1/auth/reset-password`
+- 这类接口通常围绕网关可见的身份判断或公共入口校验展开
 
-你读它时要注意：
+依赖的 Service：
 
-- 登录、注册的入参用 `req DTO`，返回统一是 `AuthResp`
-- `logout` 自己从请求头里提取 token，再交给 Service 拉黑
-- 这里不做密码校验逻辑，真正逻辑都在 `AuthServiceImpl`
+- 依赖网关安全组件，而不是直接承载用户域业务
 
-改需求时先看这里的场景：
+修改风险：
 
-- 登录入参结构变化
-- 注册接口返回字段变化
-- 新增认证相关接口
+- 很容易因为“图方便”把本该属于 `auth-service` 的能力加到网关层
 
-## 2. `HomeController.java`
+常见改动入口：
 
-文件：`src/main/java/com/platform/controller/HomeController.java`
+- 需要补网关层认证辅助返回时
 
-职责：
+## `AuthController`
 
-- 首页聚合接口
+文件位置：
 
-依赖：
+- [../../auth-service/src/main/java/com/platform/controller/AuthController.java](../../auth-service/src/main/java/com/platform/controller/AuthController.java)
 
-- `HomeService`
+文件职责：
+
+- 提供注册、登录、找回密码和重置密码等认证入口
 
 关键接口：
 
-- `GET /api/v1/home`
+- 注册
+- 登录
+- 忘记密码
+- 重置密码
 
-特点：
+依赖的 Service：
 
-- 公开接口
-- Controller 极薄，说明首页组装逻辑全部在 Service
+- `AuthServiceImpl`
 
-## 3. `CategoryController.java`
+修改风险：
 
-文件：`src/main/java/com/platform/controller/CategoryController.java`
+- 这里改的不只是接口返回，还会影响 JWT 生成、Redis 临时数据、邮件链路
 
-职责：
+常见改动入口：
 
-- 分类页文章列表
+- 调整注册校验
+- 调整登录返回
+- 调整找回密码流程
 
-依赖：
+## `UserController`
 
-- `CategoryService`
+文件位置：
+
+- [../../auth-service/src/main/java/com/platform/controller/UserController.java](../../auth-service/src/main/java/com/platform/controller/UserController.java)
+
+文件职责：
+
+- 提供当前登录用户的资料查询和更新接口
 
 关键接口：
 
-- `GET /api/v1/categories/{category}/articles`
+- 查看个人资料
+- 更新昵称、头像或其他用户资料字段
 
-特点：
+依赖的 Service：
 
-- `category` 实际上传的是 `QUICK / SHORT / DEEP`
-- `page / pageSize` 是典型分页接口
+- `UserServiceImpl`
 
-## 4. `SearchController.java`
+修改风险：
 
-文件：`search-service/src/main/java/com/platform/controller/SearchController.java`
+- 用户资料字段是多个页面会复用的数据，改返回字段要注意兼容前端和搜索作者补全链路
 
-职责：
+常见改动入口：
 
-- 搜索入口
+- 新增用户资料字段
+- 调整资料更新规则
 
-依赖：
+## `InternalUserController`
 
-- `SearchService`
+文件位置：
+
+- [../../auth-service/src/main/java/com/platform/controller/internal/InternalUserController.java](../../auth-service/src/main/java/com/platform/controller/internal/InternalUserController.java)
+
+文件职责：
+
+- 向其他服务提供内部用户摘要接口
+
+关键接口：
+
+- 按用户 ID 批量或单个查询用户摘要
+
+依赖的 Service：
+
+- `UserServiceImpl`
+
+修改风险：
+
+- 这是跨服务契约接口，改字段或改路径会直接影响内容、搜索、通知等依赖方
+
+常见改动入口：
+
+- 需要给其他服务新增稳定的用户摘要字段时
+
+## `HomeController`
+
+文件位置：
+
+- [../../content-service/src/main/java/com/platform/controller/HomeController.java](../../content-service/src/main/java/com/platform/controller/HomeController.java)
+
+文件职责：
+
+- 提供首页文章流和首页展示所需的内容入口
+
+关键接口：
+
+- 首页推荐或最新文章列表
+
+依赖的 Service：
+
+- `HomeServiceImpl`
+
+修改风险：
+
+- 首页接口很容易被误改成“顺便做搜索、顺便做筛选”的大杂烩
+
+常见改动入口：
+
+- 首页卡片字段变化
+- 首页排序或分页变化
+
+## `CategoryController`
+
+文件位置：
+
+- [../../content-service/src/main/java/com/platform/controller/CategoryController.java](../../content-service/src/main/java/com/platform/controller/CategoryController.java)
+
+文件职责：
+
+- 提供分类查询与分类相关内容入口
+
+关键接口：
+
+- 分类列表
+- 分类下文章列表或分类详情相关接口
+
+依赖的 Service：
+
+- `CategoryServiceImpl`
+
+修改风险：
+
+- 分类语义如果与首页、文章详情使用的不一致，会导致前端多处显示错位
+
+常见改动入口：
+
+- 分类展示字段调整
+- 分类排序调整
+
+## `ArticleController`
+
+文件位置：
+
+- [../../content-service/src/main/java/com/platform/controller/ArticleController.java](../../content-service/src/main/java/com/platform/controller/ArticleController.java)
+
+文件职责：
+
+- 提供文章创建、编辑、保存草稿、详情、提审等核心入口
+
+关键接口：
+
+- 新建文章
+- 保存草稿
+- 查询文章详情
+- 提交审核
+- 查询自己的文章列表
+
+依赖的 Service：
+
+- `ArticleServiceImpl`
+- 某些草稿相关能力会进一步依赖 `DraftServiceImpl`
+
+修改风险：
+
+- 这里的任何状态相关改动都有可能影响审核、通知和搜索链路
+
+常见改动入口：
+
+- 文章字段变化
+- 提审前校验变化
+- 草稿相关接口变化
+
+## `InternalArticleController`
+
+文件位置：
+
+- [../../content-service/src/main/java/com/platform/controller/internal/InternalArticleController.java](../../content-service/src/main/java/com/platform/controller/internal/InternalArticleController.java)
+
+文件职责：
+
+- 向其他服务暴露内容域内部接口
+
+关键接口：
+
+- 供审核、搜索、通知或其他内部链路读取最小必要文章信息
+
+依赖的 Service：
+
+- `ArticleServiceImpl`
+
+修改风险：
+
+- 内部接口一旦承载过多展示字段，就会把内容域和调用方绑得太紧
+
+常见改动入口：
+
+- 新增跨服务最小文章摘要字段
+
+## `ReviewController`
+
+文件位置：
+
+- [../../review-service/src/main/java/com/platform/controller/ReviewController.java](../../review-service/src/main/java/com/platform/controller/ReviewController.java)
+
+文件职责：
+
+- 提供管理员审核任务查询和审核决定入口
+
+关键接口：
+
+- 查询待审任务
+- 审核通过
+- 审核退回
+- 审核拒绝
+
+依赖的 Service：
+
+- `ReviewServiceImpl`
+- `ReviewTaskServiceImpl`
+
+修改风险：
+
+- 这里的决定动作如果直接改内容库而绕过既有链路，会破坏领域边界
+
+常见改动入口：
+
+- 新增审核动作
+- 调整审核列表筛选
+
+## `InternalReviewController`
+
+文件位置：
+
+- [../../review-service/src/main/java/com/platform/controller/internal/InternalReviewController.java](../../review-service/src/main/java/com/platform/controller/internal/InternalReviewController.java)
+
+文件职责：
+
+- 暴露审核域内部读取接口
+
+关键接口：
+
+- 查询审核结果或审核任务摘要这类内部能力
+
+依赖的 Service：
+
+- `ReviewTaskServiceImpl` 或 `ReviewServiceImpl`
+
+修改风险：
+
+- 内部接口容易被误当成公网接口使用，权限和路由边界要看清
+
+常见改动入口：
+
+- 其他服务需要读取审核侧投影信息时
+
+## `SearchController`
+
+文件位置：
+
+- [../../search-service/src/main/java/com/platform/controller/SearchController.java](../../search-service/src/main/java/com/platform/controller/SearchController.java)
+
+文件职责：
+
+- 提供公开文章搜索入口
 
 关键接口：
 
 - `GET /api/v1/search/articles`
 
-特点：
+依赖的 Service：
 
-- 参数校验已经加了 `@NotBlank`
-- 当前 Service 已接入 Elasticsearch，Controller 仍保持公开搜索入口不变
+- `SearchServiceImpl`
 
-这类设计的价值是：搜索实现可以继续演进，但前端 API 不用改。
+修改风险：
 
-## 5. `ArticleController.java`
+- 这里改参数或返回结构会直接影响前端搜索页和 smoke 验证
 
-文件：`src/main/java/com/platform/controller/ArticleController.java`
+常见改动入口：
 
-职责：
+- 调整搜索请求参数
+- 调整搜索结果卡片字段
 
-- 作者侧的文章与草稿操作入口
+## `UploadController`
 
-依赖：
+文件位置：
 
-- `ArticleService`
-- `DraftService`
+- [../../file-service/src/main/java/com/platform/controller/UploadController.java](../../file-service/src/main/java/com/platform/controller/UploadController.java)
 
-关键接口：
+文件职责：
 
-- `POST /api/v1/articles`
-- `PUT /api/v1/articles/{articleId}/draft`
-- `GET /api/v1/articles/drafts`
-- `GET /api/v1/articles/{articleId}`
-- `POST /api/v1/articles/{articleId}/submit`
-- `POST /api/v1/articles/{articleId}/cancel-review`
-- `DELETE /api/v1/articles/{articleId}`
-
-它是主业务最核心的 Controller 之一。
-
-你读它时要形成这个分层感：
-
-- “创建、提交、取消审核、删除”走 `ArticleService`
-- “保存草稿、草稿箱”走 `DraftService`
-
-这里的好处是：
-
-- 文章正式状态流和草稿缓存逻辑被拆开了
-- 以后改草稿保存，不一定会动提审逻辑
-
-## 6. `ReviewController.java`
-
-文件：`src/main/java/com/platform/controller/ReviewController.java`
-
-职责：
-
-- 审核侧操作入口
-
-依赖：
-
-- `ReviewService`
+- 提供文件上传入口
 
 关键接口：
 
-- `GET /api/v1/reviews/pending`
-- `POST /api/v1/reviews/{articleId}/action`
-- `GET /api/v1/reviews/{articleId}/logs`
+- 上传图片或其他允许类型文件
 
-需要特别注意的点：
+依赖的 Service：
 
-- 审核动作只包含 `APPROVE / RETURN / REJECT`
-- `CANCEL` 不是管理员动作，是作者取消审核
-- 日志接口理论上允许文章作者查看，但还要结合 `SecurityConfig` 一起读
+- `UploadServiceImpl`
 
-## 7. `UserController.java`
+修改风险：
 
-文件：`src/main/java/com/platform/controller/UserController.java`
+- 上传接口改动通常会联动文件校验、物理存储和访问 URL 规则
 
-职责：
+常见改动入口：
 
-- 当前登录用户信息
-- 用户资料修改
-- 用户主页
+- 放宽或收紧允许文件类型
+- 调整返回 URL 结构
 
-依赖：
+## Controller 层应该保持什么边界
 
-- `UserService`
-
-关键接口：
-
-- `GET /api/v1/users/me`
-- `PUT /api/v1/users/me/profile`
-- `GET /api/v1/users/{username}/profile`
-
-这个 Controller 的关键在于“同一个用户主页接口，对本人和访客返回的数据范围不同”。这种差异化不是 Controller 做的，而是 Service 做的。
-
-## 8. `UploadController.java`
-
-文件：`src/main/java/com/platform/controller/UploadController.java`
-
-职责：
-
-- 图片上传入口
-
-依赖：
-
-- `UploadService`
-
-关键接口：
-
-- `POST /api/v1/uploads/images`
-
-特点：
-
-- 使用 `multipart/form-data`
-- 参数除了文件，还有 `bizType`
-- 真正的文件校验、扩展名检查、图片解析、路径生成都不在 Controller
-
-## 9. `AdminArticleController.java`
-
-文件：`src/main/java/com/platform/controller/AdminArticleController.java`
-
-职责：
-
-- 管理员删除文章
-
-依赖：
-
-- `ArticleService`
-
-关键接口：
-
-- `DELETE /api/v1/admin/articles/{articleId}`
-
-为什么它单独存在：
-
-- 作者删除文章和管理员删除文章属于两套规则
-- 共用 `ArticleService`，但接口入口分开更清晰
-
-## 10. 看 Controller 时的读法
-
-读每个 Controller，不要一上来钻方法体。先按下面顺序看：
-
-1. `@RequestMapping` 基础路径
-2. 注释里的接口清单
-3. 依赖了哪些 Service
-4. 哪些方法有 `@PreAuthorize`
-5. 哪些方法会拿 `currentUserId`
-6. 入参是哪个 `req DTO`
-7. 出参是哪个 `resp DTO`
-
-这样你会先有“接口地图”，再去看 Service 细节，不会迷路。
+- Controller 负责收参与出参，不负责写长业务流程
+- 真正的状态推进、事务、事件发送和外部依赖协调应下沉到 Service
+- 内部接口要坚持“最小必要信息”原则
+- 改接口前先判断是公网接口还是内部接口，再决定改动范围

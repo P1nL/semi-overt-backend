@@ -1,146 +1,116 @@
-# 02 接口与权限矩阵
+# 02 API 与权限矩阵
 
-## 1. 统一规则
+## 为什么读这篇
 
-接口统一前缀基本是：
+这篇用来回答三个问题：
 
-- `/api/v1/auth`
-- `/api/v1/home`
-- `/api/v1/categories`
-- `/api/v1/articles`
-- `/api/v1/reviews`
-- `/api/v1/users`
-- `/api/v1/uploads`
-- `/api/v1/search`
+- 哪些接口是给公网直接调用的
+- 哪些接口只能在服务间内部调用
+- 当前权限边界和 HTTP 语义是怎样落地的
 
-统一返回格式：
+如果这张矩阵没看清，最容易出现的错误就是把内部接口暴露到公网，或者把本该由网关处理的鉴权逻辑写散到各服务里。
 
-- 成功：`code=200`
-- 失败：`code=400/401/403/404/409/429/500`
+## 当前入口划分
 
-权限来源有两层：
+### 公开接口
 
-1. `SecurityConfig` 的路由级规则
-2. `@PreAuthorize` 和 Service 内部的细粒度校验
+公开接口是匿名用户也能访问，或者前端在正常登录态下直接访问的接口。它们统一从 `gateway-service` 进入，再路由到各业务服务。
 
-## 2. 公开 / 登录 / 管理员矩阵
+常见公开接口类型：
 
-| 模块 | 接口 | 方法 | 访问级别 | 主要作用 | 主服务 |
-| --- | --- | --- | --- | --- | --- |
-| 首页 | `/api/v1/home` | `GET` | 公开 | 首页 Hero 和分区聚合 | `HomeServiceImpl` |
-| 分类 | `/api/v1/categories/{category}/articles` | `GET` | 公开 | 分类文章分页 | `CategoryServiceImpl` |
-| 搜索 | `/api/v1/search/articles` | `GET` | 公开 | 基础关键词搜索，数据来自 Elasticsearch 文章投影 | `SearchServiceImpl` |
-| 认证 | `/api/v1/auth/register` | `POST` | 公开 | 注册并直接返回 token | `AuthServiceImpl` |
-| 认证 | `/api/v1/auth/login` | `POST` | 公开 | 登录并返回 token | `AuthServiceImpl` |
-| 认证 | `/api/v1/auth/forgot-password` | `POST` | 公开 | 发送重置密码邮件 | `AuthServiceImpl` |
-| 认证 | `/api/v1/auth/reset-password` | `POST` | 公开 | 使用邮件 token 重置密码 | `AuthServiceImpl` |
-| 文章 | `/api/v1/articles/{articleId}` | `GET` | 公开入口，内部细分 | 获取文章详情 | `ArticleServiceImpl` |
-| 用户主页 | `/api/v1/users/{username}/profile` | `GET` | 公开入口，内部细分 | 查看公开主页或本人主页 | `UserServiceImpl` |
-| 认证 | `/api/v1/auth/logout` | `POST` | 已登录 | token 拉黑 | `AuthServiceImpl` |
-| 文章 | `/api/v1/articles` | `POST` | 已登录 | 新建空草稿 | `ArticleServiceImpl` |
-| 文章 | `/api/v1/articles/{articleId}/draft` | `PUT` | 已登录且本人 | 自动保存草稿 | `DraftServiceImpl` |
-| 文章 | `/api/v1/articles/drafts` | `GET` | 已登录 | 草稿箱列表 | `DraftServiceImpl` |
-| 文章 | `/api/v1/articles/{articleId}/submit` | `POST` | 已登录且本人 | 提交审核 | `ArticleServiceImpl` |
-| 文章 | `/api/v1/articles/{articleId}/cancel-review` | `POST` | 已登录且本人 | 取消审核 | `ArticleServiceImpl` |
-| 文章 | `/api/v1/articles/{articleId}` | `DELETE` | 已登录且本人 | 删除文章 | `ArticleServiceImpl` |
-| 当前用户 | `/api/v1/users/me` | `GET` | 已登录 | 获取当前用户资料 | `UserServiceImpl` |
-| 当前用户 | `/api/v1/users/me/profile` | `PUT` | 已登录 | 修改资料 | `UserServiceImpl` |
-| 上传 | `/api/v1/uploads/images` | `POST` | 已登录 | 上传图片 | `UploadServiceImpl` |
-| 审核日志 | `/api/v1/reviews/{articleId}/logs` | `GET` | 已登录，内部细分 | 作者查看自己的审核日志，管理员可看全部 | `ReviewServiceImpl` |
-| 审核队列 | `/api/v1/reviews/pending` | `GET` | 管理员 | 获取待审核列表 | `ReviewServiceImpl` |
-| 审核动作 | `/api/v1/reviews/{articleId}/action` | `POST` | 管理员 | 通过 / 退回 / 拒绝 | `ReviewServiceImpl` |
+- 登录、注册、找回密码
+- 首页文章列表
+- 分类列表
+- 文章详情
+- 搜索接口
+- 静态上传资源访问
 
-## 3. 8 个 Controller 的职责边界
+### 登录接口
 
-### `AuthController`
+登录接口本质上仍是公开接口的一部分，但它们承担身份建立职责，所以风险更高。这里主要是 `auth-service` 下的认证相关接口，例如登录、注册、验证码和重置密码。
 
-- 只处理认证生命周期
-- 不负责权限判断
-- token 实际生成、黑名单、重置密码 token 都在 `AuthServiceImpl`
+### 受保护的普通用户接口
 
-### `HomeController`
+这类接口要求用户已经登录，通常依赖网关写入的内部身份头。典型场景：
 
-- 只有一个首页聚合入口
-- 负责把首页展示所需的多块数据一次返回给前端
+- 编辑自己的文章
+- 保存草稿
+- 提交审核
+- 查看自己的通知
+- 修改个人资料
 
-### `CategoryController`
+### 管理员接口
 
-- 只负责按阅读时长分类做分页列表
-- 不负责搜索或详情
+这类接口除了登录，还要求角色满足管理员权限。当前最典型的是审核服务中的审核动作接口。
 
-### `SearchController`
+### 内部接口
 
-- 独立于分类页的搜索入口
-- 当前实现为基础 Elasticsearch 搜索，接口 shape 已稳定
-- 搜索范围固定为标题和摘要，只返回已发布文章投影
+内部接口只给服务间调用，不应该直接暴露给前端。典型例子：
 
-### `ArticleController`
+- `auth-service` 的内部用户摘要接口
+- `content-service` 的内部文章接口
+- `review-service` 的内部审核接口
 
-- 作者工作台核心入口
-- 覆盖创建、保存草稿、草稿箱、详情、提交审核、取消审核、删除
+内部接口的意义是把“跨服务读取某个域的最小必需信息”收敛到稳定契约里，避免服务之间直接摸对方数据库。
 
-### `ReviewController`
+## 当前路由后的服务入口
 
-- 管理员工作台核心入口
-- 覆盖待审核队列、审核动作、审核日志
+公网经过网关后的主要业务入口可以按模块理解：
 
-### `UserController`
+- `auth-service`：认证和用户资料
+- `content-service`：首页、分类、文章、草稿、提审
+- `review-service`：管理员审核
+- `search-service`：公开搜索
+- `file-service`：上传接口和静态资源路径
 
-- 覆盖当前用户资料和公开主页
-- “我的资料”和“别人的主页”是同一模块的两类视图
+内部接口不依赖网关对外暴露，它们更多用于 Feign 或服务间 HTTP 调用。
 
-### `UploadController`
+## 权限语义
 
-- 只负责图片上传
-- 物理存储和主色提取在 `UploadServiceImpl`
+### 未登录
 
-## 4. 特别容易误判的权限点
+- 只能访问公开接口
+- 如果访问受保护接口，应返回 `401`
 
-### 文章详情不是“完全公开”
+### 已登录普通用户
 
-虽然 `GET /api/v1/articles/{articleId}` 在路由级是公开入口，但真正能否看到文章由 `ArticleServiceImpl.checkReadPermission` 决定：
+- 可以访问公开接口
+- 可以访问自己的草稿、提审、资料修改等普通用户接口
+- 不应直接访问管理员审核动作
 
-- `APPROVED`：所有人可见
-- `PENDING`：作者本人和管理员可见
-- `DRAFT / RETURNED / REJECTED`：只有作者本人可见
+### 管理员
 
-### 用户主页不是“完全相同的视图”
+- 拥有普通用户能力
+- 额外具备审核动作和管理侧接口权限
 
-`GET /api/v1/users/{username}/profile` 的返回会因为访问者身份不同而变化：
+## 当前 HTTP 状态与业务语义
 
-- 游客或他人访问：只能看到 `APPROVED`
-- 本人或管理员访问：可以按 `tab` 查看不同状态
+- `200`：请求成功，业务返回在统一 `Result` 包装中
+- `400`：参数错误或请求不合法
+- `401`：未登录、token 缺失或 token 非法
+- `403`：已登录但没有权限
+- `404`：目标不存在或路由不存在
+- `409`：状态冲突、重复操作或不满足前置条件
 
-### 审核日志是一个特殊接口
+这里最关键的一条是：无效 token 当前会在网关层直接返回 `401`。它不再因为 JWT 解析异常而冒泡成 `500`。
 
-`/api/v1/reviews/**` 整体偏管理员接口，但 `GET /api/v1/reviews/{articleId}/logs` 允许普通已登录作者访问自己的日志，真正权限在 `ReviewServiceImpl` 里二次判断。
+## 为什么无效 token 要在网关终止
 
-## 5. 接口层对前端最重要的两个约束
+- 网关是公网统一入口，越早挡住非法 token，越能减少后端服务无意义负担
+- 业务服务只需要关注“当前请求是否已经被识别出用户身份”，而不是重复写一套 token 解析流程
+- 这样可以保证跨服务的权限语义一致
 
-### 约束 1：不要只看 HTTP 状态码
+## 内部头协议的意义
 
-这个项目很多错误会以 `HTTP 200 + Result.fail(...)` 的形式返回。
+网关在请求向下游转发时，会写入内部身份头和 TraceId。这样做的作用有三点：
 
-所以前端必须看：
+- 各服务可以在不重新解析公网 token 的情况下获取用户上下文
+- 服务之间可以继续透传相同的身份和追踪信息
+- 日志和排障可以把同一条链路串起来
 
-- `response.data.code`
-- `response.data.message`
+## 读完这篇后你应该知道什么
 
-### 约束 2：要处理 `New-Token`
-
-当旧 token 快到期时，后端会在响应头下发：
-
-- `New-Token`
-
-前端应该把它覆盖到本地 token。
-
-## 6. 接口矩阵怎么用来读代码
-
-如果你是为了改需求，建议用下面的方法：
-
-- 先在这个矩阵里找到目标接口
-- 再看对应 controller
-- 再直接跳 `service/impl`
-- 最后才看 `mapper` 和 SQL
-
-这样不会一开始就陷进细节。
+- 前端请求先看网关，再看具体业务服务
+- 内部接口的职责是跨服务最小依赖，不是给前端走捷径
+- `401`、`403`、`409` 在这个仓库里各自有明确语义，不应混用
+- 权限规则优先在网关和服务自己的 `SecurityConfig` 中定义，不要在 Controller 里零散硬编码

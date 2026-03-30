@@ -1,231 +1,327 @@
-# 数据模型与持久化逐文件讲解
+# 09 数据与模型逐文件讲解
 
-这一篇解决两个问题：
+## 为什么读这篇
 
-- 数据库里到底存了什么。
-- 哪些查询直接走 `BaseMapper`，哪些走 XML。
+这篇用来解决一个经常被混淆的问题：当前仓库里哪些数据是真源，哪些是派生投影，哪些只是内部传输契约。如果这个层次没理清，最常见的后果就是改了一个 DTO，却以为自己改的是业务真源；或者看见 ES 文档，就误以为那才是文章主数据。
 
-## 1. `init.sql`
+## 本篇覆盖哪些文件
 
-文件：`src/main/resources/init.sql`
+- 内容、审核、通知、搜索中的关键实体和索引文档
+- `common` 中的内部 DTO 与事件模型
+- 关键 Mapper、XML 与 Repository
 
-这是数据库初始化脚本，也是理解实体最直接的入口。
+## `Article`
 
-### 三张核心表
+文件位置：
 
-- `users`
-- `articles`
-- `review_logs`
+- [../../content-service/src/main/java/com/platform/entity/Article.java](../../content-service/src/main/java/com/platform/entity/Article.java)
 
-### `users`
+文件职责：
 
-核心字段：
+- 表示内容域中的文章真源实体
 
-- `username`
-- `email`
-- `password`
-- `role`
-- `avatar_url`
-- `cover_url`
-- `signature`
+关键行为：
 
-你从表结构就能看出：
+- 承载文章标题、摘要、正文、作者、分类、状态、发布时间等主数据
 
-- 用户体系很轻量，没有权限组、没有部门、没有软删。
-- `username` 和 `email` 都唯一。
+依赖关系：
 
-### `articles`
+- 由 `ArticleMapper` 持久化
+- 被 `ArticleServiceImpl` 使用
+- 会被内部接口、首页、详情、审核链路引用
 
-核心字段：
+修改风险：
 
-- `author_id`
-- `title`
-- `content`
-- `summary`
-- `cover_url`
-- `cover_color`
-- `word_count`
-- `read_minutes`
-- `duration_category`
-- `status`
-- `submit_count`
-- `last_submitted_at`
-- `published_at`
-- `deleted`
+- 文章字段一旦变化，首页、详情、审核、搜索、通知都可能联动
 
-这个表本质上同时承载了：
+常见改动入口：
 
-- 草稿元数据
-- 正式内容
-- 审核状态
-- 展示统计信息
+- 新增文章字段
+- 调整状态字段语义
 
-### `review_logs`
+## `ArticleMapper`
 
-核心字段：
+文件位置：
 
-- `article_id`
-- `operator_id`
-- `action`
-- `from_status`
-- `to_status`
-- `reason`
+- [../../content-service/src/main/java/com/platform/mapper/ArticleMapper.java](../../content-service/src/main/java/com/platform/mapper/ArticleMapper.java)
+- [../../content-service/src/main/resources/mapper/ArticleMapper.xml](../../content-service/src/main/resources/mapper/ArticleMapper.xml)
 
-它是文章状态变更的历史表，不只是管理员动作，也包含作者取消审核。
+文件职责：
 
-## 2. `User.java`
+- 承接文章实体与 MySQL 的查询、写入和复杂 SQL 映射
 
-文件：`src/main/java/com/platform/entity/User.java`
+关键行为：
 
-作用：
+- 首页列表、分类列表、详情、文章管理侧查询通常都要经过这里
 
-- MyBatis Plus 用户实体
-- 对应 `users` 表
+依赖关系：
 
-你看这个类时要关注：
+- 被 `ArticleServiceImpl`、`HomeServiceImpl`、`CategoryServiceImpl` 调用
 
-- `@TableName("users")`
-- `@TableId(type = IdType.AUTO)`
-- `createdAt / updatedAt` 自动填充
+修改风险：
 
-不要把它和 `UserInfoResp / UserProfileResp` 混在一起。`User` 是数据库视角，DTO 是接口视角。
+- SQL 改动最容易造成线上行为变化但编译仍然通过
+- 这里还要注意区分当前模块内 XML 和根目录历史单体 `src` 下同名残留文件
 
-## 3. `Article.java`
+常见改动入口：
 
-文件：`src/main/java/com/platform/entity/Article.java`
+- 改列表排序
+- 改详情查询字段
+- 新增文章后台查询条件
 
-作用：
+## `ReviewTask`
 
-- 文章主实体
-- 对应 `articles` 表
+文件位置：
 
-这个类最重要的字段是：
+- [../../review-service/src/main/java/com/platform/entity/ReviewTask.java](../../review-service/src/main/java/com/platform/entity/ReviewTask.java)
 
-- `authorId`
-- `status`
-- `submitCount`
-- `lastSubmittedAt`
-- `publishedAt`
-- `deleted`
+文件职责：
 
-理解这个实体时要特别记住：
+- 表示审核域中的待审任务投影
 
-- 草稿正文理论上也会落到 `content`，但编辑高频阶段最新版本可能只在 Redis。
-- `deleted` 是逻辑删除字段，不是物理删除。
+关键行为：
 
-## 4. `ReviewLog.java`
+- 保存“哪篇文章需要审核、当前审核任务是什么状态”这类信息
 
-文件：`src/main/java/com/platform/entity/ReviewLog.java`
+依赖关系：
 
-作用：
+- 由 `ReviewTaskMapper` 读写
+- 被 `ReviewTaskServiceImpl` 和 `ReviewController` 使用
 
-- 审核历史实体
-- 对应 `review_logs`
+修改风险：
 
-这个类和状态机关系最紧密。任何审核动作、取消动作，最后都应该映射成一条日志。
+- 它是投影，不是真源；不要在这里塞入取代内容真源的字段和规则
 
-## 5. `ArticleMapper.java`
+常见改动入口：
 
-文件：`src/main/java/com/platform/mapper/ArticleMapper.java`
+- 调整审核列表展示字段
 
-它继承了 `BaseMapper<Article>`，因此天然拥有：
+## `ReviewLog`
 
-- `selectById`
-- `insert`
-- `updateById`
-- `deleteById`
-- `selectPage`
+文件位置：
 
-除了通用 CRUD，这个接口额外声明了复杂查询：
+- [../../review-service/src/main/java/com/platform/entity/ReviewLog.java](../../review-service/src/main/java/com/platform/entity/ReviewLog.java)
 
-- `selectHeroPrimary`
-- `selectHeroSecondary`
-- `selectRandomApproved`
-- `selectApprovedByCategory`
-- `selectPageByCategory`
-- `searchByKeyword`
+文件职责：
 
-读法上要建立一个区分：
+- 保存审核动作日志
 
-- 单表基础操作，优先找 `BaseMapper`
-- 带筛选策略或页面聚合意图的查询，优先找 XML
+关键行为：
 
-## 6. `ArticleMapper.xml`
+- 记录是谁在什么时间对哪篇文章做了什么审核决定以及备注
 
-文件：`src/main/resources/mapper/ArticleMapper.xml`
+依赖关系：
 
-### 它为什么存在
+- 由 `ReviewLogMapper` 持久化
+- 被 `ReviewServiceImpl` 写入
 
-因为有些查询用 LambdaWrapper 写出来不直观，或者团队更想把 SQL 显式写出来。
+修改风险：
 
-### 主要查询
+- 审核日志是审计数据，字段改动要考虑历史兼容和排障价值
 
-#### `selectRandomApproved`
+常见改动入口：
 
-- 首页 Hero 随机选文章
-- 使用 `ORDER BY RAND() LIMIT #{limit}`
+- 新增审核备注字段
+- 调整日志展示需求
 
-这对小数据量项目没问题，但将来数据量大时会是优化点。
+## `Notification`
 
-#### `selectApprovedByCategory`
+文件位置：
 
-- 首页每个时长分区取固定数量文章
+- [../../notification-service/src/main/java/com/platform/entity/Notification.java](../../notification-service/src/main/java/com/platform/entity/Notification.java)
 
-#### `selectPageByCategory`
+文件职责：
 
-- 分类页分页数据源
+- 表示通知主记录
 
-#### `searchByKeyword`
+关键行为：
 
-- 当前是基于标题、摘要的 LIKE 查询预留
-- 但主流程里实际还没启用，因为 `SearchServiceImpl` 目前返回空结果
+- 保存通知面向用户的主信息
 
-### 一个重要认识
+依赖关系：
 
-这个 XML 只操作 `Article` 主表，不做复杂多表对象映射。作者信息大多在 Service 层二次查 `UserMapper` 再组装 DTO。
+- 被 `NotificationMapper` 持久化
+- 被 `NotificationEventServiceImpl` 生成
 
-这说明当前项目的数据访问策略偏简单直接，不是重 XML 关联映射风格。
+修改风险：
 
-## 7. `UserMapper.java` 和 `ReviewLogMapper.java`
+- 它是派生数据，不应反过来驱动文章状态
 
-文件：
+常见改动入口：
 
-- `src/main/java/com/platform/mapper/UserMapper.java`
-- `src/main/java/com/platform/mapper/ReviewLogMapper.java`
+- 调整通知文案模板对应的字段
 
-这两个 Mapper 都只继承了 `BaseMapper`，没有额外自定义方法。
+## `NotificationDelivery`
 
-这带来的结论是：
+文件位置：
 
-- 用户查询目前都比较简单
-- 审核日志查询也基本用 Wrapper 就够了
+- [../../notification-service/src/main/java/com/platform/entity/NotificationDelivery.java](../../notification-service/src/main/java/com/platform/entity/NotificationDelivery.java)
 
-如果以后这两个 Mapper 变复杂，通常说明业务正在增长。
+文件职责：
 
-## 8. 数据层的整体风格
+- 表示通知投递记录
 
-这个项目的数据层风格可以概括成：
+关键行为：
 
-- 基础 CRUD 用 `BaseMapper`
-- 复杂查询少量下沉到 XML
-- 聚合 DTO 组装在 Service 层完成
-- Redis 只做缓存和短期状态，不当成主存储
+- 记录通知是否已投递、何时投递、投递结果如何
 
-## 9. 最常见的改动入口
+依赖关系：
 
-改数据库字段：
+- 由 `NotificationDeliveryMapper` 持久化
+- 被 `NotificationEventServiceImpl` 写入
 
-1. `init.sql`
-2. 对应 `entity`
-3. 对应 DTO
-4. `ServiceImpl`
-5. 如果有自定义查询，再改 XML
+修改风险：
 
-改查询逻辑：
+- 如果把投递结果和通知主记录混在一起，会让重试和审计变得不清晰
 
-- 先看能不能用 `BaseMapper + Wrapper`
-- 不够清晰再加到 `ArticleMapper.xml`
+常见改动入口：
 
-改状态相关逻辑：
+- 增加投递状态字段
+- 增加失败原因字段
 
-- 不要只改表或实体，一定一起看 `ArticleServiceImpl / ReviewServiceImpl / ReviewLog`
+## `ArticleSearchDocument`
+
+文件位置：
+
+- [../../search-service/src/main/java/com/platform/document/ArticleSearchDocument.java](../../search-service/src/main/java/com/platform/document/ArticleSearchDocument.java)
+
+文件职责：
+
+- 表示 Elasticsearch 中的文章搜索文档
+
+关键行为：
+
+- 保存搜索场景需要的投影字段，例如标题、摘要、作者、发布时间等
+
+依赖关系：
+
+- 由 `ArticleSearchRepository` 读写
+- 由 `SearchEventServiceImpl` 和 `SearchIndexSyncServiceImpl` 维护
+- 被 `SearchServiceImpl` 查询
+
+修改风险：
+
+- 这是索引投影，不是真源；字段删改要同时考虑写入端和查询端
+
+常见改动入口：
+
+- 新增搜索结果展示字段
+- 调整索引结构
+
+## `ArticleSearchRepository`
+
+文件位置：
+
+- [../../search-service/src/main/java/com/platform/repository/ArticleSearchRepository.java](../../search-service/src/main/java/com/platform/repository/ArticleSearchRepository.java)
+
+文件职责：
+
+- 这是搜索服务操作 Elasticsearch 文档的 Repository 入口
+
+关键行为：
+
+- 写入、更新、删除、查询 `ArticleSearchDocument`
+
+依赖关系：
+
+- 被搜索查询和搜索索引同步服务使用
+
+修改风险：
+
+- 查询方法与文档字段不一致时，最容易出现“没有报错但就是查不出结果”
+
+常见改动入口：
+
+- ES 文档字段调整
+- 查询方式调整
+
+## `SearchIndexMapper`
+
+文件位置：
+
+- [../../search-service/src/main/java/com/platform/mapper/SearchIndexMapper.java](../../search-service/src/main/java/com/platform/mapper/SearchIndexMapper.java)
+
+文件职责：
+
+- 为搜索启动回填提供数据库侧已发布文章读取能力
+
+关键行为：
+
+- 查询当前数据库中的 `APPROVED` 文章，组装成可写入 ES 的数据源
+
+依赖关系：
+
+- 被 `SearchIndexSyncServiceImpl` 使用
+
+修改风险：
+
+- 启动回填依赖它的查询结果，如果这里漏字段或筛选条件错，索引修复就会失真
+
+常见改动入口：
+
+- 回填范围变化
+- 索引字段来源变化
+
+## 内部 DTO
+
+文件位置：
+
+- `common/src/main/java/com/platform/common/dto/internal/*.java`
+
+文件职责：
+
+- 这些 DTO 承担跨服务最小必要数据传输
+
+关键行为：
+
+- 用户摘要、文章摘要、审核摘要等内部调用载体通常放在这里
+
+依赖关系：
+
+- 被 Feign 或内部 HTTP 接口返回使用
+
+修改风险：
+
+- 它们不是数据库真源，也不是前端展示 DTO；但一旦变化，会同时影响多个调用方
+
+常见改动入口：
+
+- 给内部服务新增最小必要字段
+
+## 事件模型
+
+文件位置：
+
+- `common/src/main/java/com/platform/common/event/*.java`
+- [../../common/src/main/java/com/platform/common/constant/EventConstants.java](../../common/src/main/java/com/platform/common/constant/EventConstants.java)
+
+文件职责：
+
+- 定义跨服务异步链路使用的事件结构和事件常量
+
+关键行为：
+
+- 当前主事件包括文章提审、审核决定、文章状态变更
+- 当前主消费队列包括审核投影、内容状态回写、通知生成和搜索索引同步
+
+依赖关系：
+
+- 被内容、审核、通知、搜索各服务共同使用
+
+修改风险：
+
+- 事件字段变化具有最高联动性
+- 事件类型名、交换机、队列名一旦变化，需要检查所有生产和消费方
+
+常见改动入口：
+
+- 新增事件
+- 增加事件字段
+- 调整队列路由
+
+## 这篇的核心判断标准
+
+- `Article` 是真源数据
+- `ReviewTask`、`Notification`、`NotificationDelivery`、`ArticleSearchDocument` 都是派生投影或派生记录
+- 内部 DTO 是契约，不是真源
+- 事件模型是跨服务协作协议，不是数据库表结构的替身

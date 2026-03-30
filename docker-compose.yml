@@ -16,7 +16,7 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./src/main/resources/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./deploy/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
         - CMD-SHELL

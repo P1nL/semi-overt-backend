@@ -1,295 +1,107 @@
-# 03 状态机与主业务链路
+# 03 状态机与主链路
 
-## 1. 角色模型
+## 为什么读这篇
 
-这个项目只有 2 个角色：
+这篇用来回答“文章是怎样从草稿走到发布、通知和搜索可见的”。如果你不知道状态真源在哪里、事件在什么时候发、哪些数据是派生的，改链路时最容易把一致性打坏。
 
-| 角色 | 说明 | 典型能力 |
-| --- | --- | --- |
-| `USER` | 普通作者 | 注册、登录、写文章、保存草稿、提交审核、查看自己的主页和审核日志 |
-| `ADMIN` | 管理员 | 具备普通用户能力外，还能查看待审核队列、处理审核动作、查看所有审核日志 |
+## 文章状态真源
 
-角色信息来自 JWT 的 `role` claim，进入系统后由 `JwtAuthFilter` 和 `JwtHelper` 解析进 `SecurityContext`。
+当前文章状态的真源在 `content-service`。也就是说：
 
-## 2. 文章状态机
+- 草稿、提审、发布状态的最终落表在内容域
+- 审核服务不拥有文章状态真源
+- 搜索和通知都不拥有文章状态真源
 
-```mermaid
-stateDiagram-v2
-    [*] --> DRAFT: createArticle
-    DRAFT --> DRAFT: saveDraft
-    RETURNED --> RETURNED: saveDraft
-    DRAFT --> PENDING: submitForReview
-    RETURNED --> PENDING: submitForReview
-    PENDING --> DRAFT: cancelReview
-    PENDING --> APPROVED: review APPROVE
-    PENDING --> RETURNED: review RETURN
-    PENDING --> REJECTED: review REJECT
-    DRAFT --> [*]: deleteArticle
-    RETURNED --> [*]: deleteArticle
-    REJECTED --> [*]: deleteArticle
-```
+审核服务和搜索服务都只是在围绕内容状态做派生处理。
 
-关键理解：
+## 当前主状态
 
-- 新文章一定从 `DRAFT` 开始
-- 只有 `DRAFT` 和 `RETURNED` 可以继续编辑、保存、再次提交审核
-- `PENDING` 代表进入审核队列
-- `APPROVED` 代表公开发布
-- `RETURNED` 表示退回修改
-- `REJECTED` 表示直接拒绝
-- 删除只允许 `DRAFT / RETURNED / REJECTED`
+当前链路可以按这些主状态理解：
 
-## 3. 认证主线
+- 草稿：用户还在编辑，内容可能只存在缓存或未最终发布版本
+- 待审：用户已提交审核，等待管理员处理
+- 已发布：审核通过，文章对外可见
+- 退回：审核未通过但允许作者继续修改后再提审
+- 拒绝：审核明确拒绝，不再进入当前发布流程
 
-主链路：
+具体状态值以代码枚举和数据库字段为准，但从业务上看，上面这五类已经覆盖主链路语义。
 
-```text
-AuthController
-  -> AuthServiceImpl
-  -> UserMapper / Redis / JwtHelper / JavaMailSender
-```
+## 主链路一：注册与登录
 
-### 注册
+1. 用户通过 `auth-service` 注册或登录
+2. `auth-service` 生成 JWT
+3. 前端后续请求带上 token
+4. 网关解析 token 并向下游注入内部身份头
 
-- 入口：`POST /api/v1/auth/register`
-- 角色要求：公开
-- 依赖：
-  - MySQL `users`
-- 规则：
-  - 用户名不能是保留字
-  - 用户名和邮箱唯一
-  - 密码用 `BCrypt`
-  - 注册成功后直接签发 token
+这条链路的意义是把“身份建立”与“后续业务访问”解耦。后面的内容、审核、通知、搜索都不直接负责生成登录态。
 
-### 登录
+## 主链路二：草稿保存
 
-- 入口：`POST /api/v1/auth/login`
-- 角色要求：公开
-- 依赖：
-  - MySQL `users`
-  - JWT
-- 规则：
-  - `account` 支持用户名或邮箱
-  - `rememberMe` 决定 token 过期时间
+1. 用户在 `content-service` 编辑文章
+2. 草稿优先进入 Redis 缓存
+3. 定时任务再把草稿增量刷回 MySQL
 
-### 登出
+这条设计的意义是：
 
-- 入口：`POST /api/v1/auth/logout`
-- 角色要求：已登录
-- 依赖：
-  - Redis `jwt:blacklist:{token}`
-- 规则：
-  - 把当前 token 放进黑名单
-  - TTL 等于 token 剩余时间
+- 降低频繁编辑时对数据库的写压力
+- 让保存草稿体验更顺滑
+- 最终仍回落到内容域自己的持久化真源
 
-### 找回密码
+## 主链路三：提交审核
 
-- 入口：
-  - `POST /api/v1/auth/forgot-password`
-  - `POST /api/v1/auth/reset-password`
-- 依赖：
-  - Redis `pwd:reset:{uuid}`
-  - Redis `pwd:reset:lock:{email}`
-  - `Spring Mail`
-- 规则：
-  - 同一邮箱 15 分钟内限发一次
-  - reset token 一次性使用
+1. 用户提交审核请求到 `content-service`
+2. 内容域校验文章状态、作者身份、分类等前置条件
+3. 内容域把文章状态推进到待审
+4. 内容域通过事件或内部调用驱动审核侧创建任务投影
 
-## 4. 创作主线
+这一步的关键意义是：提审动作的真源仍属于内容域，审核服务只是消费这个结果来维护自己的任务视图。
 
-主链路：
+## 主链路四：审核决定
 
-```text
-ArticleController
-  -> ArticleServiceImpl / DraftServiceImpl
-  -> ArticleMapper / ReviewLogMapper / UserMapper / Redis
-```
+1. 管理员在 `review-service` 执行通过、退回或拒绝
+2. `review-service` 记录审核日志
+3. `review-service` 产出审核决定事件
+4. `content-service` 消费审核决定并回写文章状态真源
 
-### 新建草稿
+这里最重要的边界是：审核服务负责“决定和记录”，内容服务负责“最终状态落库”。
 
-- 入口：`POST /api/v1/articles`
-- 角色：作者
-- 表：`articles`
-- 状态变化：
-  - `[无] -> DRAFT`
+## 主链路五：通知落库
 
-### 自动保存草稿
+1. 内容状态变化后产生文章状态变更事件
+2. `notification-service` 消费该事件
+3. 生成通知记录和投递记录
 
-- 入口：`PUT /api/v1/articles/{articleId}/draft`
-- 角色：作者本人
-- 表 / 缓存：
-  - MySQL `articles`
-  - Redis `draft:{userId}:{articleId}`
-- 行为：
-  - 正文优先写 Redis
-  - 标题、摘要、封面、字数、阅读时长、分类写 MySQL
-  - 如果没传摘要，会按正文自动截取
+通知为什么是派生数据：
 
-### 读取文章详情
+- 通知只是对状态变化的用户提示
+- 它可以重建、补发或重试
+- 它不应该反过来决定文章状态
 
-- 入口：`GET /api/v1/articles/{articleId}`
-- 角色：公开入口，Service 内二次鉴权
-- 表 / 缓存：
-  - MySQL `articles`
-  - Redis 草稿正文
-  - MySQL `review_logs` 用于最近一次退回/拒绝原因
-- 关键点：
-  - 对草稿类状态，正文会优先读 Redis，而不是数据库里的旧正文
+## 主链路六：搜索可见
 
-### 提交审核
+1. 内容状态变化后产生文章状态变更事件
+2. `search-service` 消费事件
+3. 如果文章是 `APPROVED`，则写入或刷新 Elasticsearch 文档
+4. 如果文章不再是 `APPROVED`，则删除 Elasticsearch 文档
+5. 公开搜索只查 Elasticsearch 中的文章投影
 
-- 入口：`POST /api/v1/articles/{articleId}/submit`
-- 角色：作者本人
-- 表 / 缓存：
-  - MySQL `articles`
-  - Redis 草稿正文
-- 状态变化：
-  - `DRAFT -> PENDING`
-  - `RETURNED -> PENDING`
-- 规则：
-  - 只能提交 `DRAFT / RETURNED`
-  - 标题不能为空
-  - 正文至少 50 字
-  - 30 分钟内不能重复提交同一篇文章
-  - 提交前会把 Redis 最新正文刷回 MySQL
+搜索为什么只索引已发布文章：
 
-### 取消审核
+- 搜索面对的是公开读场景，不应该暴露草稿或待审内容
+- 把过滤条件前移到投影阶段，比查询阶段每次判断更稳定
+- 这样公开搜索结果天然只包含可见内容
 
-- 入口：`POST /api/v1/articles/{articleId}/cancel-review`
-- 角色：作者本人
-- 表：
-  - MySQL `articles`
-  - MySQL `review_logs`
-- 状态变化：
-  - `PENDING -> DRAFT`
-- 特点：
-  - 会写一条 `CANCEL` 审核日志
+## 启动回填为什么存在
 
-### 删除文章
+除了事件增量同步之外，`search-service` 现在还在启动时做一次已发布文章索引回填。它的作用是：
 
-- 入口：`DELETE /api/v1/articles/{articleId}`
-- 角色：作者本人
-- 表 / 缓存：
-  - MySQL `articles` 逻辑删除
-  - Redis 草稿正文删除
+- 处理历史 seed 数据没有经过事件写索引的问题
+- 处理某次消费者故障导致索引漏写的问题
+- 保证“数据库已有已发布文章”与“搜索索引内容”最终能重新对齐
 
-## 5. 审核主线
+## 这篇的核心结论
 
-主链路：
-
-```text
-ReviewController
-  -> ReviewServiceImpl
-  -> ArticleMapper / ReviewLogMapper / UserMapper
-```
-
-### 获取待审核列表
-
-- 入口：`GET /api/v1/reviews/pending`
-- 角色：管理员
-- 表：
-  - MySQL `articles`
-  - MySQL `users`
-- 规则：
-  - 只查 `PENDING`
-  - 会排除管理员自己提交的文章
-
-### 审核动作
-
-- 入口：`POST /api/v1/reviews/{articleId}/action`
-- 角色：管理员
-- 表：
-  - MySQL `articles`
-  - MySQL `review_logs`
-- 动作：
-  - `APPROVE`
-  - `RETURN`
-  - `REJECT`
-- 状态变化：
-  - `PENDING -> APPROVED`
-  - `PENDING -> RETURNED`
-  - `PENDING -> REJECTED`
-- 规则：
-  - 文章必须仍然是 `PENDING`
-  - 管理员不能审核自己写的文章
-  - `RETURN / REJECT` 必须填写原因
-  - `APPROVE` 会写 `publishedAt`
-
-### 查看审核日志
-
-- 入口：`GET /api/v1/reviews/{articleId}/logs`
-- 角色：
-  - 管理员可看任意文章
-  - 作者只能看自己的文章
-- 表：
-  - MySQL `review_logs`
-  - MySQL `users`
-
-## 6. 审核动作与日志关系
-
-| 动作 | fromStatus | toStatus | 谁发起 | 是否需要 reason | 是否写入 review_logs |
-| --- | --- | --- | --- | --- | --- |
-| `APPROVE` | `PENDING` | `APPROVED` | 管理员 | 否 | 是 |
-| `RETURN` | `PENDING` | `RETURNED` | 管理员 | 是 | 是 |
-| `REJECT` | `PENDING` | `REJECTED` | 管理员 | 是 | 是 |
-| `CANCEL` | `PENDING` | `DRAFT` | 作者 | 否 | 是 |
-
-## 7. Redis 在业务中的真实位置
-
-| Redis Key | 用途 | 所属主线 |
-| --- | --- | --- |
-| `jwt:blacklist:{token}` | 登出后让 token 失效 | 认证 |
-| `pwd:reset:{uuid}` | 重置密码 token | 认证 |
-| `pwd:reset:lock:{email}` | 找回密码限流 | 认证 |
-| `draft:{userId}:{articleId}` | 草稿正文缓存 | 创作 |
-| `home:hero:{yyyy-MM-dd}` | 首页 Hero 每日随机缓存 | 首页 |
-
-## 8. 两条必须能手动追踪的请求链路
-
-### `GET /api/v1/home`
-
-链路：
-
-```text
-HomeController
-  -> HomeServiceImpl.getHomeData
-  -> Redis(home:hero:date) / ArticleMapper.selectRandomApproved
-  -> ArticleMapper.selectApprovedByCategory
-  -> UserMapper.selectBatchIds
-  -> HomeResp
-```
-
-关注点：
-
-- 首页 Hero 不是每次随机，而是“每天随机一次并缓存”
-- section 列表是按 `duration_category` 分类的已发布文章
-
-### `POST /api/v1/articles/{id}/submit`
-
-链路：
-
-```text
-ArticleController.submitForReview
-  -> SecurityUtils.getCurrentUserId
-  -> ArticleServiceImpl.submitForReview
-  -> ArticleMapper.selectById
-  -> Redis(draft:{userId}:{articleId})
-  -> ArticleMapper.updateById
-  -> SubmitResp
-```
-
-关注点：
-
-- 这是“状态流最集中”的接口
-- 同时涉及权限、校验、限流、Redis 与 MySQL 一致性
-
-## 9. 读状态机时最该警惕的风险
-
-高风险点只有 3 类：
-
-- 权限与状态冲突
-  - 例如公开接口入口不等于真正公开可见
-- 数据库与 Redis 不一致
-  - 尤其草稿正文在 Redis，元数据在 MySQL
-- 日志与状态变更不同步
-  - 审核动作除了改文章状态，还必须写 `review_logs`
+- 文章状态真源始终在 `content-service`
+- `review-service` 管理审核动作和审核投影，不替代内容真源
+- `notification-service` 和 `search-service` 都是状态变化的派生消费者
+- 事件链路的作用是最终一致性，不是替代领域边界

@@ -1,169 +1,108 @@
 # 01 项目骨架图
 
-## 1. 项目一句话概括
+## 为什么读这篇
 
-这是一个“内容创作与审核平台”后端，主要支持：
+这篇用来建立“当前仓库到底是怎么组织的”这个最基础的坐标系。你在读任何逐文件说明之前，先把模块边界、启动入口和运行层次对齐，后面就不容易把代码看串。
 
-- 用户注册、登录、登出、找回密码
-- 作者创建文章、自动保存草稿、提交审核、取消审核、删除草稿
-- 管理员审核文章
-- 首页聚合、分类页、用户主页、图片上传
+## 当前真实结构
 
-技术栈：
+当前主实现是根 [pom.xml](../../pom.xml) 下的 Maven 多模块工程，核心模块如下：
 
-- `Spring Boot 3.2.3`
-- `Spring Security`
-- `MyBatis Plus`
-- `MySQL 8`
-- `Redis`
-- `JWT`
-- `Spring Mail`
+- `gateway-service`：公网统一入口
+- `auth-service`：认证与用户域
+- `content-service`：内容域
+- `review-service`：审核域
+- `search-service`：搜索投影与公开搜索
+- `file-service`：上传与静态访问映射
+- `notification-service`：通知派生数据
+- `common`：共享契约与公共支持代码
 
-## 2. 启动入口与全局开关
+旧单体根目录 `src/` 已经移除。当前联调、测试、发布、上线都只围绕多模块微服务工程展开。
 
-启动类：`src/main/java/com/platform/NowDemoApplication.java`
+## 启动入口与运行层次
 
-它做了 3 件关键事：
+运行层次可以按四层理解：
 
-- `@SpringBootApplication`：开启 Spring Boot 自动配置
-- `@MapperScan("com.platform.mapper")`：扫描 MyBatis Mapper
-- `@EnableScheduling`：开启定时任务，供草稿刷盘任务使用
+1. 中间件层：MySQL、Redis、RabbitMQ、Elasticsearch、Nacos
+2. 业务服务层：`auth/content/review/search/file/notification`
+3. 统一入口层：`gateway-service`
+4. 可选外部反向代理层：Nginx
 
-这意味着仓库里不仅有 Web API，还有一个后台定时任务链路。
+本地默认启动方式是：
 
-## 3. 目录职责图
+- 中间件由 [docker-compose.yml](../../docker-compose.yml) 管理
+- 业务服务由 [scripts/dev-up.ps1](../../scripts/dev-up.ps1) 启动
 
-核心目录：
+Linux 发布基线是：
 
-- `config`：Spring 配置，主要是安全、跨域、Redis、MVC、存储
-- `controller`：HTTP 接口入口，负责接参、鉴权注解、返回统一 `Result`
-- `service` / `service/impl`：真正的业务规则层
-- `mapper`：数据库访问层，简单 CRUD 走 MyBatis Plus，复杂查询走 XML
-- `entity`：数据库表对应实体
-- `dto`：请求体 / 响应体
-- `enums`：角色、文章状态、审核动作、阅读时长分类等领域枚举
-- `filter`：JWT 认证过滤器
-- `exception`：统一异常处理
-- `task`：定时任务
-- `util`：JWT、统一返回、Security 上下文等工具
+- 每个服务构建成 Jar
+- 用 [scripts/run-service.sh](../../scripts/run-service.sh) 执行 `java -jar`
+- 可选由 [deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf) 暴露外层入口
 
-## 4. 请求主链路
+## 服务清单与端口
 
-```mermaid
-flowchart LR
-    A["HTTP Request"] --> B["Spring MVC Controller"]
-    B --> C["Service / ServiceImpl"]
-    C --> D["Mapper / ArticleMapper.xml"]
-    D --> E["MySQL"]
-    C --> F["Redis"]
-    A --> G["JwtAuthFilter"]
-    G --> B
-    C --> H["Local File Storage"]
-```
+- `gateway-service`：`8080`
+- `auth-service`：`8081`
+- `content-service`：`8082`
+- `review-service`：`8083`
+- `search-service`：`8084`
+- `file-service`：`8085`
+- `notification-service`：`8086`
 
-怎么理解这条链：
+这些默认端口来自各模块自己的 `application.yml`，也都可以被 `SERVER_PORT` 覆盖。
 
-- `JwtAuthFilter` 先尝试从请求头拿 `Authorization: Bearer ...`
-- 认证通过后，把 `userId` 和角色放进 `SecurityContext`
-- `controller` 通过 `SecurityUtils` 拿当前用户身份
-- `service` 决定业务规则、权限细节、状态变化、Redis 使用方式
-- `mapper` 和 XML 执行数据库查询
+## 模块角色怎么分
 
-## 5. 运行时依赖分层
+### `gateway-service`
 
-### 硬依赖
+- 负责公网流量进入系统后的第一层处理
+- 做 JWT 解析、路由转发、限流、统一异常输出、内部头注入
+- 它不拥有业务真源数据，主要承担入口治理
 
-- `MySQL`
-  - 几乎所有核心业务都依赖
-  - 文章、用户、审核日志都在 MySQL
+### `auth-service`
 
-### 半硬依赖
+- 用户、认证、密码找回、用户资料属于这里
+- 其他服务如果只需要用户摘要，不应该直连用户表，而是走内部接口
 
-- `Redis`
-  - 登录黑名单
-  - JWT 续期
-  - 草稿正文缓存
-  - 找回密码 token
-  - 首页 Hero 每日随机缓存
+### `content-service`
 
-说明：
+- 文章状态真源在这里
+- 首页、分类、详情、草稿、提审都从这里出发
+- 审核和搜索都围绕内容域状态变化来派生
 
-- 应用能启动，但很多关键接口在访问时会触发 Redis 依赖
-- 对“完整功能可用”来说，Redis 实际上是必备的
+### `review-service`
 
-### 功能增强依赖
+- 负责待审任务、审核动作、审核日志
+- 自己不保存文章正文真源，而是消费内容域提审事件并维护自己的任务视图
 
-- `Spring Mail`
-  - 只影响找回密码邮件发送
-- 本地文件系统
-  - 只影响图片上传与静态访问
+### `search-service`
 
-## 6. 关键配置摘要
+- 负责公开搜索接口
+- 维护“已发布文章”的 Elasticsearch 投影
+- 不直接决定文章是否发布，而是跟随内容状态事件同步索引
 
-配置文件：`src/main/resources/application.yml`
+### `file-service`
 
-关键项：
+- 负责上传校验、落盘和静态访问映射
+- 当前是本地磁盘方案，不是对象存储方案
 
-- 服务端口：`8080`
-- 数据库：`content_platform`
-- Redis：`localhost:6379`
-- JWT：
-  - 普通 token 120 分钟
-  - remember-me token 10080 分钟
-  - 剩余 30 分钟内会在响应头下发 `New-Token`
-- 文件访问前缀：`/static/uploads`
-- 草稿刷盘间隔：5 分钟
-- 提交审核冷却时间：30 分钟
+### `notification-service`
 
-## 7. 全局横切行为
+- 负责消费文章状态变化事件并生成通知
+- 通知是派生数据，不是内容真源
 
-### 安全
+### `common`
 
-`SecurityConfig` 定义了：
+- 放共享常量、事件模型、内部 DTO、公共过滤器和支持服务
+- 它是跨服务契约层，不应该承载具体业务规则真源
 
-- 哪些接口公开
-- 哪些接口需要登录
-- 哪些接口需要管理员
-- 关闭 Session，采用 JWT 无状态认证
+## 你应该怎样用这张骨架图
 
-### 返回格式
-
-所有接口统一返回：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {}
-}
-```
-
-注意：
-
-- 未登录、无权限时，很多情况是 `HTTP 200`，但 `body.code = 401/403`
-- 前端不能只看 HTTP 状态码
-
-### 异常处理
-
-`GlobalExceptionHandler` 统一把业务异常、参数异常、上传异常转成 `Result`
-
-### 跨域与静态资源
-
-`WebMvcConfig` 做了两件事：
-
-- 放行开发环境前端端口访问 `/api/**`
-- 把 `/static/uploads/**` 映射到本地文件目录
-
-## 8. 先看哪几类文件最有效
-
-如果你要在最短时间内建立地图，顺序建议是：
-
-1. `NowDemoApplication`
-2. `application.yml`
-3. `SecurityConfig`
-4. 所有 `controller`
-5. `ArticleServiceImpl`、`AuthServiceImpl`、`ReviewServiceImpl`
-6. `entity` 和 `init.sql`
-7. `JwtAuthFilter`、`JwtHelper`、`DraftFlushTask`
-
-看完这几类文件，就已经能建立“项目是怎么跑起来的”和“业务是怎么串起来的”的基本心智模型。
+- 如果你要改公网请求行为，先看 `gateway-service`
+- 如果你要改用户和 token 规则，先看 `auth-service`
+- 如果你要改文章状态、提审、首页和详情，先看 `content-service`
+- 如果你要改审核动作与审核链路，先看 `review-service`
+- 如果你要改公开搜索结果，先看 `search-service`
+- 如果你要改文件上传和访问，先看 `file-service`
+- 如果你要改通知生成和投递记录，先看 `notification-service`
+- 如果你一改就跨服务联动，先看 `common`

@@ -32,8 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
-# Local Spring profile overrides
-src/main/resources/application-local.yml
+# Local runtime overrides
 .codex-runtime/
 .runtime/
 .cache/m2/

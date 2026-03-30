@@ -1,235 +1,352 @@
-# 认证与请求链路逐文件讲解
+# 06 请求链路与安全逐文件讲解
 
-这一篇讲的是“一个请求进来后，先经过什么，再到 Controller”。它是理解全项目最关键的一组文件。
+## 为什么读这篇
 
-## 总体链路
+这篇用来回答“一个公网请求是怎样被识别、鉴权、透传到下游服务的”。如果你后续要改权限、修 token 异常、增加内部调用或排查跨服务身份丢失，这篇是直接入口。
 
-```mermaid
-flowchart LR
-    A["HTTP 请求"] --> B["SecurityFilterChain"]
-    B --> C["JwtAuthFilter"]
-    C --> D["SecurityContextHolder"]
-    D --> E["Controller"]
-    E --> F["Service"]
-    F --> G["Mapper / Redis"]
-    G --> H["Result<T>"]
-    H --> I["JSON 响应"]
-```
+## 本篇覆盖哪些文件
 
-## 1. `SecurityConfig.java`
+- `gateway-service` 中的鉴权、JWT、路由、限流和异常处理文件
+- 各服务自己的 `SecurityConfig`
+- `common` 中的内部头、上下文和请求透传支持文件
 
-文件：`src/main/java/com/platform/config/SecurityConfig.java`
+## `GatewayAuthFilter`
 
-这是整个项目的“访问规则总开关”。
+文件位置：
 
-### 它做了什么
+- [../../gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java](../../gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java)
 
-- 关闭 CSRF
-  - 因为项目是前后端分离 + JWT，无状态，不走服务端 Session 表单站点模式。
-- 关闭 Session
-  - `SessionCreationPolicy.STATELESS`
-- 配置路由级权限
-- 配置未登录和无权限时如何返回 JSON
-- 把 `JwtAuthFilter` 插入到安全过滤链里
+文件职责：
 
-### 最重要的权限划分
+- 这是公网请求进入系统后的第一道认证过滤器
+- 它负责识别哪些路由需要放行、哪些需要校验 token，并把身份信息写进内部头
 
-公开访问：
+关键行为：
 
-- `/static/**`
-- `/api/v1/auth/**`
-- `GET /api/v1/home`
-- `GET /api/v1/categories/**`
-- `GET /api/v1/search/**`
-- `GET /api/v1/articles/{articleId}`
-- `GET /api/v1/users/*/profile`
+- 读取请求头中的 token
+- 调用 `GatewayJwtHelper` 解析和校验
+- 对公开路由放行
+- 对受保护路由注入 `X-User-Id`、`X-Username`、`X-User-Role`、`X-Trace-Id`
+- 无效 token 直接返回 `401`
 
-要求登录：
+依赖关系：
 
-- `/api/v1/reviews/*/logs`
-- 其他默认未放行的接口
+- 依赖 `GatewayJwtHelper`
+- 依赖 [HeaderNames.java](../../common/src/main/java/com/platform/common/constant/HeaderNames.java) 提供内部头常量
+- 受网关路由和异常处理配置配合
 
-要求管理员：
+修改风险：
 
-- `/api/v1/reviews/**`
-- `/api/v1/admin/**`
+- 一旦这里误放行或误拦截，请求权限语义会全线跑偏
+- 一旦内部头写错，所有下游服务都可能拿不到用户上下文
 
-### 两个必须记住的细节
+常见改动入口：
 
-- 这个项目未登录和无权限时，HTTP 状态码仍然写 `200`，真正的业务状态码放在 `Result.code`。
-- `/api/v1/reviews/**` 在这里被整体限制为 `ADMIN`，但 `ReviewController` 又用 `@PreAuthorize("isAuthenticated()")` 想放行日志接口给作者访问。这两个规则叠在一起时，路由级规则优先拦截，文档阅读时一定要意识到这里存在设计张力。
+- 新增公开路由
+- 调整 token 缺失或非法时的响应策略
+- 增加内部头字段
 
-改需求时先看这里的场景：
+## `GatewayJwtHelper`
 
-- 新增公开接口
-- 调整某个模块是否要求登录
-- 调整管理员接口范围
+文件位置：
 
-## 2. `JwtAuthFilter.java`
+- [../../gateway-service/src/main/java/com/platform/gateway/security/GatewayJwtHelper.java](../../gateway-service/src/main/java/com/platform/gateway/security/GatewayJwtHelper.java)
 
-文件：`src/main/java/com/platform/filter/JwtAuthFilter.java`
+文件职责：
 
-这个过滤器是“每次请求都尝试解析 JWT”的地方。
+- 封装网关侧 JWT 的解析与校验逻辑
 
-### 它的职责
+关键行为：
 
-- 从请求头提取 `Authorization: Bearer <token>`
-- 先去 Redis 查黑名单
-- 再用 `JwtHelper` 解析 token
-- 解析成功后把登录态放进 `SecurityContextHolder`
-- 如果 token 快过期，就给响应头写 `New-Token`
+- 根据共享签名密钥校验 token
+- 提取用户 ID、用户名、角色等声明
 
-### 为什么它重要
+依赖关系：
 
-因为后面的 `Controller` 根本不自己解析 token，而是统一通过 `SecurityUtils.getCurrentUserId()` 读当前登录人。这件事的前提，就是过滤器已经把认证信息放到上下文里。
+- 被 `GatewayAuthFilter` 直接调用
+- 配置来源于网关 `application.yml` 与 Nacos 的 JWT 相关配置
 
-### 设计上的取舍
+修改风险：
 
-- 项目没有把完整 `UserDetails` 放进上下文，只放了 `userId` 和角色。
-- 好处是简单、轻量。
-- 代价是如果某些地方想直接从安全上下文里拿昵称、邮箱，就拿不到，必须再查库。
+- 这里与 `auth-service` 里的 JWT 生成规则必须保持一致
+- 只改一边会导致“能登录但网关认不出 token”
 
-### 前端为什么必须读 `New-Token`
+常见改动入口：
 
-因为这里做了“临近过期续签”，续签结果不是放在响应体，而是放在响应头。前端如果不处理，会出现：
+- JWT claim 结构变化
+- 签名密钥或过期时间策略变化
 
-- 当前请求能成功
-- 过一会下一次请求突然 401
+## `GatewayRouteConfig`
 
-## 3. `JwtHelper.java`
+文件位置：
 
-文件：`src/main/java/com/platform/util/JwtHelper.java`
+- [../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java)
 
-这个类只负责 JWT 本身，不关心业务。
+文件职责：
 
-### 它负责的事
+- 定义网关把哪些外部路径转发到哪个服务
 
-- 创建 token
-- 解析 token
-- 提取 `userId / username / role`
-- 判断是否过期
-- 判断是否需要刷新
+关键行为：
 
-### token 载荷结构
+- 将认证、用户、内容、审核、搜索、上传相关路径路由到对应服务
+- 为这些路由统一挂载限流过滤器
 
-- `subject = userId`
-- `claims.username = username`
-- `claims.role = role`
+依赖关系：
 
-这意味着：
+- 依赖 Spring Cloud Gateway
+- 与 `GatewayAuthFilter` 一起构成公网入口治理
 
-- 登录态最小可用信息已经写进 token。
-- 不需要每次请求都查库校验用户身份。
+修改风险：
 
-### 你需要关注的实现点
+- 路由改错会直接导致接口 404 或打到错误服务
+- 如果新增服务或路径忘记在这里接入，前端永远进不去
 
-- `getSigningKey()` 使用 Base64 解码 `sign-key`
-- `resolveJwt()` 把角色转换成 `ROLE_USER / ROLE_ADMIN`
-- `shouldRefresh()` 用剩余分钟数判断是否续签
+常见改动入口：
 
-### 典型风险点
+- 新增网关公开路径
+- 拆分或合并业务模块路径
 
-- 环境里的 `sign-key` 不是合法 Base64 时会直接挂。
-- 角色如果写入格式变化，`hasRole()` 和 `@PreAuthorize` 都会受影响。
+## `GatewayRateLimitConfig`
 
-## 4. `SecurityUtils.java`
+文件位置：
 
-文件：`src/main/java/com/platform/util/SecurityUtils.java`
+- [../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRateLimitConfig.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRateLimitConfig.java)
 
-这是 Controller 层最常用的小工具。
+文件职责：
 
-### 它提供什么
+- 提供默认限流器和限流 key 解析方式
 
-- `getCurrentUserId()`
-- `isAdmin()`
-- `isAuthenticated()`
+关键行为：
 
-### 为什么它存在
+- 结合 Redis 做请求频率限制
+- 决定按什么粒度识别客户端
 
-Controller 不需要碰 `SecurityContextHolder` 这些底层 API，直接拿当前用户 ID 即可。你会在几乎所有需要登录的接口里看到：
+依赖关系：
 
-```java
-Long userId = SecurityUtils.getCurrentUserId();
-```
+- 被 `GatewayRouteConfig` 使用
+- 依赖 Redis
 
-理解这点后，看 Controller 会轻松很多。
+修改风险：
 
-## 5. `Result.java`
+- key 规则变动会改变限流统计维度
+- 配额设置过低会误伤正常请求，过高则没有保护价值
 
-文件：`src/main/java/com/platform/util/Result.java`
+常见改动入口：
 
-这是全项目统一响应格式。
+- 调整全局限流参数
+- 换限流 key 维度
 
-### 固定结构
+## `GatewayJsonExceptionHandler`
 
-- `code`
-- `message`
-- `data`
+文件位置：
 
-### 为什么它重要
+- [../../gateway-service/src/main/java/com/platform/gateway/config/GatewayJsonExceptionHandler.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayJsonExceptionHandler.java)
 
-因为这个项目很多错误并不是靠 HTTP 状态码表达，而是靠 `Result.code` 表达。前端如果只看 `axios` 是否进入成功回调，会误判。
+文件职责：
 
-### 常见快捷方法
+- 把网关层异常统一转换成 JSON 响应
 
-- `ok`
-- `badRequest`
-- `unauthorized`
-- `forbidden`
-- `notFound`
-- `conflict`
-- `tooManyRequests`
-- `serverError`
+关键行为：
 
-## 6. `GlobalExceptionHandler.java`
+- 避免网关在异常时返回不可用的默认 HTML
+- 让前端拿到一致的错误结构
 
-文件：`src/main/java/com/platform/exception/GlobalExceptionHandler.java`
+依赖关系：
 
-这个类把“异常”统一收口成 `Result`。
+- 与 `GatewayAuthFilter`、路由和限流配置共同组成入口异常面
 
-### 它处理的异常类型
+修改风险：
 
-- `BusinessException`
-- `MethodArgumentNotValidException`
-- `BindException`
-- `ConstraintViolationException`
-- `HttpMessageNotReadableException`
-- `AuthenticationException`
-- `AccessDeniedException`
-- `MaxUploadSizeExceededException`
-- 兜底 `Exception`
+- 这里如果吞掉错误上下文，排障会变得困难
 
-### 读代码时最该知道的事
+常见改动入口：
 
-- 参数校验失败会被统一翻译成 400。
-- 业务规则冲突通常走 `BusinessException`。
-- 未知异常最后被统一转成 500，不会把栈暴露给前端。
+- 统一错误码格式时
 
-## 7. `BusinessException.java`
+## `GatewayCorsConfig`
 
-文件：`src/main/java/com/platform/exception/BusinessException.java`
+文件位置：
 
-这就是业务层主动“抛给前端看的错误”。
+- [../../gateway-service/src/main/java/com/platform/gateway/config/GatewayCorsConfig.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayCorsConfig.java)
 
-它和普通异常的区别是：
+文件职责：
 
-- 它是可预期的
-- 带明确 `code`
-- 可选 `details`
+- 统一定义网关跨域规则
 
-你在 Service 里看到 `BusinessException.conflict(...)`，基本就能知道：这是规则不允许，不是程序崩了。
+关键行为：
 
-## 8. 这组文件一起看时要形成的理解
+- 控制前端域名能否跨域访问网关
 
-一个受保护接口的大致过程是：
+依赖关系：
 
-1. 请求进入 `SecurityFilterChain`
-2. `JwtAuthFilter` 提取 token
-3. `JwtHelper` 解析 token
-4. 登录信息写入 `SecurityContextHolder`
-5. `Controller` 通过 `SecurityUtils` 读取当前用户
-6. `Service` 执行业务
-7. 成功返回 `Result.ok(...)`
-8. 失败则抛 `BusinessException` 或其他异常，由 `GlobalExceptionHandler` 统一转成 `Result`
+- 作用于所有经网关暴露的公网 API
 
-如果以后排查“为什么前端明明收到 200 但实际还是报错”，先回头看这组文件。
+修改风险：
+
+- 放太宽会增加风险
+- 写错正式域名会导致前端线上直接被浏览器拦截
+
+常见改动入口：
+
+- 切换前端域名
+- 新增环境域名白名单
+
+## 各服务 `SecurityConfig`
+
+文件位置：
+
+- [../../auth-service/src/main/java/com/platform/config/SecurityConfig.java](../../auth-service/src/main/java/com/platform/config/SecurityConfig.java)
+- [../../content-service/src/main/java/com/platform/config/SecurityConfig.java](../../content-service/src/main/java/com/platform/config/SecurityConfig.java)
+- [../../review-service/src/main/java/com/platform/config/SecurityConfig.java](../../review-service/src/main/java/com/platform/config/SecurityConfig.java)
+- [../../search-service/src/main/java/com/platform/config/SecurityConfig.java](../../search-service/src/main/java/com/platform/config/SecurityConfig.java)
+- [../../file-service/src/main/java/com/platform/config/SecurityConfig.java](../../file-service/src/main/java/com/platform/config/SecurityConfig.java)
+- [../../notification-service/src/main/java/com/platform/config/SecurityConfig.java](../../notification-service/src/main/java/com/platform/config/SecurityConfig.java)
+
+文件职责：
+
+- 定义每个服务自己的访问边界
+- 决定哪些路径需要身份、哪些内部路径可放行、哪些角色可进入
+
+关键行为：
+
+- 配合 `HeaderAuthenticationFilter` 把网关注入的内部头转成 Spring Security 上下文
+- 收敛公开、登录、普通用户、管理员和内部接口的边界
+
+依赖关系：
+
+- 依赖 `common` 中的安全过滤和上下文支持类
+- 与网关入口形成“两层防线”
+
+修改风险：
+
+- 网关放行不代表服务侧一定放行
+- 服务侧配置太宽会让内部接口暴露出错
+
+常见改动入口：
+
+- 新增管理员接口
+- 调整内部接口放行规则
+
+## `HeaderNames`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/constant/HeaderNames.java](../../common/src/main/java/com/platform/common/constant/HeaderNames.java)
+
+文件职责：
+
+- 集中定义内部头协议常量
+
+关键行为：
+
+- 统一 `X-User-Id`、`X-Username`、`X-User-Role`、`X-Trace-Id`
+
+依赖关系：
+
+- 网关写入
+- 各服务读取
+- Feign 透传继续使用
+
+修改风险：
+
+- 改一个字符串就是全链路协议变化
+
+常见改动入口：
+
+- 新增跨服务上下文字段
+
+## `HeaderAuthenticationFilter`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/security/HeaderAuthenticationFilter.java](../../common/src/main/java/com/platform/common/security/HeaderAuthenticationFilter.java)
+
+文件职责：
+
+- 让下游服务把内部头转成服务内可用的认证上下文
+
+关键行为：
+
+- 从内部头读取用户信息
+- 写入 Spring Security 认证对象和上下文
+
+依赖关系：
+
+- 被各服务的 `SecurityConfig` 装配
+- 依赖 `HeaderNames`
+
+修改风险：
+
+- 这里一旦解析规则和网关不一致，下游服务会出现“请求已登录但拿不到用户”的假象
+
+常见改动入口：
+
+- 内部头协议扩展
+
+## `FeignHeaderRelayInterceptor`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/feign/FeignHeaderRelayInterceptor.java](../../common/src/main/java/com/platform/common/feign/FeignHeaderRelayInterceptor.java)
+
+文件职责：
+
+- 在服务间 HTTP 调用时继续透传用户头和 TraceId
+
+关键行为：
+
+- 把当前线程上下文里的头信息带到 Feign 请求里
+
+依赖关系：
+
+- 依赖 `TraceContextHolder` 和 `UserContextHolder`
+- 被跨服务调用链使用
+
+修改风险：
+
+- 如果透传不完整，内部接口虽然能调通，但会丢失调用身份和链路追踪
+
+常见改动入口：
+
+- 新增需要透传的内部头
+
+## `TraceContextHolder` 与 `UserContextHolder`
+
+文件位置：
+
+- [../../common/src/main/java/com/platform/common/context/TraceContextHolder.java](../../common/src/main/java/com/platform/common/context/TraceContextHolder.java)
+- [../../common/src/main/java/com/platform/common/context/UserContextHolder.java](../../common/src/main/java/com/platform/common/context/UserContextHolder.java)
+
+文件职责：
+
+- 保存当前请求线程内的追踪信息和用户信息
+
+关键行为：
+
+- 供过滤器、Feign 透传和业务代码读取当前上下文
+
+依赖关系：
+
+- 上游由网关和 Header 过滤器写入
+- 下游由 Feign 拦截器和业务服务读取
+
+修改风险：
+
+- 线程上下文如果清理不当，可能导致串请求污染
+
+常见改动入口：
+
+- 增加上下文字段
+
+## 为什么网关是公网统一鉴权入口
+
+- 公网 token 在最外层解析，权限语义最容易统一
+- 下游服务只认内部头和本地安全配置，逻辑更清晰
+- 一旦需要修复无效 token、限流或 TraceId 问题，集中在网关更容易收敛
+
+## 读完这篇后你应该知道什么
+
+- 公网认证起点在 `GatewayAuthFilter`
+- JWT 规则必须在网关和认证服务之间保持一致
+- 服务侧 `SecurityConfig` 负责第二层边界，不是多余配置
+- 内部头和 TraceId 是跨服务链路能否对齐的基础协议

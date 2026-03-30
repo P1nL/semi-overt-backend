@@ -1,200 +1,456 @@
-# 启动与配置逐文件讲解
+# 05 启动与配置逐文件讲解
 
-这一篇只讲项目怎么启动、依赖什么、配置项控制什么。读完后你应该知道：项目能跑起来最少依赖哪些外部组件，哪个文件决定端口、数据库、Redis、JWT 和上传目录。
+## 为什么读这篇
 
-## 1. `NowDemoApplication.java`
+这篇用来回答“服务是怎么启动起来的、配置从哪里来、为什么本地能跑而上线还要再做一层准备”。如果你不了解启动入口和配置优先级，后面的业务文件即使看懂了，也很难判断问题到底是代码、配置还是环境。
 
-文件：`src/main/java/com/platform/NowDemoApplication.java`
+## 本篇覆盖哪些文件
 
-这个文件只有一件事：把 Spring Boot 应用启动起来。但它身上的 3 个注解决定了整个项目的运行边界。
+- [pom.xml](../../pom.xml)
+- 各服务启动类
+- 各模块 `application.yml`
 
-- `@SpringBootApplication`
-  - 打开 Spring Boot 自动配置。
-  - 扫描 `com.platform` 包及其子包中的 `Controller / Service / Config / Component`。
-- `@MapperScan("com.platform.mapper")`
-  - 告诉 MyBatis 去扫描 `mapper` 接口。
-  - 没有它的话，`ArticleMapper / UserMapper / ReviewLogMapper` 这些 Bean 不会被注册。
-- `@EnableScheduling`
-  - 打开定时任务。
-  - 直接影响 [DraftFlushTask](./10-supporting-files-walkthrough.md) 是否执行。没有它，Redis 草稿不会定时刷回 MySQL。
+## 根 `pom.xml`
 
-怎么读这个文件：
+文件位置：
 
-- 不要只看 `main()`，重点看注解。
-- 看到定时任务问题时，先回到这里确认 `@EnableScheduling` 还在不在。
+- [../../pom.xml](../../pom.xml)
 
-改需求时的入口判断：
+文件职责：
 
-- “为什么 Mapper 注入失败”先看这里。
-- “为什么定时任务不执行”先看这里。
+- 这是整个仓库的父工程
+- 统一定义模块列表、依赖管理、插件配置和版本基线
+- 当前微服务结构是否成立，先看这里，而不是去追溯已经移除的旧单体目录
 
-## 2. `pom.xml`
+关键行为：
 
-文件：`pom.xml`
+- 把 `gateway-service`、`auth-service`、`content-service`、`review-service`、`search-service`、`file-service`、`notification-service`、`common` 收进同一个构建图
+- 统一 Spring Boot、Spring Cloud、`springdoc` 等依赖版本
 
-这是项目的技术栈总表。你看不懂某个类来自哪里，回到这里基本都能定位。
+依赖关系：
 
-### 核心依赖
+- 所有服务模块都依赖它作为父 `pom`
+- 它决定模块是否会参与当前真实构建
 
-- `spring-boot-starter-web`
-  - 提供 MVC、Tomcat、JSON 接口能力。
-- `spring-boot-starter-security`
-  - 提供认证、鉴权、过滤器链、`@PreAuthorize`。
-- `mybatis-plus-spring-boot3-starter`
-  - 提供 `BaseMapper`、分页插件、逻辑删除、自动填充。
-- `mysql-connector-j`
-  - MySQL 驱动。
-- `spring-boot-starter-data-redis`
-  - Redis 访问能力，用于草稿缓存、密码重置、Token 黑名单。
-- `jjwt-*`
-  - JWT 生成和解析。
-- `spring-boot-starter-mail`
-  - 找回密码邮件。
-- `spring-boot-starter-validation`
-  - `@Valid`、`@NotBlank` 等参数校验。
+修改风险：
 
-### 你读到的几个重要结论
+- 这里改错最容易引发全仓编译失败或运行期依赖冲突
+- 版本升级看似只改一处，实际可能影响所有服务
 
-- 项目是标准的 `Spring Boot 3 + Security + MyBatis Plus + MySQL + Redis + JWT` 架构。
-- 没有 MQ、没有 ES、没有分布式任务框架，复杂度整体可控。
-- 搜索目前只是接口占位，不是搜索引擎项目。
+常见改动入口：
 
-### 运行所需的最小依赖
+- 新增模块
+- 收敛依赖版本
+- 修复跨模块依赖冲突
 
-必须可用：
+## 网关启动类
 
-- JDK 17
-- MySQL
-- Redis
+文件位置：
 
-功能增强但可后补：
+- [../../gateway-service/src/main/java/com/platform/gateway/GatewayServiceApplication.java](../../gateway-service/src/main/java/com/platform/gateway/GatewayServiceApplication.java)
 
-- SMTP 邮箱配置
-- 实际上传目录
+文件职责：
 
-注意点：
+- 声明 `gateway-service` 的 Spring Boot 启动入口
 
-- `jjwt` 当前版本是 `0.12.7`，而 `JwtHelper` 里按 Base64 key 解析，生产环境必须给足够强的密钥。
-- `kaptcha` 这个依赖目前更像预留或历史遗留，当前主链路里不是核心。
+关键行为：
 
-## 3. `application.yml`
+- 启动网关应用上下文
+- 结合网关配置、路由配置和过滤器完成统一入口服务装配
 
-文件：`src/main/resources/application.yml`
+依赖关系：
 
-这个文件决定“应用跑在哪、连谁、把文件放哪、JWT 怎么签、草稿多久刷盘一次”。
+- 依赖网关模块自己的配置类
+- 被 [scripts/dev-up.ps1](../../scripts/dev-up.ps1) 和 [scripts/run-service.sh](../../scripts/run-service.sh) 间接启动
 
-### `server`
+修改风险：
 
-- `port: 8080`
-- `context-path: /`
+- 启动类本身通常不需要频繁改动
+- 一旦改包扫描范围或启用注解，可能造成配置类不生效
 
-影响：
+常见改动入口：
 
-- 前端默认请求目标就是 `http://localhost:8080`。
+- 新增全局组件且需要调整扫描边界时
 
-### `spring.datasource`
+## 认证服务启动类
 
-- 连接数据库 `content_platform`
-- 使用 MySQL 驱动
-- 用户名从环境变量 `DB_USERNAME` 读取，默认 `root`
-- 密码从环境变量 `DB_PASSWORD` 读取
-- URL 里带了 `allowPublicKeyRetrieval=true`
+文件位置：
 
-这里是你前面遇到数据库连接报错时最先要看的地方。
+- [../../auth-service/src/main/java/com/platform/auth/AuthServiceApplication.java](../../auth-service/src/main/java/com/platform/auth/AuthServiceApplication.java)
 
-### `spring.data.redis`
+文件职责：
 
-- 默认 `localhost:6379`
-- 使用 `database: 0`
+- 声明 `auth-service` 的启动入口
 
-项目里 Redis 用途非常多：
+关键行为：
 
-- 草稿正文缓存
-- Token 黑名单
-- 找回密码重置令牌
-- 找回密码发送频率限制
-- 首页 Hero 每日随机缓存
+- 装配认证、用户、Redis、邮件、JWT 等相关能力
 
-### `spring.mail`
+依赖关系：
 
-- 用于找回密码邮件。
-- 开发阶段可以先不配，但“忘记密码”功能会失败。
+- 依赖 `auth-service` 自己的配置和 `common`
 
-### `mybatis-plus`
+修改风险：
 
-- `mapper-locations: classpath:mapper/*.xml`
-  - 指定 `ArticleMapper.xml` 的位置。
-- `logic-delete-field: deleted`
-  - 说明 `articles.deleted` 是逻辑删除字段。
-- `map-underscore-to-camel-case: true`
-  - 数据库下划线字段自动映射成 Java 驼峰。
-- `log-impl: StdOutImpl`
-  - 开发时打印 SQL，排查问题很方便。
+- 改扫描路径会直接影响 Controller、Service、Mapper 是否被发现
 
-### `jwt.token`
+常见改动入口：
 
-- `expiration: 120`
-  - 普通登录默认 2 小时。
-- `remember-me-expiration: 10080`
-  - 记住我 7 天。
-- `sign-key`
-  - JWT 签名密钥。
-- `refresh-threshold: 30`
-  - 剩余有效期不足 30 分钟时，响应头下发 `New-Token`。
+- 新接入认证相关基础设施时
 
-这是理解“为什么前端要监听 `New-Token`”的根源。
+## 内容服务启动类
 
-### `storage`
+文件位置：
 
-- `upload-path`
-  - 文件实际落盘目录。
-- `access-prefix`
-  - 访问 URL 前缀。
-- `allowed-types`
-  - 允许上传的 MIME 类型。
-- `max-file-size`
-  - 业务层上传大小上限。
+- [../../content-service/src/main/java/com/platform/content/ContentServiceApplication.java](../../content-service/src/main/java/com/platform/content/ContentServiceApplication.java)
 
-上传问题一般分成两类：
+文件职责：
 
-- 文件没写进磁盘：看 `upload-path`
-- 文件写进去了但访问不到：看 `access-prefix` 和 `WebMvcConfig`
+- 声明 `content-service` 的启动入口
 
-### `platform`
+关键行为：
 
-- `submit-review-cooldown-minutes: 30`
-  - 同一篇文章 30 分钟内不能连续提交审核。
-- `draft-cache-ttl-days: 7`
-  - 草稿正文在 Redis 保留 7 天。
-- `draft-flush-interval-minutes: 5`
-  - 草稿刷盘周期。
-- `reset-pwd-token-ttl-minutes: 15`
-  - 重置密码链接有效期。
-- `frontend-base-url`
-  - 密码重置邮件里拼接前端地址。
+- 装配内容域接口、草稿缓存、MQ 监听和定时任务
 
-### 这份配置文件最容易踩的坑
+依赖关系：
 
-- `jwt.token.sign-key` 默认值只是开发占位，不适合生产。
-- 当前 `JwtHelper` 按 Base64 解码签名密钥，环境值如果不是合法 Base64，会在运行时报错。
-- `DraftFlushTask` 的执行周期写死在代码里，而 `application.yml` 里也有一个 `draft-flush-interval-minutes`。这意味着配置和代码目前并没有真正打通，后面如果要做成可配置，应该优先改任务类。
-- 上传业务层限制是 5MB，但配置里写了 10MB，Spring multipart 又是 15MB。现在存在“三套大小限制”，维护时要注意统一。
+- 依赖内容域自己的 Controller、Service、Mapper、任务与 MQ 组件
 
-## 4. 先建立一个运行心智模型
+修改风险：
 
-只看这 3 个文件，可以先得到这张图：
+- 一旦定时任务或事件相关配置未被扫描，草稿刷回和状态消费都会出问题
 
-```mermaid
-flowchart LR
-    A["NowDemoApplication"] --> B["Spring Boot 容器启动"]
-    B --> C["扫描 Controller / Service / Mapper / Config"]
-    C --> D["按 application.yml 初始化端口、数据库、Redis、JWT、上传目录"]
-    D --> E["Tomcat 监听 8080"]
-    E --> F["请求进入 Security 过滤链"]
-```
+常见改动入口：
 
-如果项目“根本起不来”，先看这三处：
+- 新增内容域组件且包结构变化时
 
-1. `pom.xml` 依赖是否完整。
-2. `application.yml` 外部资源配置是否可连通。
-3. `NowDemoApplication.java` 注解是否还保持完整。
+## 审核服务启动类
+
+文件位置：
+
+- [../../review-service/src/main/java/com/platform/review/ReviewServiceApplication.java](../../review-service/src/main/java/com/platform/review/ReviewServiceApplication.java)
+
+文件职责：
+
+- 声明 `review-service` 的启动入口
+
+关键行为：
+
+- 装配审核任务、审核日志、MQ 消费与发布组件
+
+依赖关系：
+
+- 依赖审核域的 Controller、Service、Mapper 与 MQ 组件
+
+修改风险：
+
+- 包扫描错误会让审核监听或审核接口缺失
+
+常见改动入口：
+
+- 新增审核投影或监听器时
+
+## 搜索服务启动类
+
+文件位置：
+
+- [../../search-service/src/main/java/com/platform/search/SearchServiceApplication.java](../../search-service/src/main/java/com/platform/search/SearchServiceApplication.java)
+
+文件职责：
+
+- 声明 `search-service` 的启动入口
+
+关键行为：
+
+- 装配搜索查询、ES Repository、状态事件消费和启动回填逻辑
+
+依赖关系：
+
+- 依赖搜索模块自己的 Controller、Service、Mapper、Repository
+
+修改风险：
+
+- 启动回填如果未生效，会导致历史已发布文章与索引不一致
+
+常见改动入口：
+
+- 搜索投影初始化策略变化时
+
+## 文件服务启动类
+
+文件位置：
+
+- [../../file-service/src/main/java/com/platform/file/FileServiceApplication.java](../../file-service/src/main/java/com/platform/file/FileServiceApplication.java)
+
+文件职责：
+
+- 声明 `file-service` 的启动入口
+
+关键行为：
+
+- 装配上传、存储配置与静态访问映射
+
+依赖关系：
+
+- 依赖上传 Controller、上传 Service、存储配置类
+
+修改风险：
+
+- 扫描错误会让上传接口和静态资源映射一起失效
+
+常见改动入口：
+
+- 切换存储方案时
+
+## 通知服务启动类
+
+文件位置：
+
+- [../../notification-service/src/main/java/com/platform/notification/NotificationServiceApplication.java](../../notification-service/src/main/java/com/platform/notification/NotificationServiceApplication.java)
+
+文件职责：
+
+- 声明 `notification-service` 的启动入口
+
+关键行为：
+
+- 装配通知事件消费、通知落库与投递记录能力
+
+依赖关系：
+
+- 依赖通知事件监听器、事件服务和通知 Mapper
+
+修改风险：
+
+- 扫描错误会让通知消费和落库链路断掉
+
+常见改动入口：
+
+- 新增通知类型或投递策略时
+
+## `gateway-service` 的 `application.yml`
+
+文件位置：
+
+- [../../gateway-service/src/main/resources/application.yml](../../gateway-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义网关默认端口、Nacos、Redis、JWT 和限流相关基础配置
+
+关键行为：
+
+- 默认端口是 `8080`
+- 导入 `shared-common.yaml`、`shared-redis.yaml`、`shared-jwt.yaml` 以及服务级 Nacos 配置
+- 定义网关 HTTP client 超时和默认限流参数
+
+依赖关系：
+
+- 被网关配置类和过滤器读取
+
+修改风险：
+
+- JWT、Redis、限流配置改错会直接影响所有公网请求
+
+常见改动入口：
+
+- 调整网关超时
+- 调整限流配额
+- 切换 Nacos 地址和命名空间
+
+## `auth-service` 的 `application.yml`
+
+文件位置：
+
+- [../../auth-service/src/main/resources/application.yml](../../auth-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义认证服务的端口、数据库、Redis、邮件和 JWT 基线配置
+
+关键行为：
+
+- 默认端口是 `8081`
+- 导入数据库、Redis、JWT 共享配置
+- 定义重置密码 token TTL、前端地址和 Feign 超时
+
+依赖关系：
+
+- 被 `AuthServiceImpl`、Redis 配置、邮件能力和 JWT 工具使用
+
+修改风险：
+
+- JWT 相关配置改错会让登录态全线异常
+- 邮件配置错误会影响找回密码
+
+常见改动入口：
+
+- 切换数据库或 Redis
+- 调整 token 过期时间
+- 调整前端地址或邮件参数
+
+## `content-service` 的 `application.yml`
+
+文件位置：
+
+- [../../content-service/src/main/resources/application.yml](../../content-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义内容域端口、数据库、Redis、RabbitMQ 和草稿缓存参数
+
+关键行为：
+
+- 默认端口是 `8082`
+- 导入数据库和 Redis 共享配置
+- 定义提审冷却时间、草稿缓存 TTL、草稿刷回间隔、事件发布/重试参数
+
+依赖关系：
+
+- 被 `ArticleServiceImpl`、`DraftServiceImpl`、`DraftFlushTask` 和内容域 MQ 组件使用
+
+修改风险：
+
+- 草稿 TTL 或刷回频率改错，会影响用户保存体验和最终一致性
+
+常见改动入口：
+
+- 调整草稿缓存策略
+- 调整事件发布与重试参数
+
+## `review-service` 的 `application.yml`
+
+文件位置：
+
+- [../../review-service/src/main/resources/application.yml](../../review-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义审核域端口、数据库、RabbitMQ 和事件消费参数
+
+关键行为：
+
+- 默认端口是 `8083`
+- 导入数据库共享配置和服务级配置
+- 定义审核域 Feign 与事件重试参数
+
+依赖关系：
+
+- 被审核任务投影、审核决定事件处理和 MQ 组件使用
+
+修改风险：
+
+- MQ 参数错误会导致审核任务生成或审核决定事件异常
+
+常见改动入口：
+
+- 调整审核域事件重试策略
+
+## `search-service` 的 `application.yml`
+
+文件位置：
+
+- [../../search-service/src/main/resources/application.yml](../../search-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义搜索服务端口、数据库、RabbitMQ、Elasticsearch 和事件参数
+
+关键行为：
+
+- 默认端口是 `8084`
+- 导入数据库共享配置
+- 定义 Elasticsearch 连接地址
+
+依赖关系：
+
+- 被搜索查询、索引同步、启动回填和 MQ 消费逻辑使用
+
+修改风险：
+
+- ES 地址错误会直接让搜索服务启动失败或查询不可用
+
+常见改动入口：
+
+- 切换 ES 地址
+- 调整搜索事件重试策略
+
+## `file-service` 的 `application.yml`
+
+文件位置：
+
+- [../../file-service/src/main/resources/application.yml](../../file-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义文件服务端口和存储参数
+
+关键行为：
+
+- 默认端口是 `8085`
+- 定义上传目录、访问前缀、允许类型和最大文件大小
+
+依赖关系：
+
+- 被 `StorageConfig`、`UploadServiceImpl` 和 `WebMvcConfig` 使用
+
+修改风险：
+
+- 上传目录或访问前缀改错，会出现“能上传但不能访问”或“访问到了错误目录”
+
+常见改动入口：
+
+- 调整上传大小限制
+- 调整文件存储位置
+
+## `notification-service` 的 `application.yml`
+
+文件位置：
+
+- [../../notification-service/src/main/resources/application.yml](../../notification-service/src/main/resources/application.yml)
+
+文件职责：
+
+- 定义通知服务端口、数据库、RabbitMQ 和事件参数
+
+关键行为：
+
+- 默认端口是 `8086`
+- 导入数据库共享配置
+- 定义事件消费重试参数
+
+依赖关系：
+
+- 被通知监听器和通知事件服务使用
+
+修改风险：
+
+- MQ 配置错误会导致通知漏消费
+
+常见改动入口：
+
+- 调整通知消费重试策略
+
+## 配置优先级怎么理解
+
+当前仓库配置来源大致按这个顺序叠加：
+
+- 模块自己的 `application.yml`
+- `spring.config.import` 导入的 Nacos 配置
+- 环境变量覆盖
+
+理解重点：
+
+- `application.yml` 提供默认值和本地开发基线
+- Nacos 用来承接环境化配置
+- 环境变量适合在服务器启动脚本层做最后覆盖
+
+## 为什么正式基线是 `java -jar`
+
+当前仓库已经把 Linux 发布基线写在 [scripts/run-service.sh](../../scripts/run-service.sh) 和 [docs/03-runtime-and-delivery/03-release-runbook.md](../../03-runtime-and-delivery/03-release-runbook.md) 里。正式基线选择 `java -jar` 的原因是：
+
+- 当前仓库已经具备多 Jar 服务化运行方式
+- 发布脚本、环境变量和 Nacos 约定都围绕这个基线整理
+- 业务服务并没有默认提供容器化发布链路作为主路径
+
+`spring-boot:run` 仍然可以作为本地开发手段，但它不是当前仓库定义出来的正式交付方式。

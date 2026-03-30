@@ -4,23 +4,21 @@
 
 这份文档的作用是先帮新接手的后端同学建立全局心智模型：项目是什么、为什么拆成现在这些模块、运行时依赖有哪些、什么才算当前真实实现。
 
-如果你刚进入仓库，先读完这一篇，再去看模块地图和业务链路，会比直接钻源码更高效。
-
 ## 项目一句话介绍
 
 `now-demo` 是一个围绕“内容创作 -> 提交审核 -> 审核决定 -> 通知投递 -> 搜索可见”设计的后端仓库。
 
-它的业务目标不是做一个纯博客系统，而是把这些工程问题放到一条完整链路里：
+它的目标不是做一个纯博客系统，而是把这些工程问题放到一条完整链路里：
 
 - 用户注册、登录、找回密码
-- 作者创建文章、保存草稿、提交审核、取消审核
+- 作者创建文章、保存草稿、提交审核
 - 管理员审核文章
 - 审核结果触发通知与搜索索引更新
 - 首页、分类页、用户主页、公开搜索、图片上传
 
 ## 当前真实项目结构
 
-当前运行主实现是父 [pom.xml](../../pom.xml) 管理的 Maven 多模块工程，而不是根目录历史单体 `src/`。
+当前运行主实现是父 [pom.xml](../../pom.xml) 管理的 Maven 多模块工程。
 
 当前模块：
 
@@ -33,10 +31,10 @@
 - [notification-service](../../notification-service)
 - [common](../../common)
 
-历史残留：
+补充说明：
 
-- [src](../../src) 保留了单体阶段的 `init.sql`、旧控制器/服务/Mapper 参考代码
-- 它仍有参考价值，但不属于当前服务启动和网关路由的主实现
+- 旧单体根目录 `src/` 已移除，不再作为参考代码保留。
+- 本地数据库初始化脚本位于 [deploy/sql/init.sql](../../deploy/sql/init.sql)。
 
 ## 为什么拆成这些服务
 
@@ -98,9 +96,9 @@
 
 运行入口：
 
-- 本地 Windows： [docker-compose.yml](../../docker-compose.yml) + [dev-up.ps1](../../scripts/dev-up.ps1)
-- Linux 基线： [run-service.sh](../../scripts/run-service.sh) + `java -jar`
-- 可选 Nginx： [deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf)
+- 本地 Windows：[docker-compose.yml](../../docker-compose.yml) + [scripts/dev-up.ps1](../../scripts/dev-up.ps1)
+- Linux 基线：[scripts/run-service.sh](../../scripts/run-service.sh) + `java -jar`
+- 可选 Nginx：[deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf)
 
 ## 当前对外能力
 
@@ -119,7 +117,7 @@
 
 ## 读完后你应该知道什么
 
-- 当前项目是不是还在跑单体
+- 当前项目已经不是单体
 - 哪些服务是对外入口，哪些是内部支撑
 - 为什么文章状态必须以 `content-service` 为准
 - 为什么搜索和通知适合走异步投影
