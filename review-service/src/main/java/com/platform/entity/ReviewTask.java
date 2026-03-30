@@ -10,6 +10,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 审核实体，映射持久化层中的相关数据记录。
+ */
+
 @Data
 @TableName("review_tasks")
 public class ReviewTask {

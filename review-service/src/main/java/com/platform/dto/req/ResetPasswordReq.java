@@ -5,8 +5,9 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 找回密码第二步：携带邮件中的 token + 新密码提交
+ * ResetPasswordReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class ResetPasswordReq {
 

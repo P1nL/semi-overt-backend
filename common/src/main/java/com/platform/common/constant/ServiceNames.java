@@ -1,5 +1,9 @@
 package com.platform.common.constant;
 
+/**
+ * 服务Names常量定义，集中维护相关固定值。
+ */
+
 public final class ServiceNames {
 
     public static final String GATEWAY_SERVICE = "gateway-service";

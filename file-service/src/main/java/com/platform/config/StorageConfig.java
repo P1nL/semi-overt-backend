@@ -7,23 +7,23 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 
 /**
- * 本地文件存储配置（对应 application.yml 的 storage 前缀）
- * 注入 FileStorageService 使用
+ * 本地文件存储配置。
+ * 对应 `application.yml` 中的 `storage` 前缀。
  */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "storage")
 public class StorageConfig {
 
-    /** 文件实际存储根目录 */
+    /** 文件物理存储目录。 */
     private String uploadPath;
 
-    /** 对外访问 URL 前缀 */
+    /** 对外访问 URL 前缀。 */
     private String accessPrefix;
 
-    /** 允许上传的 MIME 类型 */
+    /** 允许上传的 MIME 类型。 */
     private List<String> allowedTypes;
 
-    /** 单文件大小上限（字节） */
+    /** 单文件大小上限，单位字节。 */
     private long maxFileSize;
 }

@@ -7,8 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 分类详情接口
+ * 分类控制器，对外提供相关 HTTP 接口。
  */
+
 @RestController
 @RequestMapping("/api/v1/categories")
 @RequiredArgsConstructor

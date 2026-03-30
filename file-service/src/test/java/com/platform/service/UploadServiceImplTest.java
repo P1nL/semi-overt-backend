@@ -18,6 +18,10 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * 上传服务ImplTest业务接口，定义对外暴露的服务能力。
+ */
+
 class UploadServiceImplTest {
 
     @TempDir

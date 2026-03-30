@@ -6,8 +6,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * Submit review cooldown info.
+ * SubmitCooldownResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SubmitCooldownResp {

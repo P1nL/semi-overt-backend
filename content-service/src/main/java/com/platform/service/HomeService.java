@@ -3,8 +3,9 @@ package com.platform.service;
 import com.platform.dto.resp.HomeResp;
 
 /**
- * 首页服务接口
+ * 首页业务接口，定义对外暴露的服务能力。
  */
+
 public interface HomeService {
 
     /**

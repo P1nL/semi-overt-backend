@@ -24,6 +24,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 审核事件服务ImplTest业务接口，定义对外暴露的服务能力。
+ */
+
 @ExtendWith(MockitoExtension.class)
 class ReviewEventServiceImplTest {
 

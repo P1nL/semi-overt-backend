@@ -6,6 +6,10 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ * 内容服务启动类，负责启动内容模块应用上下文。
+ */
+
 @SpringBootApplication(scanBasePackages = {"com.platform", "com.platform.common"})
 @EnableFeignClients(basePackages = "com.platform")
 @EnableScheduling

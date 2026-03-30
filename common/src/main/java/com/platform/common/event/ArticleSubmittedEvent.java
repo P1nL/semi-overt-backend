@@ -7,6 +7,10 @@ import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * 领域事件模型，描述文章提交审核时投递给下游服务的数据。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

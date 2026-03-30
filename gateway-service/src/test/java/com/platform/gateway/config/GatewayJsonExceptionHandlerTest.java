@@ -13,6 +13,10 @@ import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * 网关JSON异常HandlerTest配置类，负责当前模块相关组件的装配与框架行为配置。
+ */
+
 class GatewayJsonExceptionHandlerTest {
 
     private GatewayJsonExceptionHandler handler;

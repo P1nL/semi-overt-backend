@@ -22,17 +22,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 图片上传服务实现
- *
- * 存储策略：
- *   物理路径：{uploadBaseDir}/{year}/{month}/{day}/{uuid}.ext
- *   访问 URL：{staticUrlPrefix}/{year}/{month}/{day}/{uuid}.ext
- *   数据库保存相对 URL，避免部署路径变更时批量改库。
- *
- * 主色提取：
- *   对图片进行降采样（取中心区域 20x20 像素），
- *   计算 RGB 均值并转为 HEX，足够满足首页/分类页氛围色需求。
- *   提取失败时返回 null，前端使用默认颜色。
+ * 图片上传服务实现。
+ * 负责校验图片格式、写入本地磁盘、生成访问 URL，并在封面图场景下提取主色。
  */
 @Slf4j
 @Service
@@ -42,84 +33,80 @@ public class UploadServiceImpl implements UploadService {
         ImageIO.scanForPlugins();
     }
 
-    /** 文件物理存储根目录，配置在 application.yml */
+    /** 文件物理存储根目录。 */
     @Value("${storage.upload-path}")
     private String uploadBaseDir;
 
-    /** 对外访问 URL 前缀，配置在 application.yml */
+    /** 对外访问 URL 前缀。 */
     @Value("${storage.access-prefix}")
     private String staticUrlPrefix;
 
-    /** 允许的文件扩展名 */
+    /** 允许的文件扩展名。 */
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
 
-    /** 允许的 MIME 类型 */
+    /** 允许的 MIME 类型。 */
     private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp"
     );
 
-    /** 最大文件大小：5MB */
+    /** 单文件大小上限，5MB。 */
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-    /** 主色提取的降采样尺寸（取图片中心区域，采样格子越小越快） */
+    /** 主色提取时的采样密度。 */
     private static final int SAMPLE_SIZE = 20;
 
+    /**
+     * 上传图片。
+     * 顺序为：参数校验 -> 图片解码 -> 主色提取 -> 文件落盘 -> 生成访问地址。
+     */
     @Override
     public UploadResp upload(MultipartFile file, String bizType, Long articleId) {
-        // ---- 1. 基础校验 ----
         if (file == null || file.isEmpty()) {
-            throw BusinessException.badRequest("上传文件不能为空");
+            throw BusinessException.badRequest("涓婁紶鏂囦欢涓嶈兘涓虹┖");
         }
 
-        // 解析 bizType 枚举（大小写不敏感）
         BizType biz;
         try {
             biz = BizType.valueOf(bizType.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw BusinessException.badRequest("无效的业务类型：" + bizType
-                    + "，支持：AVATAR / COVER / ARTICLE_IMAGE");
+            throw BusinessException.badRequest("鏃犳晥鐨勪笟鍔＄被鍨嬶細" + bizType
+                    + "锛屾敮鎸侊細AVATAR / COVER / ARTICLE_IMAGE");
         }
 
-        // ---- 2. 校验文件大小 ----
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw BusinessException.badRequest("文件超过 5MB 限制，当前大小：" + (file.getSize() / 1024) + "KB");
+            throw BusinessException.badRequest("鏂囦欢瓒呰繃 5MB 闄愬埗锛屽綋鍓嶅ぇ灏忥細" + (file.getSize() / 1024) + "KB");
         }
 
-        // ---- 3. 校验 MIME 类型（后端二次校验，不信任前端传值） ----
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase())) {
-            throw BusinessException.badRequest("不支持的文件类型，仅允许 JPG / PNG / WebP");
+            throw BusinessException.badRequest("涓嶆敮鎸佺殑鏂囦欢绫诲瀷锛屼粎鍏佽 JPG / PNG / WebP");
         }
 
-        // ---- 4. 校验扩展名（与 MIME 双重验证） ----
         String originalName = file.getOriginalFilename();
         String ext = extractExtension(originalName);
         if (!ALLOWED_EXTENSIONS.contains(ext)) {
-            throw BusinessException.badRequest("不支持的文件扩展名：." + ext);
+            throw BusinessException.badRequest("涓嶆敮鎸佺殑鏂囦欢鎵╁睍鍚嶏細." + ext);
         }
 
-        // ---- 5. 读取图片、获取尺寸、提取主色 ----
         BufferedImage image;
         try (InputStream is = file.getInputStream()) {
             image = ImageIO.read(is);
         } catch (IOException e) {
-            log.warn("读取图片失败，文件名：{}", originalName, e);
-            throw BusinessException.badRequest("图片文件损坏或格式不正确");
+            log.warn("璇诲彇鍥剧墖澶辫触锛屾枃浠跺悕锛歿}", originalName, e);
+            throw BusinessException.badRequest("鍥剧墖鏂囦欢鎹熷潖鎴栨牸寮忎笉姝ｇ‘");
         }
         if (image == null) {
-            throw BusinessException.badRequest("无法解析图片内容，请确认文件格式");
+            throw BusinessException.badRequest("鏃犳硶瑙ｆ瀽鍥剧墖鍐呭锛岃纭鏂囦欢鏍煎紡");
         }
 
         int width = image.getWidth();
         int height = image.getHeight();
 
-        // 仅封面图场景提取主色（COVER），其他场景不需要
         String dominantColor = null;
         if (biz == BizType.COVER) {
             dominantColor = extractDominantColor(image);
         }
 
-        // ---- 6. 生成存储路径并写入磁盘 ----
         LocalDate today = LocalDate.now();
         String relativePath = String.format("%d/%02d/%02d/%s.%s",
                 today.getYear(), today.getMonthValue(), today.getDayOfMonth(),
@@ -128,7 +115,7 @@ public class UploadServiceImpl implements UploadService {
         Path uploadRoot = Paths.get(uploadBaseDir).toAbsolutePath().normalize();
         Path physicalPath = uploadRoot.resolve(relativePath).normalize();
         if (!physicalPath.startsWith(uploadRoot)) {
-            throw BusinessException.serverError("文件存储路径非法");
+            throw BusinessException.serverError("鏂囦欢瀛樺偍璺緞闈炴硶");
         }
         try {
             Files.createDirectories(physicalPath.getParent());
@@ -136,14 +123,13 @@ public class UploadServiceImpl implements UploadService {
                 Files.copy(inputStream, physicalPath, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            log.error("文件写入磁盘失败，路径：{}", physicalPath, e);
-            throw BusinessException.serverError("文件保存失败，请稍后重试");
+            log.error("鏂囦欢鍐欏叆纾佺洏澶辫触锛岃矾寰勶細{}", physicalPath, e);
+            throw BusinessException.serverError("鏂囦欢淇濆瓨澶辫触锛岃绋嶅悗閲嶈瘯");
         }
 
-        // ---- 7. 拼接对外访问 URL（数据库存相对路径） ----
         String accessUrl = staticUrlPrefix + "/" + relativePath;
 
-        log.info("文件上传成功: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
+        log.info("鏂囦欢涓婁紶鎴愬姛: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
 
         return UploadResp.builder()
                 .url(accessUrl)
@@ -154,11 +140,8 @@ public class UploadServiceImpl implements UploadService {
                 .build();
     }
 
-    // ==================== 私有辅助方法 ====================
-
     /**
-     * 从文件名中提取扩展名（小写）
-     * 若文件名为空或无扩展名，返回空字符串
+     * 从文件名中提取小写扩展名。
      */
     private String extractExtension(String filename) {
         if (filename == null || !filename.contains(".")) {
@@ -168,35 +151,25 @@ public class UploadServiceImpl implements UploadService {
     }
 
     /**
-     * 提取图片主色（降采样均值法）
-     *
-     * 思路：
-     *   1. 在图片中心区域取 SAMPLE_SIZE x SAMPLE_SIZE 个采样点
-     *   2. 计算所有采样像素的 RGB 平均值
-     *   3. 转换为 HEX 格式
-     *
-     * 这是一个"够用"的轻量方案，不需要引入额外依赖。
-     * 如需更精确的主色提取（如中位切割算法），可引入 color-thief 等库替换。
-     *
-     * @param image 已加载的 BufferedImage
-     * @return HEX 颜色字符串（如 #AAB7C3），失败返回 null
+     * 通过中心区域降采样估算图片主色。
+     * 该实现追求轻量和稳定，不依赖额外图像分析库。
      */
     private String extractDominantColor(BufferedImage image) {
         try {
             int imgWidth = image.getWidth();
             int imgHeight = image.getHeight();
 
-            // 取中心区域（避免边框、黑边影响主色计算）
             int startX = imgWidth / 4;
             int startY = imgHeight / 4;
             int regionWidth = imgWidth / 2;
             int regionHeight = imgHeight / 2;
 
-            // 计算采样步长
             int stepX = Math.max(1, regionWidth / SAMPLE_SIZE);
             int stepY = Math.max(1, regionHeight / SAMPLE_SIZE);
 
-            long totalR = 0, totalG = 0, totalB = 0;
+            long totalR = 0;
+            long totalG = 0;
+            long totalB = 0;
             int count = 0;
 
             for (int x = startX; x < startX + regionWidth; x += stepX) {
@@ -209,7 +182,9 @@ public class UploadServiceImpl implements UploadService {
                 }
             }
 
-            if (count == 0) return null;
+            if (count == 0) {
+                return null;
+            }
 
             int avgR = (int) (totalR / count);
             int avgG = (int) (totalG / count);
@@ -217,7 +192,7 @@ public class UploadServiceImpl implements UploadService {
 
             return String.format("#%02X%02X%02X", avgR, avgG, avgB);
         } catch (Exception e) {
-            log.warn("主色提取失败", e);
+            log.warn("涓昏壊鎻愬彇澶辫触", e);
             return null;
         }
     }

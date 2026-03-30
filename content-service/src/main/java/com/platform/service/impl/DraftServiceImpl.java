@@ -31,12 +31,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * 草稿服务实现
- *
- * 草稿存储策略：
- *   - 正文（content）存 Redis，Key: draft:{userId}:{articleId}，TTL 7 天
- *   - 元数据（title/summary/coverUrl/wordCount 等）同步写 MySQL
- *   - 定时任务每 5 分钟将 Redis 内容刷盘到 MySQL content 字段
+ * 草稿服务实现。
+ * 负责自动保存草稿、查询草稿箱以及把 Redis 中的正文内容回刷到 MySQL。
+ * 内容正文以 Redis 暂存为主，文章元数据则实时写入 MySQL。
  */
 @Slf4j
 @Service
@@ -47,27 +44,23 @@ public class DraftServiceImpl implements DraftService {
     private final StringRedisTemplate redisTemplate;
     private final ReviewInternalClient reviewInternalClient;
 
-    /** 草稿 Redis Key 前缀 */
+    /** 草稿正文在 Redis 中的 key 前缀。 */
     private static final String DRAFT_KEY_PREFIX = "draft:";
 
-    /** 草稿 Redis TTL（天） */
+    /** 草稿正文在 Redis 中的保留天数。 */
     private static final long DRAFT_TTL_DAYS = 7;
 
-    /** 摘要默认截取长度 */
-
-    /**
-     * 允许自动保存的文章状态
-     * PENDING / APPROVED / REJECTED 状态下正文已锁定，不允许保存
-     */
+    /** 允许自动保存的文章状态。 */
     private static final Set<ArticleStatus> EDITABLE_STATUSES =
             Set.of(ArticleStatus.DRAFT, ArticleStatus.RETURNED);
 
-    // ==================== 自动保存草稿 ====================
-
+    /**
+     * 自动保存草稿。
+     * 正文优先写入 Redis 以支持高频保存，字数、阅读时长、封面等元数据同步落 MySQL。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SaveDraftResp saveDraft(Long articleId, Long userId, SaveDraftReq req) {
-        // 1. 查文章，校验所有权和状态
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
             throw BusinessException.notFound("文章不存在");
@@ -80,7 +73,6 @@ public class DraftServiceImpl implements DraftService {
                     "当前状态不允许保存草稿，状态：" + article.getStatus());
         }
 
-        // 2. 正文写入 Redis（续期 TTL）
         if (req.getContent() != null) {
             String redisKey = buildDraftKey(userId, articleId);
             redisTemplate.opsForValue().set(
@@ -91,7 +83,6 @@ public class DraftServiceImpl implements DraftService {
             );
         }
 
-        // 3. 计算字数和阅读时长（以最新正文为准）
         String latestContent = req.getContent() != null
                 ? req.getContent()
                 : article.getContent();
@@ -99,8 +90,6 @@ public class DraftServiceImpl implements DraftService {
         BigDecimal readMinutes = calculateReadMinutes(wordCount);
         DurationCategory durationCategory = getDurationCategory(readMinutes);
 
-        // 4. 摘要：前端传了就用，没传且正文有内容则自动截取
-        // 5. 更新 MySQL 元数据（仅更新非 null 字段）
         LambdaUpdateWrapper<Article> updateWrapper = new LambdaUpdateWrapper<Article>()
                 .eq(Article::getId, articleId)
                 .set(Article::getWordCount, wordCount)
@@ -139,11 +128,13 @@ public class DraftServiceImpl implements DraftService {
                 .build();
     }
 
-    // ==================== 草稿箱列表 ====================
 
+    /**
+     * 查询草稿箱列表。
+     * 仅返回作者本人处于 DRAFT 或 RETURNED 状态的文章，并补充最近一次退回原因。
+     */
     @Override
     public List<DraftItemResp> getDraftList(Long userId) {
-        // 1. 查 DRAFT + RETURNED 文章，按更新时间倒序
         List<Article> articles = articleMapper.selectList(
                 new LambdaQueryWrapper<Article>()
                         .eq(Article::getAuthorId, userId)
@@ -155,14 +146,12 @@ public class DraftServiceImpl implements DraftService {
             return new ArrayList<>();
         }
 
-        // 2. 批量查询 RETURNED 文章的最近退回原因
-        //    先找出所有 RETURNED 文章 ID，一次性查 review_logs
+        // 退回原因来自 review-service，当前实现按文章逐个查询最近一条 RETURN 记录。
         List<Long> returnedIds = articles.stream()
                 .filter(a -> a.getStatus() == ArticleStatus.RETURNED)
                 .map(Article::getId)
                 .collect(Collectors.toList());
 
-        // articleId → latestReason 的映射
         java.util.Map<Long, String> reasonMap = new java.util.HashMap<>();
         if (!returnedIds.isEmpty()) {
             for (Long artId : returnedIds) {
@@ -173,7 +162,6 @@ public class DraftServiceImpl implements DraftService {
             }
         }
 
-        // 3. 组装响应
         return articles.stream()
                 .map(a -> DraftItemResp.builder()
                         .id(a.getId())
@@ -186,11 +174,13 @@ public class DraftServiceImpl implements DraftService {
                 .collect(Collectors.toList());
     }
 
-    // ==================== 定时刷盘 ====================
 
+    /**
+     * 定时把 Redis 中的草稿正文回刷到 MySQL。
+     * 只同步 content 字段，避免覆盖其他已在数据库中更新的元数据。
+     */
     @Override
     public void flushAllDrafts() {
-        // SCAN 所有草稿 Key，格式：draft:{userId}:{articleId}
         Set<String> keys = redisTemplate.keys(DRAFT_KEY_PREFIX + "*");
         if (keys == null || keys.isEmpty()) {
             log.debug("草稿刷盘：无待处理的草稿 Key");
@@ -202,7 +192,7 @@ public class DraftServiceImpl implements DraftService {
 
         for (String key : keys) {
             try {
-                // 解析 Key：draft:{userId}:{articleId}
+                // key 结构固定为 draft:{userId}:{articleId}，只使用 articleId 回写正文。
                 String[] parts = key.split(":");
                 if (parts.length != 3) {
                     log.warn("草稿 Key 格式异常，跳过: key={}", key);
@@ -212,10 +202,9 @@ public class DraftServiceImpl implements DraftService {
                 Long articleId = Long.parseLong(parts[2]);
                 String content = redisTemplate.opsForValue().get(key);
                 if (content == null) {
-                    continue; // Key 在读取过程中过期，跳过
+                    continue;
                 }
 
-                // 只更新 content 字段，避免覆盖其他元数据
                 Article update = new Article();
                 update.setId(articleId);
                 update.setContent(content);
@@ -234,30 +223,26 @@ public class DraftServiceImpl implements DraftService {
         log.info("草稿刷盘完成: 成功={}, 失败={}, 总计={}", successCount, failCount, keys.size());
     }
 
-    // ==================== 私有工具方法 ====================
 
     /**
-     * 计算字数（字符数）
-     * 对中文内容而言，字符数比"词数"更有意义
-     * 去掉 Markdown 语法符号后计算（简单方案：直接计全文长度）
+     * 计算正文“有效字符数”。
+     * 这里会粗略剔除 Markdown 语法、代码块、URL 和空白字符，使字数更接近实际阅读内容。
      */
     private int calculateWordCount(String content) {
         if (content == null || content.isBlank()) {
             return 0;
         }
-        // 去除 Markdown 常见语法符号（#、*、`、> 等）和空白，取纯文本长度
         String plain = content
-                .replaceAll("```[\\s\\S]*?```", "")   // 代码块
-                .replaceAll("`[^`]+`", "")             // 行内代码
-                .replaceAll("[#*>\\-_\\[\\]()!|]", "") // Markdown 符号
-                .replaceAll("https?://\\S+", "")       // URL
-                .replaceAll("\\s+", "");               // 空白字符
+                .replaceAll("```[\\s\\S]*?```", "")
+                .replaceAll("`[^`]+`", "")
+                .replaceAll("[#*>\\-_\\[\\]()!|]", "")
+                .replaceAll("https?://\\S+", "")
+                .replaceAll("\\s+", "");
         return plain.length();
     }
 
     /**
-     * 计算阅读时长（分钟）
-     * 按 wordCount / 300 计算，保留一位小数
+     * 以 300 字/分钟估算阅读时长，并保留一位小数。
      */
     private BigDecimal calculateReadMinutes(int wordCount) {
         if (wordCount == 0) {
@@ -268,10 +253,7 @@ public class DraftServiceImpl implements DraftService {
     }
 
     /**
-     * 根据阅读时长确定分类
-     * QUICK  ≤ 3 分钟（≤ 900 字）
-     * SHORT  ≤ 8 分钟（≤ 2400 字）
-     * DEEP   > 8 分钟（> 2400 字）
+     * 根据阅读时长映射文章阅读分类。
      */
     private DurationCategory getDurationCategory(BigDecimal readMinutes) {
         double minutes = readMinutes.doubleValue();
@@ -285,10 +267,8 @@ public class DraftServiceImpl implements DraftService {
     }
 
     /**
-     * 截取摘要：取正文前 120 个字符，去掉 Markdown 语法符号
-     */
-    /**
-     * 构建草稿 Redis Key：draft:{userId}:{articleId}
+     * 统一处理可为空的文本字段。
+     * 空串会被折叠为 null，避免数据库中混入无意义空白值。
      */
     private String normalizeNullableText(String value) {
         if (value == null) {
@@ -298,6 +278,9 @@ public class DraftServiceImpl implements DraftService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 构造草稿正文在 Redis 中的 key。
+     */
     private String buildDraftKey(Long userId, Long articleId) {
         return DRAFT_KEY_PREFIX + userId + ":" + articleId;
     }

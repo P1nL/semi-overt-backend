@@ -4,8 +4,9 @@ import com.platform.dto.resp.UploadResp;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 图片上传服务接口
+ * 上传业务接口，定义对外暴露的服务能力。
  */
+
 public interface UploadService {
 
     /**

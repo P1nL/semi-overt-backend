@@ -25,11 +25,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Public article search backed by Elasticsearch article projections.
- *
- * <p>The query is intentionally scoped to title and summary only. Visibility is
- * controlled by the index projection pipeline, so the search index only contains
- * APPROVED articles.</p>
+ * 搜索服务实现。
+ * 基于 Elasticsearch 中的文章投影文档提供公开搜索，只返回已进入搜索索引的公开文章。
  */
 @Slf4j
 @Service
@@ -41,6 +38,10 @@ public class SearchServiceImpl implements SearchService {
     private final ElasticsearchOperations elasticsearchOperations;
     private final AuthInternalClient authInternalClient;
 
+    /**
+     * 搜索文章。
+     * 查询范围只覆盖标题和摘要，分页参数会被修正到安全范围内。
+     */
     @Override
     public SearchResp search(String keyword, int page, int pageSize) {
         int safePage = Math.max(1, page);
@@ -88,6 +89,10 @@ public class SearchServiceImpl implements SearchService {
                 .build();
     }
 
+    /**
+     * 构造 Elasticsearch 查询。
+     * 采用标题和摘要双字段 should 匹配，并优先按相关度、再按发布时间倒序排序。
+     */
     static NativeQuery buildSearchQuery(String keyword, int page, int pageSize) {
         return NativeQuery.builder()
                 .withQuery(query -> query.bool(bool -> bool
@@ -106,6 +111,10 @@ public class SearchServiceImpl implements SearchService {
                 .build();
     }
 
+    /**
+     * 批量补齐作者摘要信息。
+     * 下游失败时不影响主搜索结果，只是作者信息为空。
+     */
     private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> userIds) {
         if (userIds.isEmpty()) {
             return Collections.emptyMap();
@@ -115,8 +124,7 @@ public class SearchServiceImpl implements SearchService {
             return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(userIds.stream().toList())))
                     .stream()
                     .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             log.warn("Failed to enrich search results with author summaries for {} users", userIds.size(), ex);
             return Collections.emptyMap();
         }

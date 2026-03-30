@@ -5,6 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 用户资料文章StatsDto相关类型，承载当前模块中的辅助职责。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

@@ -7,9 +7,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 草稿箱列表项响应
- * 仅包含 DRAFT 与 RETURNED 状态文章
+ * DraftItemResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class DraftItemResp {

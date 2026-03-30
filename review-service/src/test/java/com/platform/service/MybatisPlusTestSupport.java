@@ -6,6 +6,10 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.core.toolkit.LambdaUtils;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 
+/**
+ * MyBatisPlusTestSupport业务接口，定义对外暴露的服务能力。
+ */
+
 final class MybatisPlusTestSupport {
 
     private MybatisPlusTestSupport() {

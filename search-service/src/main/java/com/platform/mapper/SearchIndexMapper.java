@@ -6,6 +6,10 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/**
+ * 搜索索引数据访问接口，负责相关表的持久化读写。
+ */
+
 @Mapper
 public interface SearchIndexMapper {
 

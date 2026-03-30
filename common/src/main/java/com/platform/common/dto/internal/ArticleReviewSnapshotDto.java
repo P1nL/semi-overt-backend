@@ -8,6 +8,10 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * 文章审核SnapshotDto相关类型，承载当前模块中的辅助职责。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

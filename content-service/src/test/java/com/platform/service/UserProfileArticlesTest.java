@@ -31,6 +31,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 用户资料ArticlesTest业务接口，定义对外暴露的服务能力。
+ */
+
 @ExtendWith(MockitoExtension.class)
 class UserProfileArticlesTest {
 
@@ -181,6 +185,9 @@ class UserProfileArticlesTest {
         }
     }
 
+    /**
+     * 定义构建文章的服务能力。
+     */
     private Article buildArticle(Long articleId, Long authorId, ArticleStatus status) {
         Article article = new Article();
         article.setId(articleId);

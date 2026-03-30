@@ -23,6 +23,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * AdminDelete文章Test业务接口，定义对外暴露的服务能力。
+ */
+
 @ExtendWith(MockitoExtension.class)
 class AdminDeleteArticleTest {
 
@@ -92,6 +96,9 @@ class AdminDeleteArticleTest {
         }
     }
 
+    /**
+     * 定义构建文章的服务能力。
+     */
     private Article buildArticle(Long articleId, Long authorId, ArticleStatus status) {
         Article article = new Article();
         article.setId(articleId);

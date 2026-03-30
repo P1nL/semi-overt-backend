@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
+/**
+ * 审核内部远程客户端，负责发起跨服务调用。
+ */
+
 @FeignClient(name = "review-service", configuration = FeignCommonConfig.class)
 public interface ReviewInternalClient {
 

@@ -13,15 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 认证接口
- * 基础路径：/api/v1/auth（已在 SecurityConfig 全部放行，无需 Token）
- *
- * POST /api/v1/auth/register          注册
- * POST /api/v1/auth/login             登录
- * POST /api/v1/auth/logout            登出（需携带 Token）
- * POST /api/v1/auth/forgot-password   找回密码-发送邮件
- * POST /api/v1/auth/reset-password    找回密码-重置密码
+ * 认证控制器，对外提供相关 HTTP 接口。
  */
+
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

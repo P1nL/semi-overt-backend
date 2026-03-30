@@ -4,6 +4,10 @@ import lombok.Getter;
 
 import java.util.Map;
 
+/**
+ * 事件Constants常量定义，集中维护相关固定值。
+ */
+
 public final class EventConstants {
 
     public static final String ARTICLE_SUBMITTED = "ArticleSubmittedEvent";

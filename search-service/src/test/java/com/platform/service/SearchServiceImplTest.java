@@ -33,6 +33,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * 搜索服务ImplTest业务接口，定义对外暴露的服务能力。
+ */
+
 @ExtendWith(MockitoExtension.class)
 class SearchServiceImplTest {
 
@@ -152,6 +156,9 @@ class SearchServiceImplTest {
         assertThat(card.getAuthorAvatar()).isNull();
     }
 
+    /**
+     * 定义执行query的服务能力。
+     */
     private static void assertQuery(Query query, String keyword) {
         assertThat(query.isBool()).isTrue();
         assertThat(query.bool().minimumShouldMatch()).isEqualTo("1");
@@ -162,6 +169,9 @@ class SearchServiceImplTest {
         assertThat(query.bool().should().get(1).match().query().stringValue()).isEqualTo(keyword);
     }
 
+    /**
+     * 定义执行搜索hits的服务能力。
+     */
     private static SearchHits<ArticleSearchDocument> mockSearchHits(List<SearchHit<ArticleSearchDocument>> searchHits, long totalHits) {
         SearchHits<ArticleSearchDocument> hits = mock(SearchHits.class);
         when(hits.getSearchHits()).thenReturn(searchHits);
@@ -169,6 +179,9 @@ class SearchServiceImplTest {
         return hits;
     }
 
+    /**
+     * 定义搜索hit的服务能力。
+     */
     private static SearchHit<ArticleSearchDocument> searchHit(ArticleSearchDocument document) {
         return new SearchHit<>(
                 "articles",

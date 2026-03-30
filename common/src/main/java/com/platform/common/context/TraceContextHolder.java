@@ -1,5 +1,9 @@
 package com.platform.common.context;
 
+/**
+ * 链路上下文持有器，用于在当前线程保存和读取追踪标识。
+ */
+
 public final class TraceContextHolder {
 
     private static final ThreadLocal<String> HOLDER = new ThreadLocal<>();

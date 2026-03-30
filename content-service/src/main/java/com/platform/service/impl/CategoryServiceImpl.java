@@ -1,11 +1,11 @@
 package com.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.client.AuthInternalClient;
 import com.platform.common.api.ResultUtils;
 import com.platform.common.dto.internal.BatchUserQueryReq;
 import com.platform.common.dto.internal.UserSummaryDto;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.dto.resp.ArticleCardResp;
 import com.platform.dto.resp.CategoryResp;
 import com.platform.entity.Article;
@@ -18,11 +18,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 分类服务实现
+ * 分类页服务实现。
+ * 负责按阅读时长分类分页查询公开文章，并补齐作者摘要信息后组装成卡片列表。
  */
 @Slf4j
 @Service
@@ -34,30 +38,31 @@ public class CategoryServiceImpl implements CategoryService {
     private final ArticleMapper articleMapper;
     private final AuthInternalClient authInternalClient;
 
+    /**
+     * 按分类分页查询文章。
+     * 分类参数会先转换为 `DurationCategory`，非法值直接返回 400。
+     */
     @Override
     public CategoryResp listByCategory(String category, int page, int pageSize) {
-        // ---- 1. 解析分类枚举（大小写不敏感，非法值抛 400） ----
         DurationCategory cat;
         try {
             cat = DurationCategory.valueOf(category.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw BusinessException.badRequest("无效的分类参数：" + category + "，支持：QUICK / SHORT / DEEP");
+            throw BusinessException.badRequest("鏃犳晥鐨勫垎绫诲弬鏁帮細" + category + "锛屾敮鎸侊細QUICK / SHORT / DEEP");
         }
 
-        // ---- 2. 分页查询（MyBatis Plus 分页插件自动补 COUNT） ----
         Page<Article> pageObj = new Page<>(page, pageSize);
         IPage<Article> result = articleMapper.selectPageByCategory(pageObj, cat);
 
         List<Article> articles = result.getRecords();
 
-        // ---- 3. 批量查询作者 ----
+        // 作者信息通过内部接口批量补齐，避免列表页出现 N+1 远程调用。
         Set<Long> authorIds = articles.stream()
                 .map(Article::getAuthorId)
                 .collect(Collectors.toSet());
 
         Map<Long, UserSummaryDto> userMap = batchFetchUsers(authorIds);
 
-        // ---- 4. 组装响应 ----
         List<ArticleCardResp> list = articles.stream()
                 .map(a -> toCard(a, userMap))
                 .collect(Collectors.toList());
@@ -72,8 +77,9 @@ public class CategoryServiceImpl implements CategoryService {
                 .build();
     }
 
-    // ==================== 私有辅助方法 ====================
-
+    /**
+     * 批量查询作者摘要信息。
+     */
     private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> authorIds) {
         if (authorIds.isEmpty()) {
             return Collections.emptyMap();
@@ -84,6 +90,9 @@ public class CategoryServiceImpl implements CategoryService {
         return users.stream().collect(Collectors.toMap(UserSummaryDto::getId, u -> u));
     }
 
+    /**
+     * 文章实体到分类页卡片响应的字段映射。
+     */
     private ArticleCardResp toCard(Article article, Map<Long, UserSummaryDto> userMap) {
         UserSummaryDto author = userMap.get(article.getAuthorId());
         return ArticleCardResp.builder()

@@ -13,6 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+/**
+ * 通知事件处理服务实现。
+ * 负责把文章状态变更事件转换为通知主记录和投递记录。
+ */
 @Service
 @RequiredArgsConstructor
 public class NotificationEventServiceImpl implements NotificationEventService {
@@ -20,6 +24,10 @@ public class NotificationEventServiceImpl implements NotificationEventService {
     private final NotificationMapper notificationMapper;
     private final NotificationDeliveryMapper notificationDeliveryMapper;
 
+    /**
+     * 处理文章状态变更事件。
+     * 仅对 APPROVED、RETURNED、REJECTED 生成通知；站内通知直接标记已发送，邮件投递先进入待发送状态。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void handleArticleStatusChanged(ArticleStatusChangedEvent event) {
@@ -54,6 +62,9 @@ public class NotificationEventServiceImpl implements NotificationEventService {
         notificationDeliveryMapper.insert(emailDelivery);
     }
 
+    /**
+     * 根据目标状态生成通知标题。
+     */
     private String buildTitle(ArticleStatus status) {
         return switch (status) {
             case APPROVED -> "Review approved";
@@ -63,6 +74,9 @@ public class NotificationEventServiceImpl implements NotificationEventService {
         };
     }
 
+    /**
+     * 生成通知正文。
+     */
     private String buildContent(ArticleStatusChangedEvent event) {
         String title = event.getTitle() == null || event.getTitle().isBlank()
                 ? "Untitled article"

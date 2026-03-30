@@ -7,8 +7,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 用户实体，对应 users 表
+ * 用户实体，映射持久化层中的相关数据记录。
  */
+
 @Data
 @TableName("users")
 public class User {

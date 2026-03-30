@@ -8,11 +8,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 审核日志项响应
- * 对应接口：GET /api/v1/reviews/{articleId}/logs
- *
- * 用于编辑器顶部原因提示、拒绝原因展示与后台追踪。
+ * ReviewLogResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class ReviewLogResp {

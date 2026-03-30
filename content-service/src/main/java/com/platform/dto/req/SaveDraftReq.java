@@ -3,9 +3,9 @@ package com.platform.dto.req;
 import lombok.Data;
 
 /**
- * 自动保存草稿请求
- * 所有字段均可为 null（前端只发变化的字段也可，后端做 null 判断）
+ * SaveDraftReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class SaveDraftReq {
 

@@ -8,8 +8,9 @@ import feign.RequestInterceptor;
 import feign.RequestTemplate;
 
 /**
- * 统一透传 traceId 和用户上下文，防止每个 Feign Client 重复拼装内部协议头。
+ * Feign 请求头透传拦截器，负责把链路追踪和用户上下文转发到下游服务。
  */
+
 public class FeignHeaderRelayInterceptor implements RequestInterceptor {
 
     @Override

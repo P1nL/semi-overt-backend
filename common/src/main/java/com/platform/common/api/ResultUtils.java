@@ -4,8 +4,9 @@ import com.platform.common.exception.RemoteCallException;
 import com.platform.util.Result;
 
 /**
- * 第一阶段继续复用 Result 包装，避免服务拆分时同时大改外部与内部协议。
+ * 统一返回结果工具类，提供标准响应对象的便捷构造方法。
  */
+
 public final class ResultUtils {
 
     private ResultUtils() {

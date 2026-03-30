@@ -7,10 +7,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
- * Redis 配置
- * 本项目 Redis 存储的值均为简单字符串，直接使用 StringRedisTemplate
- * 全局 ObjectMapper 支持 Java 8 时间类型（LocalDateTime）
+ * Redis配置类，负责当前模块相关组件的装配与框架行为配置。
  */
+
 @Configuration
 public class RedisConfig {
 

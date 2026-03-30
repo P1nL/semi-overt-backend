@@ -7,11 +7,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 分类详情列表响应
- * 对应接口：GET /api/v1/categories/{category}/articles
- *
- * 包含分页元数据，前端可据此渲染"加载更多"或分页导航。
+ * CategoryResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class CategoryResp {

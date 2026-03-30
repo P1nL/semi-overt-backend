@@ -6,11 +6,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Search response model shared with the public article search API.
- *
- * <p>This DTO remains for compatibility with the split service codebase. The
- * active public search implementation is provided by {@code search-service}.</p>
+ * SearchResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SearchResp {

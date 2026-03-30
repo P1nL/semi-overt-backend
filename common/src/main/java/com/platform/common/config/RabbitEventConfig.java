@@ -20,9 +20,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * RabbitMQ 事件配置类，负责声明领域事件所需的交换机、队列和绑定关系。
+ */
+
 @Configuration
 public class RabbitEventConfig {
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public Declarables eventDeclarables(
             @Value("${platform.events.retry-delay-ms:30000}") long retryDelayMs
@@ -60,11 +67,17 @@ public class RabbitEventConfig {
         return new Declarables(declarables);
     }
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public Jackson2JsonMessageConverter jackson2JsonMessageConverter(ObjectMapper objectMapper) {
         return new Jackson2JsonMessageConverter(objectMapper);
     }
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
                                          Jackson2JsonMessageConverter converter) {
@@ -73,6 +86,9 @@ public class RabbitEventConfig {
         return rabbitTemplate;
     }
 
+    /**
+     * 执行topology。
+     */
     private List<Declarable> queueTopology(String queueName, String eventExchange, long retryDelayMs) {
         DirectExchange mainExchange = new DirectExchange(EventConstants.mainExchangeOf(queueName), true, false);
         DirectExchange retryExchange = new DirectExchange(EventConstants.retryExchangeOf(queueName), true, false);

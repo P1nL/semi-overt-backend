@@ -27,6 +27,10 @@ import org.springframework.context.annotation.FilterType;
                 }
         )
 )
+/**
+ * 文件服务启动类，负责启动文件模块应用上下文。
+ */
+
 public class FileServiceApplication {
 
     public static void main(String[] args) {

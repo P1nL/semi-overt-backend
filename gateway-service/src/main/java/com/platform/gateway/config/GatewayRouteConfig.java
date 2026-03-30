@@ -3,15 +3,22 @@ package com.platform.gateway.config;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.cloud.gateway.route.RouteLocator;
-import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.cloud.gateway.route.builder.GatewayFilterSpec;
+import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 
+/**
+ * 网关路由配置。
+ * 定义对外 URL 到各微服务的映射关系，并统一挂载 Redis 限流过滤器。
+ */
 @Configuration
 public class GatewayRouteConfig {
 
+    /**
+     * 注册网关静态路由。
+     */
     @Bean
     public RouteLocator routeLocator(RouteLocatorBuilder builder,
                                      RedisRateLimiter defaultRedisRateLimiter,
@@ -49,6 +56,9 @@ public class GatewayRouteConfig {
                 .build();
     }
 
+    /**
+     * 为路由统一附加限流器。
+     */
     private GatewayFilterSpec applyRateLimit(GatewayFilterSpec filters,
                                              RedisRateLimiter rateLimiter,
                                              KeyResolver keyResolver) {

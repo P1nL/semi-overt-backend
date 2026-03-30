@@ -29,6 +29,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SecurityConfig.class,
         com.platform.exception.GlobalExceptionHandler.class
 })
+/**
+ * 审核安全配置Test控制器，对外提供相关 HTTP 接口。
+ */
+
 @Import({SecurityConfig.class, com.platform.exception.GlobalExceptionHandler.class})
 class ReviewSecurityConfigTest {
 

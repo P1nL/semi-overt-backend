@@ -16,10 +16,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 审核接口
- * SecurityConfig 已将 /api/v1/reviews/** 整体限制为 ADMIN，
- * 此处 @PreAuthorize 作为细粒度补充（getReviewLogs 需允许文章作者访问）。
+ * 审核控制器，对外提供相关 HTTP 接口。
  */
+
 @RestController
 @RequestMapping("/api/v1/reviews")
 @RequiredArgsConstructor

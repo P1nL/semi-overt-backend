@@ -12,12 +12,21 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 审核任务投影服务实现。
+ * review_tasks 是 review-service 针对待审核文章维护的投影视图，
+ * 由提交事件和状态变更事件驱动增删改，供审核列表直接查询。
+ */
 @Service
 @RequiredArgsConstructor
 public class ReviewTaskServiceImpl implements ReviewTaskService {
 
     private final ReviewTaskMapper reviewTaskMapper;
 
+    /**
+     * 写入或更新待审核任务。
+     * 仅当文章状态仍为 PENDING 时保留投影；否则直接删除对应任务，避免脏数据留在审核池中。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void upsertTask(ReviewTaskUpsertReq req) {
@@ -54,6 +63,10 @@ public class ReviewTaskServiceImpl implements ReviewTaskService {
         }
     }
 
+    /**
+     * 按文章维度删除审核任务投影。
+     * 该操作天然幂等，不要求调用方保证任务一定存在。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeTask(ReviewTaskRemoveReq req) {

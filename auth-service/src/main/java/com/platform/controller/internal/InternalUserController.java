@@ -15,6 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * 内部用户内部控制器，向其他服务暴露服务间调用接口。
+ */
+
 @RestController
 @RequestMapping("/internal/users")
 @RequiredArgsConstructor
@@ -22,6 +26,9 @@ public class InternalUserController {
 
     private final UserMapper userMapper;
 
+    /**
+     * 处理 POST /batch 请求。
+     */
     @PostMapping("/batch")
     public Result<List<UserSummaryDto>> batchQuery(@RequestBody BatchUserQueryReq req) {
         if (req == null || req.getUserIds() == null || req.getUserIds().isEmpty()) {

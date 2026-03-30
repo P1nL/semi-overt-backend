@@ -10,9 +10,16 @@ import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
 
+/**
+ * 网关限流配置。
+ * 定义 Redis 限流器参数，以及按“用户优先、IP 退化、匿名兜底”的限流键解析规则。
+ */
 @Configuration
 public class GatewayRateLimitConfig {
 
+    /**
+     * 默认 Redis 令牌桶限流器。
+     */
     @Bean
     public RedisRateLimiter defaultRedisRateLimiter(
             @Value("${platform.gateway.rate-limit.replenish-rate:30}") int replenishRate,
@@ -21,6 +28,9 @@ public class GatewayRateLimitConfig {
         return new RedisRateLimiter(replenishRate, burstCapacity, requestedTokens);
     }
 
+    /**
+     * 解析限流键。
+     */
     @Bean
     public KeyResolver clientRateLimiterKeyResolver() {
         return exchange -> {

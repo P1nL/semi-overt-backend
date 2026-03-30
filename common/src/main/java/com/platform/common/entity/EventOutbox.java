@@ -9,6 +9,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 事件出站实体，对应待发布领域事件的持久化记录。
+ */
+
 @Data
 @TableName("event_outbox")
 public class EventOutbox {

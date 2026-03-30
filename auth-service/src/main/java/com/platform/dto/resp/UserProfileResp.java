@@ -7,13 +7,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 个人主页响应
- * 结构分三段：profile（用户信息）/ stats（各状态文章统计）/ list（文章列表分页）
- *
- * 权限说明：
- *   - 本人访问：stats 返回全部状态统计，list 支持 tab 过滤
- *   - 他人访问：stats 只统计 APPROVED，list 只返回 APPROVED 文章
+ * UserProfileResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class UserProfileResp {

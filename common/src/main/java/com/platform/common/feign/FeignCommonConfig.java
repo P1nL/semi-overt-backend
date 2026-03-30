@@ -8,6 +8,10 @@ import org.springframework.beans.factory.annotation.Value;
 
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Feign 通用配置类，统一注册服务间调用需要的拦截器与编码配置。
+ */
+
 @Configuration
 public class FeignCommonConfig {
 

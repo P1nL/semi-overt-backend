@@ -29,6 +29,10 @@ import org.springframework.context.annotation.FilterType;
                 }
         )
 )
+/**
+ * 网关服务启动类，负责启动 API Gateway 应用上下文。
+ */
+
 @EnableConfigurationProperties(JwtProperties.class)
 public class GatewayServiceApplication {
 

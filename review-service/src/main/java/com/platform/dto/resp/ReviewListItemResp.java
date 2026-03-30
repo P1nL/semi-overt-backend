@@ -6,11 +6,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 待审核列表项响应
- * 对应接口：GET /api/v1/reviews/pending
- *
- * 只包含审核员决策所需的基本信息，完整正文通过文章详情接口获取。
+ * ReviewListItemResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class ReviewListItemResp {

@@ -8,9 +8,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 审核日志实体，对应 review_logs 表
- * 记录每次审核动作，包括 APPROVE / RETURN / REJECT / CANCEL
+ * 审核日志实体，映射持久化层中的相关数据记录。
  */
+
 @Data
 @TableName("review_logs")
 public class ReviewLog {

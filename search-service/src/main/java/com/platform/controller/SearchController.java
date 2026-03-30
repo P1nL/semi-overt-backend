@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Public search API for approved articles.
+ * 公开搜索接口。
+ * 面向前端提供已发布文章搜索能力。
  */
 @Validated
 @RestController
@@ -23,15 +24,8 @@ public class SearchController {
     private final SearchService searchService;
 
     /**
-     * Search article projections by keyword.
-     *
-     * <p>The backing data comes from Elasticsearch projections that are updated
-     * by article status change events.</p>
-     *
-     * @param keyword search keyword
-     * @param page page number, default 1
-     * @param pageSize page size, default 10
-     * @return paged search results
+     * 按关键字搜索文章投影。
+     * 底层数据来自 Elasticsearch 中由事件驱动维护的索引文档。
      */
     @GetMapping("/articles")
     public Result<SearchResp> searchArticles(

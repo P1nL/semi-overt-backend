@@ -9,6 +9,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 事件消费日志实体，对应消费者幂等记录与处理状态。
+ */
+
 @Data
 @TableName("event_consume_log")
 public class EventConsumeLog {

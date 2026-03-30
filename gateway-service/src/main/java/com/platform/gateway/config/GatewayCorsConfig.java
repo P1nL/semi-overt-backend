@@ -8,9 +8,16 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * 网关跨域配置。
+ * 统一在网关层放行本地开发环境前端域名，避免各下游服务重复维护 CORS 规则。
+ */
 @Configuration
 public class GatewayCorsConfig {
 
+    /**
+     * 注册全局 CORS 过滤器。
+     */
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration configuration = new CorsConfiguration();

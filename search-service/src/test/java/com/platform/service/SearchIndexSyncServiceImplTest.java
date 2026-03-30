@@ -19,6 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 搜索索引同步服务ImplTest业务接口，定义对外暴露的服务能力。
+ */
+
 @ExtendWith(MockitoExtension.class)
 class SearchIndexSyncServiceImplTest {
 

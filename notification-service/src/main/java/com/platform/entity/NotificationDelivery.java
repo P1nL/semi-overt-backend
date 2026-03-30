@@ -9,6 +9,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 通知投递实体，映射持久化层中的相关数据记录。
+ */
+
 @Data
 @TableName("notification_deliveries")
 public class NotificationDelivery {

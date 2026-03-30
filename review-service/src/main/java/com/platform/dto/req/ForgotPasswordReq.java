@@ -5,8 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
- * 找回密码第一步：输入邮箱，后端发送重置链接
+ * ForgotPasswordReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class ForgotPasswordReq {
 

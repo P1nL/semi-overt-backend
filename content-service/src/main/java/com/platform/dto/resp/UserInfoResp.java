@@ -7,10 +7,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 当前登录用户信息响应
- * 仅用于 GET /user/me，包含 email 等敏感字段
- * 不用于他人主页（他人主页用 UserProfileResp）
+ * UserInfoResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class UserInfoResp {

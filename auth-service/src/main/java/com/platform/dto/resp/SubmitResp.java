@@ -7,8 +7,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 提交审核响应
+ * SubmitResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SubmitResp {

@@ -13,6 +13,10 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * 安全配置类，负责当前模块相关组件的装配与框架行为配置。
+ */
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -21,11 +25,17 @@ public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public HeaderAuthenticationFilter headerAuthenticationFilter() {
         return new HeaderAuthenticationFilter();
     }
 
+    /**
+     * 构建当前模块使用的安全过滤链。
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    HeaderAuthenticationFilter headerAuthenticationFilter) throws Exception {

@@ -20,6 +20,10 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * 网关统一异常输出处理器。
+ * 把路由、超时、权限等异常转换为稳定的 JSON 响应，避免默认 HTML 错误页返回给前端。
+ */
 @Slf4j
 @Component
 @Order(-2)
@@ -28,6 +32,9 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
 
     private final ObjectMapper objectMapper;
 
+    /**
+     * 处理网关层未捕获异常并输出统一错误结构。
+     */
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         if (exchange.getResponse().isCommitted()) {
@@ -48,6 +55,9 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
+    /**
+     * 根据异常类型推断 HTTP 状态码。
+     */
     private HttpStatus resolveStatus(Throwable ex) {
         if (ex instanceof ResponseStatusException responseStatusException) {
             HttpStatus status = HttpStatus.resolve(responseStatusException.getStatusCode().value());
@@ -61,6 +71,9 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
+    /**
+     * 根据状态码构造统一 Result 响应体。
+     */
     private Result<?> buildResult(HttpStatus status) {
         return switch (status) {
             case BAD_REQUEST -> Result.badRequest("Request parameters are invalid");
@@ -74,6 +87,9 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
         };
     }
 
+    /**
+     * 序列化错误响应体。
+     */
     private String toJson(Result<?> result) {
         try {
             return objectMapper.writeValueAsString(result);

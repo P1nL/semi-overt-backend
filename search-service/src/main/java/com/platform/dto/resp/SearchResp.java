@@ -6,11 +6,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Response payload for {@code GET /api/v1/search/articles}.
- *
- * <p>The card structure intentionally reuses {@link ArticleCardResp} so search,
- * home, and category pages can consume a consistent article list model.</p>
+ * SearchResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SearchResp {

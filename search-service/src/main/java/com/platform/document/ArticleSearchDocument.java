@@ -14,6 +14,10 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 文章搜索文档模型，定义索引或检索场景使用的数据结构。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

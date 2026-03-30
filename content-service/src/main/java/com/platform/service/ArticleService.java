@@ -11,10 +11,9 @@ import com.platform.dto.resp.SubmitResp;
 import java.util.Map;
 
 /**
- * 文章服务接口
- * 覆盖文章生命周期中除草稿保存以外的所有操作：
- * 新建 → 查看 → 提交审核 → 取消审核 → 删除
+ * 文章业务接口，定义对外暴露的服务能力。
  */
+
 public interface ArticleService {
 
     /**

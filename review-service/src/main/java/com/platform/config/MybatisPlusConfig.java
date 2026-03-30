@@ -14,15 +14,15 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * MyBatis Plus 配置
- * 1. 分页插件
- * 2. 乐观锁（暂未使用，保留扩展）
- * 3. 防全表更新/删除
- * 4. 字段自动填充（createdAt / updatedAt）
+ * MyBatisPlus配置类，负责当前模块相关组件的装配与框架行为配置。
  */
+
 @Configuration
 public class MybatisPlusConfig {
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
@@ -40,6 +40,9 @@ public class MybatisPlusConfig {
     @Component
     public static class AutoFillHandler implements MetaObjectHandler {
 
+    /**
+     * 执行fill。
+     */
         @Override
         public void insertFill(MetaObject metaObject) {
             LocalDateTime now = LocalDateTime.now();
@@ -48,6 +51,9 @@ public class MybatisPlusConfig {
             this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
         }
 
+    /**
+     * 更新fill。
+     */
         @Override
         public void updateFill(MetaObject metaObject) {
             // UPDATE 时只更新 updatedAt

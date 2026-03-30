@@ -25,6 +25,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 网关认证过滤器Test测试用例，验证对应场景下的行为是否符合预期。
+ */
+
 class GatewayAuthFilterTest {
 
     private ReactiveStringRedisTemplate redisTemplate;

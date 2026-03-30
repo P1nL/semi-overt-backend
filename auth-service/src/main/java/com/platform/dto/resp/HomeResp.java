@@ -7,16 +7,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 首页聚合响应
- * 对应接口：GET /api/v1/home
- *
- * 结构说明：
- *   hero.primary    → 最新 1 篇 APPROVED 文章（Hero 主卡位）
- *   hero.secondary  → 次新 4 篇 APPROVED 文章（Hero 次卡位）
- *   sections        → 三个阅读时长分类的文章列表（QUICK / SHORT / DEEP）
- *
- * 前端负责 8+4 栅格布局，后端只提供数据，不感知样式。
+ * HomeResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class HomeResp {

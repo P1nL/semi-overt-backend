@@ -8,6 +8,10 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * ArticleCardResp 响应模型，封装对应场景返回的数据结构。
+ */
+
 @Data
 @Builder
 public class ArticleCardResp {

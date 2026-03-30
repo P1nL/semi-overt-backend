@@ -4,8 +4,9 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 /**
- * 注册请求
+ * RegisterReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class RegisterReq {
 

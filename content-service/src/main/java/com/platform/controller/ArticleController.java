@@ -17,21 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 文章与草稿模块接口
- * 基础路径：/api/v1/articles
- *
- * 接口清单：
- *   POST   /api/v1/articles                            新建空草稿
- *   PUT    /api/v1/articles/{articleId}/draft          自动保存草稿
- *   GET    /api/v1/articles/drafts                     草稿箱列表
- *   GET    /api/v1/articles/{articleId}                文章详情
- *   POST   /api/v1/articles/{articleId}/submit         提交审核
- *   POST   /api/v1/articles/{articleId}/cancel-review  取消审核
- *   DELETE /api/v1/articles/{articleId}                删除文章
- *
- * 注意：Spring MVC 对字面量路径（/drafts）优先级高于路径变量（/{articleId}），
- *       因此 GET /articles/drafts 不会匹配 /{articleId}，不存在歧义。
+ * 文章控制器，对外提供相关 HTTP 接口。
  */
+
 @RestController
 @RequestMapping("/api/v1/articles")
 @RequiredArgsConstructor

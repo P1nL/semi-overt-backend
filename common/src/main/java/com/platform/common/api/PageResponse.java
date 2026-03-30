@@ -7,6 +7,10 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * 通用分页响应模型，封装列表数据与分页元信息。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

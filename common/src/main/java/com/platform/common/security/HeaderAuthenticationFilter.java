@@ -18,8 +18,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 下游服务统一信任网关注入的头，避免每个服务重复解析 JWT 和维护不同认证逻辑。
+ * 请求头认证过滤器，负责把网关透传的用户身份恢复到当前请求上下文。
  */
+
 public class HeaderAuthenticationFilter extends OncePerRequestFilter {
 
     @Override

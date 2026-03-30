@@ -12,6 +12,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
+/**
+ * 审核决策事件消息监听器，负责消费队列中的领域事件并委托业务服务处理。
+ */
+
 @Component
 @RequiredArgsConstructor
 public class ReviewDecidedEventListener {
@@ -19,6 +23,9 @@ public class ReviewDecidedEventListener {
     private final EventListenerExecutor eventListenerExecutor;
     private final ArticleService articleService;
 
+    /**
+     * 消费队列中的消息并交给业务服务处理。
+     */
     @RabbitListener(queues = EventConstants.REVIEW_DECIDED_QUEUE)
     public void onMessage(Message message, Channel channel) throws IOException {
         eventListenerExecutor.execute(

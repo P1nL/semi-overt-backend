@@ -2,6 +2,10 @@ package com.platform.common.exception;
 
 import lombok.Getter;
 
+/**
+ * 错误码常量定义，集中维护服务内复用的错误语义。
+ */
+
 @Getter
 public enum ErrorCode {
     BAD_REQUEST(400),

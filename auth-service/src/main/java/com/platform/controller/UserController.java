@@ -15,13 +15,9 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 用户模块接口
- * 基础路径：/api/v1/users
- *
- * 修复记录（相对于初始版本）：
- *   1. 新增 tab 查询参数，对齐接口文档 10.3
- *   2. getUserProfile 透传 currentUserId，Service 层判断是否本人访问
+ * 用户控制器，对外提供相关 HTTP 接口。
  */
+
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -53,12 +49,7 @@ public class UserController {
     }
 
     /**
-     * 查看指定用户的公开主页
-     * GET /api/v1/users/{username}/profile?tab=approved&page=1&pageSize=10
-     *
-     * tab 可选值：all / approved / pending / returned / rejected / draft
-     *   - 他人访问时 tab 参数无效，始终只返回 APPROVED 内容
-     *   - 本人 / 管理员访问时 tab 生效，可按状态过滤
+     * 处理 GET /{username}/profile 请求。
      */
     @GetMapping("/{username}/profile")
     public Result<UserProfileResp> getUserProfile(

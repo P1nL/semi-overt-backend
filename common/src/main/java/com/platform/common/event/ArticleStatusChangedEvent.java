@@ -10,6 +10,10 @@ import lombok.AllArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 领域事件模型，描述文章状态变更后跨服务传播的数据快照。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

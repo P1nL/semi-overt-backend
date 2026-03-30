@@ -6,6 +6,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
+/**
+ * 领域事件模型，描述审核动作完成后传播给内容服务的结果。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

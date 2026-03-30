@@ -9,9 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 文章卡片响应
- * 复用场景：首页、分类详情页、搜索结果页、个人主页文章列表
+ * ArticleCardResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class ArticleCardResp {

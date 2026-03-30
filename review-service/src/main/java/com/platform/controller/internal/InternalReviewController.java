@@ -17,6 +17,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 内部审核内部控制器，向其他服务暴露服务间调用接口。
+ */
+
 @RestController
 @RequestMapping("/internal/reviews")
 @RequiredArgsConstructor
@@ -25,6 +29,9 @@ public class InternalReviewController {
     private final ReviewLogMapper reviewLogMapper;
     private final ReviewTaskService reviewTaskService;
 
+    /**
+     * 处理 GET /articles/{id}/latest 请求。
+     */
     @GetMapping("/articles/{id}/latest")
     public Result<LatestReviewReasonDto> latest(@PathVariable Long id) {
         ReviewLog log = reviewLogMapper.selectOne(new LambdaQueryWrapper<ReviewLog>()
@@ -45,12 +52,18 @@ public class InternalReviewController {
                 .build());
     }
 
+    /**
+     * 处理 POST /tasks/upsert 请求。
+     */
     @PostMapping("/tasks/upsert")
     public Result<Void> upsertTask(@RequestBody ReviewTaskUpsertReq req) {
         reviewTaskService.upsertTask(req);
         return Result.ok();
     }
 
+    /**
+     * 处理 POST /tasks/remove 请求。
+     */
     @PostMapping("/tasks/remove")
     public Result<Void> removeTask(@RequestBody ReviewTaskRemoveReq req) {
         reviewTaskService.removeTask(req);

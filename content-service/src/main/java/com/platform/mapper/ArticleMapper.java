@@ -11,11 +11,9 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * Article mapper.
- *
- * <p>Simple CRUD comes from MyBatis Plus. Custom queries are defined in
- * {@code ArticleMapper.xml}.</p>
+ * 文章数据访问接口，负责相关表的持久化读写。
  */
+
 @Mapper
 public interface ArticleMapper extends BaseMapper<Article> {
 

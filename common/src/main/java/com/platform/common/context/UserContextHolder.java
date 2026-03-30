@@ -1,5 +1,9 @@
 package com.platform.common.context;
 
+/**
+ * 用户上下文持有器，用于在线程范围内读写当前用户信息。
+ */
+
 public final class UserContextHolder {
 
     private static final ThreadLocal<UserContext> HOLDER = new ThreadLocal<>();

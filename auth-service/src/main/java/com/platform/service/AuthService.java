@@ -7,8 +7,9 @@ import com.platform.dto.req.ResetPasswordReq;
 import com.platform.dto.resp.AuthResp;
 
 /**
- * 认证服务：注册 / 登录 / 登出 / 找回密码
+ * 认证业务接口，定义对外暴露的服务能力。
  */
+
 public interface AuthService {
 
     /**

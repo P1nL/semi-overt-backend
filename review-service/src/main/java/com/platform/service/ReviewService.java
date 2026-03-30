@@ -9,9 +9,9 @@ import com.platform.dto.resp.ReviewLogResp;
 import java.util.List;
 
 /**
- * 审核服务接口
- * 覆盖：待审核列表 / 审核动作 / 审核日志
+ * 审核业务接口，定义对外暴露的服务能力。
  */
+
 public interface ReviewService {
 
     /**

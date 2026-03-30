@@ -5,9 +5,9 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 提交审核动作请求
- * 对应接口：POST /api/v1/reviews/{articleId}/action
+ * ReviewActionReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class ReviewActionReq {
 

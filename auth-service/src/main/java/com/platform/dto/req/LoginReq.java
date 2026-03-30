@@ -4,9 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
- * 登录请求
- * account 字段同时支持用户名和邮箱（后端按是否含 @ 自动区分）
+ * LoginReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 public class LoginReq {
 

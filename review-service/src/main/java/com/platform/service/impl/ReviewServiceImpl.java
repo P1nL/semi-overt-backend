@@ -41,6 +41,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * 审核主流程服务实现。
+ * 负责待审核列表查询、审核动作执行以及审核日志查看。
+ * 该类是 review-service 的状态裁决入口，并通过 outbox 向内容域发送 REVIEW_DECIDED 事件。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -52,6 +57,10 @@ public class ReviewServiceImpl implements ReviewService {
     private final ContentInternalClient contentInternalClient;
     private final EventOutboxService eventOutboxService;
 
+    /**
+     * 查询待审核列表。
+     * 当前管理员本人提交的文章会被排除，避免自审。
+     */
     @Override
     public PageResponse<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
         Page<ReviewTask> pageResult = reviewTaskMapper.selectPage(
@@ -93,6 +102,10 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
     }
 
+    /**
+     * 执行一次审核动作。
+     * 会先拉取内容域快照确认文章仍处于 PENDING，再写审核日志、删除审核任务并发送 REVIEW_DECIDED 事件。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ReviewActionResp doReview(Long articleId, Long currentAdminId, ReviewActionReq req) {
@@ -143,6 +156,10 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
     }
 
+    /**
+     * 查询文章审核日志。
+     * 仅管理员或文章作者本人可以查看。
+     */
     @Override
     public List<ReviewLogResp> getReviewLogs(Long articleId, Long currentUserId) {
         ArticleReviewSnapshotDto snapshot = ResultUtils.requireOk(contentInternalClient.reviewSnapshot(articleId));
@@ -185,6 +202,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .toList();
     }
 
+    /**
+     * 将外部请求中的动作字符串转换为审核动作枚举。
+     */
     private ReviewAction parseAction(String actionValue) {
         try {
             return ReviewAction.valueOf(actionValue.toUpperCase());
@@ -193,6 +213,10 @@ public class ReviewServiceImpl implements ReviewService {
         }
     }
 
+    /**
+     * 校验审核动作的业务约束。
+     * CANCEL 只允许走作者撤回链路；RETURN 和 REJECT 必须提供原因。
+     */
     private void validateActionRequest(ReviewAction action, String reason) {
         if (action == ReviewAction.CANCEL) {
             throw BusinessException.badRequest("CANCEL is owned by the article cancel-review flow");
@@ -203,6 +227,9 @@ public class ReviewServiceImpl implements ReviewService {
         }
     }
 
+    /**
+     * 把审核动作映射为文章目标状态。
+     */
     private ArticleStatus toDecisionStatus(ReviewAction action) {
         return switch (action) {
             case APPROVE -> ArticleStatus.APPROVED;
@@ -212,6 +239,9 @@ public class ReviewServiceImpl implements ReviewService {
         };
     }
 
+    /**
+     * 将审核决策载荷转换为 review_logs 记录。
+     */
     private ReviewLog toReviewLog(ReviewDecisionPayload decision) {
         ReviewLog reviewLog = new ReviewLog();
         reviewLog.setArticleId(decision.getArticleId());
@@ -223,6 +253,10 @@ public class ReviewServiceImpl implements ReviewService {
         return reviewLog;
     }
 
+    /**
+     * 标准化审核原因文本。
+     * 空串会被折叠为 null，避免写入无意义空白内容。
+     */
     private String normalizeReason(String reason) {
         if (reason == null) {
             return null;
@@ -231,6 +265,9 @@ public class ReviewServiceImpl implements ReviewService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 批量查询用户摘要信息，避免审核列表和日志出现 N+1 调用。
+     */
     private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> ids) {
         if (ids.isEmpty()) {
             return Collections.emptyMap();
@@ -240,6 +277,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
     }
 
+    /**
+     * 构造审核决策事件 ID，便于跨服务追踪。
+     */
     private String newEventId(Long articleId) {
         return "review-decided:" + articleId + ":" + UUID.randomUUID();
     }

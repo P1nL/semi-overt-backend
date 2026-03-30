@@ -5,8 +5,9 @@ import com.platform.dto.resp.UserInfoResp;
 import com.platform.dto.resp.UserProfileResp;
 
 /**
- * 用户模块 Service 接口
+ * 用户业务接口，定义对外暴露的服务能力。
  */
+
 public interface UserService {
 
     /**

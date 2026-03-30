@@ -19,10 +19,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * JWT 工具类
- * Token 结构：subject=userId, claims: username + role
- * 认证方式：Authorization: Bearer <token>
+ * JWT工具类，提供可复用的辅助方法。
  */
+
 @Slf4j
 @Component
 public class JwtHelper {
@@ -42,11 +41,17 @@ public class JwtHelper {
     @Value("${jwt.token.refresh-threshold}")
     private long refreshThreshold;
 
+    /**
+     * 获取signingkey。
+     */
     private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(signKey);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    /**
+     * 创建token。
+     */
     public String createToken(Long userId, String username, String role, boolean rememberMe) {
         long ttlMinutes = rememberMe ? rememberMeExpiration : expiration;
         Date now = new Date();
@@ -62,6 +67,9 @@ public class JwtHelper {
                 .compact();
     }
 
+    /**
+     * 解析JWT。
+     */
     public UsernamePasswordAuthenticationToken resolveJwt(String token) {
         try {
             Claims claims = parseClaims(token);
@@ -86,6 +94,9 @@ public class JwtHelper {
         }
     }
 
+    /**
+     * 获取用户id。
+     */
     public Long getUserId(String token) {
         try {
             return Long.valueOf(parseClaims(token).getSubject());
@@ -94,6 +105,9 @@ public class JwtHelper {
         }
     }
 
+    /**
+     * 获取username。
+     */
     public String getUsername(String token) {
         try {
             return parseClaims(token).get("username", String.class);
@@ -102,6 +116,9 @@ public class JwtHelper {
         }
     }
 
+    /**
+     * 判断expiration。
+     */
     public boolean isExpiration(String token) {
         try {
             return parseClaims(token).getExpiration().before(new Date());
@@ -110,6 +127,9 @@ public class JwtHelper {
         }
     }
 
+    /**
+     * 获取remainingmillis。
+     */
     public long getRemainingMillis(String token) {
         try {
             Date expireAt = parseClaims(token).getExpiration();
@@ -120,11 +140,17 @@ public class JwtHelper {
         }
     }
 
+    /**
+     * 执行refresh。
+     */
     public boolean shouldRefresh(String token) {
         long remainingMinutes = getRemainingMillis(token) / 60 / 1000;
         return remainingMinutes > 0 && remainingMinutes < refreshThreshold;
     }
 
+    /**
+     * 执行claims。
+     */
     private Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -133,6 +159,9 @@ public class JwtHelper {
                 .getPayload();
     }
 
+    /**
+     * 获取角色。
+     */
     public String getRole(String token) {
         try {
             return parseClaims(token).get("role", String.class);

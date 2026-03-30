@@ -6,6 +6,10 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
 import org.mybatis.spring.annotation.MapperScan;
 
+/**
+ * 搜索服务启动类，负责启动搜索模块应用上下文。
+ */
+
 @SpringBootApplication(scanBasePackages = {"com.platform", "com.platform.common"})
 @EnableFeignClients(basePackages = "com.platform")
 @EnableElasticsearchRepositories(basePackages = "com.platform.repository")

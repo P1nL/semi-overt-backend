@@ -5,9 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 
 /**
- * 认证响应：注册和登录均返回此结构
- * 前端拿到 token 后存入本地，后续请求放入 Authorization: Bearer <token>
+ * AuthResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class AuthResp {

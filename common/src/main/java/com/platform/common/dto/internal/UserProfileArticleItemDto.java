@@ -10,6 +10,10 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 用户资料文章ItemDto相关类型，承载当前模块中的辅助职责。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor

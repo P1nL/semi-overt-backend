@@ -8,13 +8,18 @@ import com.platform.common.entity.EventOutbox;
 import com.platform.common.enums.EventOutboxStatus;
 import com.platform.common.event.BaseDomainEvent;
 import com.platform.exception.BusinessException;
-import com.platform.mapper.EventOutboxMapper;
+import com.platform.common.mapper.EventOutboxMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Outbox 事件持久化服务。
+ * 负责把领域事件先落到 event_outbox，再由独立发布器异步投递到 RabbitMQ，
+ * 从而保证业务数据提交与事件发送之间的最终一致性。
+ */
 @Service
 @RequiredArgsConstructor
 public class EventOutboxService {
@@ -22,6 +27,10 @@ public class EventOutboxService {
     private final EventOutboxMapper eventOutboxMapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 保存一条待发布事件。
+     * 调用方应在业务事务内调用该方法，使事件记录与主业务数据一同提交。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void saveEvent(String aggregateType,
                           String aggregateId,
@@ -42,6 +51,10 @@ public class EventOutboxService {
         eventOutboxMapper.insert(outbox);
     }
 
+    /**
+     * 查询当前可发布的事件批次。
+     * 只返回指定类型、状态为 PENDING 且已到重试时间的记录。
+     */
     public List<EventOutbox> findPublishable(List<String> eventTypes, int batchSize) {
         return eventOutboxMapper.selectList(new LambdaQueryWrapper<EventOutbox>()
                 .in(EventOutbox::getEventType, eventTypes)
@@ -51,6 +64,10 @@ public class EventOutboxService {
                 .last("LIMIT " + batchSize));
     }
 
+    /**
+     * 将事件标记为已发布。
+     * 发布成功后清空错误信息并记录发布时间。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void markPublished(String eventId) {
         EventOutbox outbox = eventOutboxMapper.selectById(eventId);
@@ -63,6 +80,10 @@ public class EventOutboxService {
         eventOutboxMapper.updateById(outbox);
     }
 
+    /**
+     * 记录一次发布失败，并计算下次重试时间。
+     * 超过最大重试次数后将事件置为 DEAD，后续不再自动投递。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void markRetry(String eventId, String errorMessage) {
         EventOutbox outbox = eventOutboxMapper.selectById(eventId);
@@ -83,10 +104,16 @@ public class EventOutboxService {
         eventOutboxMapper.updateById(outbox);
     }
 
+    /**
+     * 根据事件类型解析出交换机、路由键等投递信息。
+     */
     public EventConstants.EventRoute routeOf(String eventType) {
         return EventConstants.routeOf(eventType);
     }
 
+    /**
+     * 将领域事件序列化为 JSON 负载，供 outbox 持久化。
+     */
     private String writePayload(BaseDomainEvent event) {
         try {
             return objectMapper.writeValueAsString(event);

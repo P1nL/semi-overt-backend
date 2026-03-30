@@ -6,11 +6,9 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * Search response model shared with the public article search API.
- *
- * <p>This DTO is retained for response-model consistency across modules. The
- * active search runtime is {@code search-service}.</p>
+ * SearchResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SearchResp {

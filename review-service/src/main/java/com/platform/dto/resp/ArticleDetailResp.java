@@ -9,10 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 文章详情响应
- * 阅读页、编辑页、审核页统一使用此结构
- * 权限由 Service 层控制，Controller 不感知
+ * ArticleDetailResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class ArticleDetailResp {

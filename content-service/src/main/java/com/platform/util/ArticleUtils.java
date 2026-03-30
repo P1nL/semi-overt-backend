@@ -5,10 +5,17 @@ import com.platform.enums.DurationCategory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+/**
+ * 文章工具类，提供可复用的辅助方法。
+ */
+
 public class ArticleUtils {
 
     private static final int WORDS_PER_MINUTE = 300;
 
+    /**
+     * 执行words。
+     */
     public static int countWords(String content) {
         if (content == null || content.isBlank()) return 0;
 
@@ -22,12 +29,18 @@ public class ArticleUtils {
         return plain.isEmpty() ? 0 : plain.length();
     }
 
+    /**
+     * 执行readminutes。
+     */
     public static BigDecimal calcReadMinutes(int wordCount) {
         if (wordCount <= 0) return BigDecimal.ZERO;
         return BigDecimal.valueOf(wordCount)
                 .divide(BigDecimal.valueOf(WORDS_PER_MINUTE), 1, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 执行时长分类。
+     */
     public static DurationCategory calcDurationCategory(BigDecimal readMinutes) {
         if (readMinutes == null) return DurationCategory.QUICK;
         double minutes = readMinutes.doubleValue();
@@ -37,6 +50,9 @@ public class ArticleUtils {
     }
 
     // Preview only uses the first non-empty plain-text paragraph.
+    /**
+     * 提取previewtext。
+     */
     public static String extractPreviewText(String content, int maxLength) {
         if (content == null || content.isBlank()) return "";
 
@@ -55,6 +71,9 @@ public class ArticleUtils {
         return "";
     }
 
+    /**
+     * 执行plaintextpreview。
+     */
     private static String toPlainTextPreview(String block, int maxLength) {
         String[] lines = block.split("\\n");
         StringBuilder plainBuilder = new StringBuilder();
@@ -81,6 +100,9 @@ public class ArticleUtils {
         return plain.length() > maxLength ? plain.substring(0, maxLength) + "..." : plain;
     }
 
+    /**
+     * 判断plaintextline。
+     */
     private static boolean isPlainTextLine(String line) {
         return !line.startsWith("#")
                 && !line.startsWith(">")

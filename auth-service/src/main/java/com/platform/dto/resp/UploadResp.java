@@ -4,9 +4,9 @@ import lombok.Builder;
 import lombok.Data;
 
 /**
- * 图片上传响应
- * 对应接口：POST /api/v1/uploads/images
+ * UploadResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class UploadResp {

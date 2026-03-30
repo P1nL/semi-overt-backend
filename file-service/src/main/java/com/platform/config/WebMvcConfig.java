@@ -10,29 +10,27 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * Web MVC 配置
- * 1. 统一跨域策略（开发环境允许前端 dev server）
- * 2. 本地文件存储目录映射（/static/uploads/** → 本地磁盘）
+ * file-service 的 Web MVC 配置。
+ * 负责开放开发环境跨域，并把本地上传目录映射为可访问的静态资源路径。
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-    /** 文件实际存储根目录 */
+    /** 文件物理存储根目录。 */
     @Value("${storage.upload-path}")
     private String uploadPath;
 
-    /** 对外访问的 URL 前缀 */
+    /** 对外访问的 URL 前缀。 */
     @Value("${storage.access-prefix}")
     private String accessPrefix;
 
     /**
-     * 跨域配置
-     * 生产环境请将 allowedOrigins 改为实际前端域名，不要用 *
+     * 配置跨域规则。
+     * 当前仅面向本地开发域名开放。
      */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                // 开发阶段允许 Vue 开发服务器（5173 为 Vite 默认端口）
                 .allowedOrigins(
                         "http://localhost:5173",
                         "http://localhost:3000",
@@ -40,19 +38,16 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
-                // 允许前端读取 New-Token 响应头（Token 刷新时使用）
                 .exposedHeaders("New-Token", "Authorization")
                 .allowCredentials(true)
                 .maxAge(3600);
     }
 
     /**
-     * 本地文件存储目录映射
-     * 访问 /static/uploads/xxx 实际读取 uploadPath/xxx
+     * 把本地上传目录映射为静态资源路径。
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 确保路径以 file: 开头，以 / 结尾
         Path uploadRoot = Paths.get(uploadPath).toAbsolutePath().normalize();
         String resourceLocation = uploadRoot.toUri().toString();
         if (!resourceLocation.endsWith("/")) {

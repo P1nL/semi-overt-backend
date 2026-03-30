@@ -2,6 +2,10 @@ package com.platform.common.exception;
 
 import lombok.Getter;
 
+/**
+ * 远程调用异常，表示下游服务返回异常或不可用。
+ */
+
 @Getter
 public class RemoteCallException extends RuntimeException {
 

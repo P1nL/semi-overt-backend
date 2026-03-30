@@ -3,6 +3,10 @@ package com.platform.common.context;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * 用户上下文模型，封装当前请求中的登录用户身份信息。
+ */
+
 @Value
 @Builder
 public class UserContext {

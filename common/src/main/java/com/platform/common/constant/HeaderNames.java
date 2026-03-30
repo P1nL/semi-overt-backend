@@ -1,8 +1,9 @@
 package com.platform.common.constant;
 
 /**
- * 内部头协议必须集中定义，避免网关和下游各自手写字符串导致链路不兼容。
+ * 请求头Names常量定义，集中维护相关固定值。
  */
+
 public final class HeaderNames {
 
     public static final String X_USER_ID = "X-User-Id";

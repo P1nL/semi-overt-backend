@@ -12,9 +12,16 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
+/**
+ * MyBatisPlus配置类，负责当前模块相关组件的装配与框架行为配置。
+ */
+
 @Configuration
 public class MybatisPlusConfig {
 
+    /**
+     * 注册当前配置类需要的 Bean。
+     */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
@@ -26,6 +33,9 @@ public class MybatisPlusConfig {
     @Component
     public static class AutoFillHandler implements MetaObjectHandler {
 
+    /**
+     * 执行fill。
+     */
         @Override
         public void insertFill(MetaObject metaObject) {
             LocalDateTime now = LocalDateTime.now();
@@ -33,6 +43,9 @@ public class MybatisPlusConfig {
             this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
         }
 
+    /**
+     * 更新fill。
+     */
         @Override
         public void updateFill(MetaObject metaObject) {
             this.strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());

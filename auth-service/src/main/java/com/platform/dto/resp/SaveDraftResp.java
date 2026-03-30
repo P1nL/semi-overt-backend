@@ -9,9 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 自动保存草稿响应
- * 前端用于展示"上次保存时间"和实时字数/阅读时长
+ * SaveDraftResp 响应模型，封装对应场景返回的数据结构。
  */
+
 @Data
 @Builder
 public class SaveDraftResp {

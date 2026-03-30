@@ -7,9 +7,9 @@ import com.platform.dto.resp.SaveDraftResp;
 import java.util.List;
 
 /**
- * 草稿服务接口
- * 负责草稿的自动保存（Redis + MySQL 元数据）、列表查询和定时刷盘
+ * 草稿业务接口，定义对外暴露的服务能力。
  */
+
 public interface DraftService {
 
     /**

@@ -9,8 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 文章实体，对应 articles 表
+ * 文章实体，映射持久化层中的相关数据记录。
  */
+
 @Data
 @TableName("articles")
 public class Article {

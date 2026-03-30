@@ -5,9 +5,9 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 修改个人资料请求体。
- * 所有字段都为可选，前端只传需要更新的字段即可。
+ * UpdateProfileReq 请求模型，承载对应场景的入参字段。
  */
+
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UpdateProfileReq {

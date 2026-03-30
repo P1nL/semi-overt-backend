@@ -7,6 +7,10 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * 用户资料Articles相关类型，承载当前模块中的辅助职责。
+ */
+
 @Data
 @Builder
 @NoArgsConstructor
