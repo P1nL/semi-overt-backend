@@ -2,10 +2,10 @@ package com.platform.gateway.filter;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.common.constant.HeaderNames;
 import com.platform.gateway.security.GatewayJwtHelper;
 import com.platform.gateway.security.GatewayJwtHelper.JwtUser;
-import com.platform.util.Result;
+import com.platform.kernel.constant.HeaderNames;
+import com.platform.kernel.util.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -25,10 +25,6 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-/**
- * 网关全局鉴权过滤器。
- * 负责拦截公网请求、清洗伪造头、补齐 TraceId、校验 JWT、透传用户身份头，并对公共路由放行。
- */
 @Component
 @RequiredArgsConstructor
 public class GatewayAuthFilter implements GlobalFilter, Ordered {
@@ -39,15 +35,11 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
     private final GatewayJwtHelper jwtHelper;
     private final ObjectMapper objectMapper;
 
-    /**
-     * 执行网关统一鉴权。
-     * 顺序为：拦截内部接口 -> 生成 TraceId -> 清洗头部 -> 认证 -> 白名单放行或权限拦截。
-     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
         if (path.startsWith("/internal/")) {
-            return writeResult(exchange, HttpStatus.NOT_FOUND, Result.notFound("资源不存在"));
+            return writeResult(exchange, HttpStatus.NOT_FOUND, Result.notFound("Not found"));
         }
 
         String traceId = resolveTraceId(exchange.getRequest());
@@ -62,13 +54,13 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
                     if (authContext.status() != AuthStatus.AUTHENTICATED) {
                         return writeResult(baseExchange, HttpStatus.UNAUTHORIZED,
-                                Result.unauthorized("未登录或 Token 已失效"));
+                                Result.unauthorized("Authentication required or token is invalid"));
                     }
 
                     if (path.startsWith("/api/v1/reviews/")
                             && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
                         return writeResult(baseExchange, HttpStatus.FORBIDDEN,
-                                Result.forbidden("权限不足"));
+                                Result.forbidden("没有审核权限"));
                     }
 
                     return chain.filter(authContext.exchange());
@@ -80,29 +72,19 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return -100;
     }
 
-    /**
-     * 处理白名单请求。
-     * 白名单接口允许匿名访问，但若显式携带了非法 token，仍返回 401。
-     */
     private Mono<Void> handleWhitelistedRequest(AuthContext authContext, GatewayFilterChain chain) {
         if (authContext.status() == AuthStatus.INVALID_TOKEN) {
             return writeResult(authContext.exchange(), HttpStatus.UNAUTHORIZED,
-                    Result.unauthorized("未登录或 Token 已失效"));
+                    Result.unauthorized("Authentication required or token is invalid"));
         }
         return chain.filter(authContext.exchange());
     }
 
-    /**
-     * 解析或生成 TraceId。
-     */
     private String resolveTraceId(ServerHttpRequest request) {
         String traceId = request.getHeaders().getFirst(HeaderNames.X_TRACE_ID);
         return (traceId == null || traceId.isBlank()) ? UUID.randomUUID().toString() : traceId;
     }
 
-    /**
-     * 清洗客户端传入的身份头，只保留网关自己生成的 TraceId。
-     */
     private ServerHttpRequest sanitizeHeaders(ServerHttpRequest request, String traceId) {
         return request.mutate()
                 .headers(headers -> {
@@ -115,9 +97,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                 .build();
     }
 
-    /**
-     * 判断当前请求是否属于公共白名单。
-     */
     private boolean isWhitelisted(HttpMethod method, String path) {
         if (path.startsWith("/static/uploads/")) {
             return true;
@@ -141,9 +120,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return false;
     }
 
-    /**
-     * 从 Authorization 头中提取 Bearer token。
-     */
     private String extractToken(ServerHttpRequest request) {
         String header = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
@@ -152,10 +128,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return null;
     }
 
-    /**
-     * 执行 token 校验与身份头透传。
-     * 若 token 命中黑名单或解析失败，返回 INVALID_TOKEN；若接近过期，则顺带回写刷新后的 token。
-     */
     private Mono<AuthContext> authenticate(ServerWebExchange baseExchange, ServerHttpRequest baseRequest) {
         String token = extractToken(baseRequest);
         if (token == null || token.isBlank()) {
@@ -204,9 +176,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                 });
     }
 
-    /**
-     * 输出统一 JSON 错误响应。
-     */
     private Mono<Void> writeResult(ServerWebExchange exchange, HttpStatus httpStatus, Result<?> result) {
         exchange.getResponse().setStatusCode(httpStatus);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
@@ -215,9 +184,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
-    /**
-     * 序列化统一响应对象。
-     */
     private String toJson(Result<?> result) {
         try {
             return objectMapper.writeValueAsString(result);
@@ -226,18 +192,12 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         }
     }
 
-    /**
-     * 网关认证状态枚举。
-     */
     private enum AuthStatus {
         NO_TOKEN,
         INVALID_TOKEN,
         AUTHENTICATED
     }
 
-    /**
-     * 鉴权结果上下文。
-     */
     private record AuthContext(ServerWebExchange exchange, AuthStatus status, JwtUser jwtUser) {
     }
 }

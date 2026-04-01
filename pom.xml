@@ -19,7 +19,12 @@
     <description>内容平台分布式改造父工程</description>
 
     <modules>
-        <module>common</module>
+        <module>platform-kernel</module>
+        <module>platform-web-support</module>
+        <module>platform-events</module>
+        <module>auth-contract</module>
+        <module>content-contract</module>
+        <module>review-contract</module>
         <module>gateway-service</module>
         <module>auth-service</module>
         <module>content-service</module>
@@ -27,6 +32,7 @@
         <module>search-service</module>
         <module>file-service</module>
         <module>notification-service</module>
+        <module>architecture-tests</module>
     </modules>
 
     <properties>

@@ -1,6 +1,6 @@
 package com.platform.gateway.security;
 
-import com.platform.common.security.JwtProperties;
+import com.platform.web.support.security.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
@@ -15,8 +15,8 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 
 /**
- * 网关侧 JWT 辅助类。
- * 负责解析 token、判断剩余有效期以及在需要时重新签发刷新 token。
+ * 缃戝叧渚?JWT 杈呭姪绫汇€?
+ * 璐熻矗瑙ｆ瀽 token銆佸垽鏂墿浣欐湁鏁堟湡浠ュ強鍦ㄩ渶瑕佹椂閲嶆柊绛惧彂鍒锋柊 token銆?
  */
 @Component
 public class GatewayJwtHelper {
@@ -28,8 +28,8 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 解析 token 中的最小用户身份信息。
-     * 解析失败或 token 已过期时返回 null。
+     * 瑙ｆ瀽 token 涓殑鏈€灏忕敤鎴疯韩浠戒俊鎭€?
+     * 瑙ｆ瀽澶辫触鎴?token 宸茶繃鏈熸椂杩斿洖 null銆?
      */
     public JwtUser parse(String token) {
         try {
@@ -46,7 +46,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 计算 token 剩余有效期，单位毫秒。
+     * 璁＄畻 token 鍓╀綑鏈夋晥鏈燂紝鍗曚綅姣銆?
      */
     public long getRemainingMillis(String token) {
         try {
@@ -58,7 +58,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 判断 token 是否进入刷新阈值窗口。
+     * 鍒ゆ柇 token 鏄惁杩涘叆鍒锋柊闃堝€肩獥鍙ｃ€?
      */
     public boolean shouldRefresh(String token) {
         long remainingMinutes = getRemainingMillis(token) / 1000 / 60;
@@ -66,7 +66,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 重新签发 token。
+     * 閲嶆柊绛惧彂 token銆?
      */
     public String createToken(Long userId, String username, String role, boolean rememberMe) {
         long ttlMinutes = rememberMe ? jwtProperties.getRememberMeExpiration() : jwtProperties.getExpiration();
@@ -83,7 +83,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 解析 JWT Claims。
+     * 瑙ｆ瀽 JWT Claims銆?
      */
     private Claims parseClaims(String token) {
         return Jwts.parser()
@@ -94,7 +94,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 获取签名密钥。
+     * 鑾峰彇绛惧悕瀵嗛挜銆?
      */
     private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(jwtProperties.getSignKey());
@@ -102,7 +102,7 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 网关侧最小用户身份载荷。
+     * 缃戝叧渚ф渶灏忕敤鎴疯韩浠借浇鑽枫€?
      */
     @Value
     @Builder
@@ -112,3 +112,4 @@ public class GatewayJwtHelper {
         String role;
     }
 }
+

@@ -179,7 +179,7 @@ function Invoke-DockerCompose {
 
 function Test-InfrastructureHealth {
     Write-Step "Checking Docker container health"
-    foreach ($service in @("mysql", "redis", "nacos", "rabbitmq", "elasticsearch")) {
+    foreach ($service in @("mysql", "redis", "nacos", "rabbitmq")) {
         $containerId = (Invoke-DockerCompose -Arguments @("ps", "-q", $service) | Select-Object -Last 1).Trim()
         if ([string]::IsNullOrWhiteSpace($containerId)) {
             throw "Infrastructure service $service is not running"
@@ -216,10 +216,6 @@ function Test-InfrastructureHealth {
     }
     $rabbit = Invoke-Api -Method Get -Uri "http://127.0.0.1:15672/api/overview" -Headers $rabbitHeaders
     Assert-StatusCode -Response $rabbit -ExpectedStatus 200 -Context "RabbitMQ management API"
-
-    Write-Step "Checking Elasticsearch cluster health"
-    $es = Invoke-Api -Method Get -Uri "http://127.0.0.1:9200/_cluster/health"
-    Assert-StatusCode -Response $es -ExpectedStatus 200 -Context "Elasticsearch cluster health"
 }
 
 function Test-ServiceEndpoints {

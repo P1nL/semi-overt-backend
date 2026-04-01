@@ -1,34 +1,15 @@
 package com.platform.file;
 
-import com.platform.common.config.RabbitEventConfig;
-import com.platform.common.support.EventConsumeService;
-import com.platform.common.support.EventListenerExecutor;
-import com.platform.common.support.EventOutboxService;
-import com.platform.common.support.OutboxPublisherSupport;
-import com.platform.common.support.RabbitRetrySupport;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
+import org.springframework.context.annotation.Import;
+import com.platform.web.support.config.PlatformWebSupportConfig;
 
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
-@ComponentScan(
-        basePackages = {"com.platform", "com.platform.common"},
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = {
-                        RabbitEventConfig.class,
-                        EventConsumeService.class,
-                        EventOutboxService.class,
-                        EventListenerExecutor.class,
-                        OutboxPublisherSupport.class,
-                        RabbitRetrySupport.class
-                }
-        )
-)
+@SpringBootApplication(scanBasePackageClasses = FileServiceApplication.class, exclude = {DataSourceAutoConfiguration.class})
+@Import(PlatformWebSupportConfig.class)
 /**
- * 文件服务启动类，负责启动文件模块应用上下文。
+ * 鏂囦欢鏈嶅姟鍚姩绫伙紝璐熻矗鍚姩鏂囦欢妯″潡搴旂敤涓婁笅鏂囥€?
  */
 
 public class FileServiceApplication {
@@ -37,3 +18,4 @@ public class FileServiceApplication {
         SpringApplication.run(FileServiceApplication.class, args);
     }
 }
+

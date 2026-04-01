@@ -16,7 +16,12 @@
     <dependencies>
         <dependency>
             <groupId>com.platform</groupId>
-            <artifactId>common</artifactId>
+            <artifactId>platform-kernel</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>platform-web-support</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

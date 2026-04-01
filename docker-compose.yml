@@ -89,43 +89,9 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  elasticsearch:
-    image: elasticsearch:8.13.4
-    ports:
-      - "9200:9200"
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - curl -fsS http://127.0.0.1:9200/_cluster/health >/dev/null || exit 1
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 30s
-    restart: unless-stopped
-
-  kibana:
-    image: kibana:8.13.4
-    profiles:
-      - ops-ui
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    ports:
-      - "5601:5601"
-    environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-    restart: unless-stopped
-
 volumes:
   mysql-data:
   redis-data:
   nacos-data:
   nacos-logs:
   rabbitmq-data:
-  es-data:

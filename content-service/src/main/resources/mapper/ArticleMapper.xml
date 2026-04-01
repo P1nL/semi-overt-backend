@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.platform.mapper.ArticleMapper">
+<mapper namespace="com.platform.content.mapper.ArticleMapper">
 
     <!--
         通用结果映射：文章基础字段 + 作者字段（JOIN users 时使用）
@@ -10,7 +10,7 @@
               或通过 @Results 手动映射到 VO。此处 resultMap 映射到 Article 实体本身，
               作者信息由 Service 层通过 authorId 二次查询或在 VO 组装时注入。
     -->
-    <resultMap id="ArticleBaseMap" type="com.platform.entity.Article">
+    <resultMap id="ArticleBaseMap" type="com.platform.content.entity.Article">
         <id     column="id"                  property="id"/>
         <result column="author_id"           property="authorId"/>
         <result column="title"               property="title"/>
@@ -116,7 +116,7 @@
 
     <!--
         历史保留的标题/摘要 LIKE 搜索 SQL（仅 APPROVED 文章）
-        当前公开搜索主链路已经迁移到 search-service + Elasticsearch。
+        当前公开搜索主链路已经迁移到 search-service + MySQL。
         这里保留是为了兼容旧的内容侧调用，不作为当前对外搜索能力的真实实现说明。
     -->
     <select id="searchByKeyword" resultMap="ArticleBaseMap">

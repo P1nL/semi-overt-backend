@@ -1,7 +1,7 @@
 package com.platform.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.common.constant.HeaderNames;
+import com.platform.kernel.constant.HeaderNames;
 import com.platform.gateway.security.GatewayJwtHelper;
 import com.platform.gateway.security.GatewayJwtHelper.JwtUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 网关认证过滤器Test测试用例，验证对应场景下的行为是否符合预期。
+ * 缃戝叧璁よ瘉杩囨护鍣═est娴嬭瘯鐢ㄤ緥锛岄獙璇佸搴斿満鏅笅鐨勮涓烘槸鍚︾鍚堥鏈熴€?
  */
 
 class GatewayAuthFilterTest {
@@ -190,3 +190,4 @@ class GatewayAuthFilterTest {
         };
     }
 }
+

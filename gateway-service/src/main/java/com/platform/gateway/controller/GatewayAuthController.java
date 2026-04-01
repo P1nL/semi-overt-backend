@@ -1,7 +1,7 @@
 package com.platform.gateway.controller;
 
 import com.platform.gateway.security.GatewayJwtHelper;
-import com.platform.util.Result;
+import com.platform.kernel.util.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
@@ -13,8 +13,8 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 
 /**
- * 网关认证辅助接口。
- * 当前仅承载登出能力：通过把 token 写入 Redis 黑名单，使其在剩余有效期内失效。
+ * 缃戝叧璁よ瘉杈呭姪鎺ュ彛銆?
+ * 褰撳墠浠呮壙杞界櫥鍑鸿兘鍔涳細閫氳繃鎶?token 鍐欏叆 Redis 榛戝悕鍗曪紝浣垮叾鍦ㄥ墿浣欐湁鏁堟湡鍐呭け鏁堛€?
  */
 @RestController
 @RequiredArgsConstructor
@@ -24,8 +24,8 @@ public class GatewayAuthController {
     private final GatewayJwtHelper jwtHelper;
 
     /**
-     * 登出。
-     * 如果 token 缺失或本身已过期，则直接返回成功；否则按剩余有效期写入黑名单。
+     * 鐧诲嚭銆?
+     * 濡傛灉 token 缂哄け鎴栨湰韬凡杩囨湡锛屽垯鐩存帴杩斿洖鎴愬姛锛涘惁鍒欐寜鍓╀綑鏈夋晥鏈熷啓鍏ラ粦鍚嶅崟銆?
      */
     @PostMapping("/api/v1/auth/logout")
     public Mono<Result<Void>> logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
@@ -45,7 +45,7 @@ public class GatewayAuthController {
     }
 
     /**
-     * 从 Authorization 头中提取 Bearer token。
+     * 浠?Authorization 澶翠腑鎻愬彇 Bearer token銆?
      */
     private String extractToken(String authorization) {
         if (authorization != null && authorization.startsWith("Bearer ")) {
@@ -54,3 +54,4 @@ public class GatewayAuthController {
         return null;
     }
 }
+

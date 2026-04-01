@@ -33,14 +33,11 @@ spring:
     listener:
       simple:
         acknowledge-mode: manual
-  elasticsearch:
-    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
-
 server:
   port: ${SERVER_PORT:8084}
 
 mybatis-plus:
-  type-aliases-package: com.platform.common.entity
+  type-aliases-package: com.platform.search.model
   mapper-locations: classpath:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
@@ -53,6 +50,9 @@ platform:
   events:
     retry-delay-ms: ${EVENT_RETRY_DELAY_MS:30000}
     consumer-max-retries: ${EVENT_CONSUMER_MAX_RETRIES:3}
+  search:
+    index:
+      enabled: ${SEARCH_INDEX_ENABLED:false}
 
 management:
   endpoints:

@@ -1,60 +1,36 @@
 # now-demo
 
-这是一个面向内容创作、审核、通知和搜索链路的 Spring Boot 多模块微服务示例仓库。当前真实运行主实现是父 [pom.xml](./pom.xml) 下的 Maven 多模块工程，核心链路为 `gateway -> auth/content/review/search/file/notification`。
+`now-demo` 是一个围绕“内容创作 -> 提交审核 -> 审核决定 -> 通知投递 -> 搜索可见”设计的 Spring Boot 多模块微服务示例仓库。
 
-## 项目状态
+当前运行主实现是父 [pom.xml](./pom.xml) 管理的 Maven 多模块工程，公网流量统一经 `gateway-service` 进入，再分发到认证、内容、审核、搜索、文件和通知服务。
 
-- 当前真实结构：父 [pom.xml](./pom.xml) 下的多模块工程
-- 当前本地运行形态：`docker-compose.yml` + [scripts/dev-up.ps1](./scripts/dev-up.ps1)
-- 当前 Linux 发布基线：[scripts/run-service.sh](./scripts/run-service.sh) + `java -jar`
-- 可选外层 HTTP 入口：[deploy/nginx/now-demo.conf](./deploy/nginx/now-demo.conf)
-- 当前烟雾验证入口：[scripts/smoke-test.ps1](./scripts/smoke-test.ps1)
+## 这份仓库适合谁
 
-重要说明：
+- 后端开发：接手系统、改需求、联调、排障、发布
+- 前端 / 测试：快速定位接口入口、鉴权规则、联调路径、冒烟方式
+- 运维 / 平台：确认运行依赖、端口、配置来源、发布入口和 Nginx 基线
 
-- 根目录旧单体 `src` 已经移除，不再保留历史代码残留。
-- 本地 MySQL 初始化 SQL 现在位于 [deploy/sql/init.sql](./deploy/sql/init.sql)。
-- 当前正式源码入口在各模块目录：[gateway-service](./gateway-service)、[auth-service](./auth-service)、[content-service](./content-service)、[review-service](./review-service)、[search-service](./search-service)、[file-service](./file-service)、[notification-service](./notification-service)、[common](./common)。
+## 系统快照
 
-## 模块结构
+业务服务：
 
-- `gateway-service`：公网统一入口，负责鉴权、路由、限流、TraceId 透传
-- `auth-service`：注册、登录、找回密码、用户资料、内部用户摘要接口
-- `content-service`：首页、分类、文章创建、草稿、提审、详情、内容域内部接口
-- `review-service`：审核任务、审核动作、审核日志、审核任务投影
-- `search-service`：公开搜索接口、Elasticsearch 索引同步
-- `file-service`：图片上传、本地静态文件访问映射
-- `notification-service`：消费文章状态事件，生成通知与投递记录
-- `common`：共享常量、内部 DTO、事件模型、公共支持代码
+- `gateway-service`：公网入口、JWT 校验、内部头注入、限流、路由
+- `auth-service`：注册、登录、找回密码、用户资料、内部用户查询
+- `content-service`：首页、分类、文章、草稿、提审、详情、内部内容接口
+- `review-service`：审核待办、审核动作、审核日志、审核投影
+- `search-service`：公开搜索与搜索事件消费
+- `file-service`：图片上传与静态文件访问
+- `notification-service`：通知事件消费、通知与投递记录
 
-## 文档导航
+支撑模块：
 
-当前主文档分为三组：
+- `platform-kernel`：共享常量、基础类型、公共结果模型
+- `platform-web-support`：Web / Feign / Security 公共支持
+- `platform-events`：Outbox、RabbitMQ 拓扑、事件发布与消费基础设施
+- `auth-contract` / `content-contract` / `review-contract`：内部契约与 Feign client
+- `architecture-tests`：架构边界约束测试
 
-- 项目总览
-  - [01 项目概览](./docs/01-overview/01-project-overview.md)
-  - [02 模块地图](./docs/01-overview/02-module-map.md)
-  - [03 核心业务链路](./docs/01-overview/03-main-flows.md)
-- 后端导读
-  - [01 API 与鉴权](./docs/02-backend-guide/01-api-and-auth.md)
-  - [02 服务职责与边界](./docs/02-backend-guide/02-service-responsibilities.md)
-  - [03 数据与事件模型](./docs/02-backend-guide/03-data-and-events.md)
-  - [04 改需求入口指南](./docs/02-backend-guide/04-change-entry-guide.md)
-- 运行与交付
-  - [01 本地开发与联调](./docs/03-runtime-and-delivery/01-local-development.md)
-  - [02 运行配置说明](./docs/03-runtime-and-delivery/02-runtime-configuration.md)
-  - [03 上线流程 Runbook](./docs/03-runtime-and-delivery/03-release-runbook.md)
-  - [04 上线检查与回滚](./docs/03-runtime-and-delivery/04-release-checklist-and-rollback.md)
-
-当前逐文件详细讲解沿用旧路径承载：
-
-- [backend-understanding：逐文件详细讲解](./docs/archive/backend-understanding/README.md)
-
-真正的历史资料保留在：
-
-- [distributed-refactor：历史改造背景](./docs/archive/distributed-refactor/README.md)
-
-## 本地快速启动
+## 快速开始
 
 ### 1. 启动中间件
 
@@ -62,13 +38,14 @@
 docker compose up -d
 ```
 
-默认会启动：
+默认启动：
 
 - MySQL `3306`
 - Redis `6379`
 - Nacos `8848`
+- Nacos gRPC `9848`
 - RabbitMQ `5672`
-- Elasticsearch `9200`
+- RabbitMQ 管理台 `15672`
 
 ### 2. 启动本地服务
 
@@ -86,30 +63,80 @@ docker compose up -d
 6. `file-service`
 7. `gateway-service`
 
-### 3. 跑烟雾验证
+运行日志写入 `.codex-runtime/logs`，PID 写入 `.codex-runtime/pids`。
+
+### 3. 跑通冒烟
 
 ```powershell
 .\scripts\smoke-test.ps1
 ```
 
-这条脚本会校验：
+脚本会校验：
 
-- 中间件健康状态
-- 所有服务的 `/actuator/health` 和 `/actuator/info`
-- 网关公开路由
-- 无效 token 的 `401`
-- “注册 -> 提交审核 -> 审核通过 -> 通知落库 -> 搜索可见”链路
+- Docker 中间件健康状态
+- 所有服务的 `/actuator/health` 与 `/actuator/info`
+- 网关公开路由与无效 token 的 `401`
+- 注册 -> 草稿 -> 提审 -> 审核通过 -> 通知入库 -> 搜索可见 的主链路
 
-## Linux 发布基线
+## 文档导航
 
-当前仓库默认的正式发布基线不是容器化业务服务，而是 Linux 主机上的 `java -jar`：
+### 起步
 
-```bash
-cp ./scripts/env/server.env.example ./scripts/env/server.env
-./scripts/run-service.sh gateway-service server ./scripts/env/server.env
-```
+- [Start Here 索引](./docs/01-start-here/README.md)
+- [项目概览](./docs/01-start-here/01-project-overview.md)
+- [角色化阅读路径](./docs/01-start-here/02-reading-paths.md)
+- [首次接手与改需求入口](./docs/01-start-here/03-first-day-handoff.md)
+- [10 分钟跑通本地环境](./docs/01-start-here/04-ten-minute-run.md)
 
-发布和回滚细节见：
+### 架构
 
-- [上线流程 Runbook](./docs/03-runtime-and-delivery/03-release-runbook.md)
-- [上线检查与回滚](./docs/03-runtime-and-delivery/04-release-checklist-and-rollback.md)
+- [Architecture 索引](./docs/02-architecture/README.md)
+- [模块边界](./docs/02-architecture/01-module-boundaries.md)
+- [核心链路与状态流转](./docs/02-architecture/02-core-flow-and-state.md)
+- [事件与派生视图](./docs/02-architecture/03-events-and-derived-views.md)
+- [架构约束](./docs/02-architecture/04-architecture-constraints.md)
+
+### 开发与运维
+
+- [Development & Operations 索引](./docs/03-development-and-operations/README.md)
+- [本地开发与联调](./docs/03-development-and-operations/01-local-development.md)
+- [配置来源与运行依赖](./docs/03-development-and-operations/02-configuration-and-dependencies.md)
+- [发布与部署基线](./docs/03-development-and-operations/03-release-and-deployment.md)
+- [排障手册](./docs/03-development-and-operations/04-troubleshooting.md)
+
+### 参考手册
+
+- [Reference 索引](./docs/04-reference/README.md)
+- [API 与权限矩阵](./docs/04-reference/01-api-and-permissions.md)
+- [内部协作接口](./docs/04-reference/02-internal-collaboration.md)
+- [端口、依赖与队列清单](./docs/04-reference/03-ports-dependencies-and-queues.md)
+- [脚本与入口文件说明](./docs/04-reference/04-scripts-and-entrypoints.md)
+
+### 附录
+
+- [Appendices 索引](./docs/05-appendices/README.md)
+- [历史演进背景](./docs/05-appendices/01-historical-evolution.md)
+- [关键文件深度导读](./docs/05-appendices/02-file-level-deep-dive.md)
+- [术语表](./docs/05-appendices/03-glossary.md)
+
+### 兼容入口
+
+- [旧 `archive` 入口迁移说明](./docs/archive/README.md)
+
+## 常见入口
+
+- 本地启动脚本：[scripts/dev-up.ps1](./scripts/dev-up.ps1)
+- 本地停止脚本：[scripts/dev-down.ps1](./scripts/dev-down.ps1)
+- 冒烟脚本：[scripts/smoke-test.ps1](./scripts/smoke-test.ps1)
+- Linux 启动脚本：[scripts/run-service.sh](./scripts/run-service.sh)
+- 服务器环境变量样例：[scripts/env/server.env.example](./scripts/env/server.env.example)
+- 本地 SQL 初始化：[deploy/sql/init.sql](./deploy/sql/init.sql)
+- Nginx 基线：[deploy/nginx/README.md](./deploy/nginx/README.md)
+- 架构约束测试：[architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java](./architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java)
+
+## 当前事实边界
+
+- 当前仓库已不再保留旧单体根目录 `src/`
+- 当前对外 API 统一经网关暴露
+- 搜索与通知是派生视图，不是内容真源
+- 运行时配置来自环境变量和 Nacos；服务自身 `application.yml` 只提供默认值和导入关系

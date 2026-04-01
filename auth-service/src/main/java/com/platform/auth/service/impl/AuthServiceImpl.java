@@ -1,0 +1,211 @@
+package com.platform.auth.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.platform.auth.api.req.ForgotPasswordReq;
+import com.platform.auth.api.req.LoginReq;
+import com.platform.auth.api.req.RegisterReq;
+import com.platform.auth.api.req.ResetPasswordReq;
+import com.platform.auth.api.resp.AuthResp;
+import com.platform.auth.entity.User;
+import com.platform.kernel.exception.BusinessException;
+import com.platform.kernel.enums.UserRole;
+import com.platform.auth.mapper.UserMapper;
+import com.platform.auth.service.AuthService;
+import com.platform.auth.util.JwtHelper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthServiceImpl implements AuthService {
+
+    private static final String KEY_PWD_RESET = "pwd:reset:";
+    private static final String KEY_PWD_RESET_LOCK = "pwd:reset:lock:";
+    private static final Set<String> RESERVED_NAMES = Set.of("me", "admin", "system");
+
+    private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtHelper jwtHelper;
+    private final StringRedisTemplate redisTemplate;
+    private final JavaMailSender mailSender;
+
+    @Value("${spring.mail.username}")
+    private String mailFrom;
+
+    @Value("${platform.reset-pwd-token-ttl-minutes}")
+    private long resetPwdTtlMinutes;
+
+    @Value("${platform.frontend-base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AuthResp register(RegisterReq req) {
+        if (RESERVED_NAMES.contains(req.getUsername().toLowerCase())) {
+            throw new BusinessException(400, "Username is reserved");
+        }
+        if (existsByUsername(req.getUsername())) {
+            throw BusinessException.conflict("Username already exists");
+        }
+        if (existsByEmail(req.getEmail())) {
+            throw BusinessException.conflict("Email already registered");
+        }
+
+        User user = new User();
+        user.setUsername(req.getUsername());
+        user.setNickname(req.getUsername());
+        user.setEmail(req.getEmail());
+        user.setPassword(passwordEncoder.encode(req.getPassword()));
+        user.setRole(UserRole.USER);
+        userMapper.insert(user);
+
+        String token = jwtHelper.createToken(user.getId(), user.getUsername(), UserRole.USER.name(), false);
+        log.info("User registered: userId={}, username={}", user.getId(), user.getUsername());
+        return buildAuthResp(token, user);
+    }
+
+    @Override
+    public AuthResp login(LoginReq req) {
+        User user = req.getAccount().contains("@")
+                ? findByEmail(req.getAccount())
+                : findByUsername(req.getAccount());
+
+        if (user == null || !passwordEncoder.matches(req.getPassword(), user.getPassword())) {
+            throw BusinessException.badRequest("Invalid account or password");
+        }
+
+        String token = jwtHelper.createToken(
+                user.getId(),
+                user.getUsername(),
+                user.getRole().name(),
+                req.isRememberMe()
+        );
+        log.info("User logged in: userId={}, username={}, rememberMe={}",
+                user.getId(), user.getUsername(), req.isRememberMe());
+        return buildAuthResp(token, user);
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordReq req) {
+        String email = req.getEmail().toLowerCase().trim();
+        String lockKey = KEY_PWD_RESET_LOCK + email;
+
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+            throw BusinessException.tooManyRequests(
+                    "Reset email already sent, try again in " + resetPwdTtlMinutes + " minutes");
+        }
+
+        User user = findByEmail(email);
+        if (user == null) {
+            log.info("Forgot password skipped for unknown email: {}", email);
+            return;
+        }
+
+        String resetToken = UUID.randomUUID().toString().replace("-", "");
+        redisTemplate.opsForValue().set(
+                KEY_PWD_RESET + resetToken,
+                String.valueOf(user.getId()),
+                resetPwdTtlMinutes,
+                TimeUnit.MINUTES
+        );
+        redisTemplate.opsForValue().set(lockKey, "1", resetPwdTtlMinutes, TimeUnit.MINUTES);
+
+        try {
+            sendResetEmail(user.getUsername(), email, resetToken);
+        } catch (MailException e) {
+            redisTemplate.delete(KEY_PWD_RESET + resetToken);
+            redisTemplate.delete(lockKey);
+            log.error("Failed to send reset email: userId={}, email={}", user.getId(), email, e);
+            throw BusinessException.serverError("Mail service is temporarily unavailable");
+        }
+
+        log.info("Reset email sent: userId={}, email={}", user.getId(), email);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void resetPassword(ResetPasswordReq req) {
+        String tokenKey = KEY_PWD_RESET + req.getToken();
+        String userIdStr = redisTemplate.opsForValue().get(tokenKey);
+        if (userIdStr == null) {
+            throw BusinessException.badRequest("Reset link is invalid or expired");
+        }
+
+        Long userId = Long.valueOf(userIdStr);
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw BusinessException.notFound("User not found");
+        }
+
+        user.setPassword(passwordEncoder.encode(req.getNewPassword()));
+        userMapper.updateById(user);
+        redisTemplate.delete(tokenKey);
+        log.info("Password reset: userId={}", userId);
+    }
+
+    private boolean existsByUsername(String username) {
+        return userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getUsername, username)) > 0;
+    }
+
+    private boolean existsByEmail(String email) {
+        return userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getEmail, email)) > 0;
+    }
+
+    private User findByUsername(String username) {
+        return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+    }
+
+    private User findByEmail(String email) {
+        return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
+    }
+
+    private AuthResp buildAuthResp(String token, User user) {
+        return AuthResp.builder()
+                .token(token)
+                .userId(user.getId())
+                .username(user.getUsername())
+                .nickname(user.getNickname())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .avatarUrl(user.getAvatarUrl())
+                .build();
+    }
+
+    private void sendResetEmail(String username, String toEmail, String resetToken) {
+        String resetLink = UriComponentsBuilder
+                .fromUriString(frontendBaseUrl)
+                .path("/reset-password")
+                .queryParam("token", resetToken)
+                .build()
+                .toUriString();
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(toEmail);
+        message.setSubject("Password reset");
+        message.setText(
+                "Hi " + username + ",\n\n"
+                        + "Use the link below to reset your password within "
+                        + resetPwdTtlMinutes
+                        + " minutes:\n\n"
+                        + resetLink
+                        + "\n\nIf you did not request this, you can ignore this email.\n\nNow Demo"
+        );
+        mailSender.send(message);
+    }
+}
+

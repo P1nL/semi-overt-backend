@@ -16,7 +16,32 @@
     <dependencies>
         <dependency>
             <groupId>com.platform</groupId>
-            <artifactId>common</artifactId>
+            <artifactId>platform-kernel</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>platform-web-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>platform-events</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>auth-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>content-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.platform</groupId>
+            <artifactId>review-contract</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

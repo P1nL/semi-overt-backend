@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.platform.search.mapper.SearchArticleMapper">
+
+    <sql id="KeywordMatchPredicate">
+        (
+            COALESCE(a.title, '') LIKE CONCAT('%', #{escapedKeyword}, '%')
+            OR COALESCE(a.summary, '') LIKE CONCAT('%', #{escapedKeyword}, '%')
+        )
+    </sql>
+
+    <select id="countByKeyword" resultType="long">
+        SELECT COUNT(*)
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+          AND <include refid="KeywordMatchPredicate"/>
+    </select>
+
+    <select id="searchByKeyword" resultType="com.platform.search.model.SearchArticleRow">
+        SELECT
+            a.id AS article_id,
+            a.author_id,
+            a.title,
+            a.summary,
+            a.cover_url,
+            a.cover_color,
+            a.read_minutes,
+            a.duration_category,
+            a.published_at,
+            a.updated_at
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+          AND <include refid="KeywordMatchPredicate"/>
+        ORDER BY
+            CASE
+                WHEN COALESCE(a.title, '') LIKE CONCAT(#{escapedKeyword}, '%') THEN 1
+                WHEN COALESCE(a.title, '') LIKE CONCAT('%', #{escapedKeyword}, '%') THEN 2
+                WHEN COALESCE(a.summary, '') LIKE CONCAT(#{escapedKeyword}, '%') THEN 3
+                WHEN COALESCE(a.summary, '') LIKE CONCAT('%', #{escapedKeyword}, '%') THEN 4
+                ELSE 5
+            END ASC,
+            a.published_at DESC,
+            a.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

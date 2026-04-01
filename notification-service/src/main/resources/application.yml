@@ -38,7 +38,7 @@ server:
   port: ${SERVER_PORT:8086}
 
 mybatis-plus:
-  type-aliases-package: com.platform.entity,com.platform.common.entity
+  type-aliases-package: com.platform.notification.entity
   mapper-locations: classpath:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true

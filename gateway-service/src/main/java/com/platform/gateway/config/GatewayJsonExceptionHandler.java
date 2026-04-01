@@ -2,7 +2,7 @@ package com.platform.gateway.config;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.util.Result;
+import com.platform.kernel.util.Result;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutException;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 网关统一异常输出处理器。
- * 把路由、超时、权限等异常转换为稳定的 JSON 响应，避免默认 HTML 错误页返回给前端。
+ * 缃戝叧缁熶竴寮傚父杈撳嚭澶勭悊鍣ㄣ€?
+ * 鎶婅矾鐢便€佽秴鏃躲€佹潈闄愮瓑寮傚父杞崲涓虹ǔ瀹氱殑 JSON 鍝嶅簲锛岄伩鍏嶉粯璁?HTML 閿欒椤佃繑鍥炵粰鍓嶇銆?
  */
 @Slf4j
 @Component
@@ -33,7 +33,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     private final ObjectMapper objectMapper;
 
     /**
-     * 处理网关层未捕获异常并输出统一错误结构。
+     * 澶勭悊缃戝叧灞傛湭鎹曡幏寮傚父骞惰緭鍑虹粺涓€閿欒缁撴瀯銆?
      */
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
@@ -56,7 +56,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 根据异常类型推断 HTTP 状态码。
+     * 鏍规嵁寮傚父绫诲瀷鎺ㄦ柇 HTTP 鐘舵€佺爜銆?
      */
     private HttpStatus resolveStatus(Throwable ex) {
         if (ex instanceof ResponseStatusException responseStatusException) {
@@ -72,7 +72,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 根据状态码构造统一 Result 响应体。
+     * 鏍规嵁鐘舵€佺爜鏋勯€犵粺涓€ Result 鍝嶅簲浣撱€?
      */
     private Result<?> buildResult(HttpStatus status) {
         return switch (status) {
@@ -88,7 +88,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 序列化错误响应体。
+     * 搴忓垪鍖栭敊璇搷搴斾綋銆?
      */
     private String toJson(Result<?> result) {
         try {
@@ -98,3 +98,4 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
         }
     }
 }
+

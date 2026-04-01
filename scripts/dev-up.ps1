@@ -13,7 +13,8 @@ param(
         "gateway-service"
     ),
     [switch]$SkipDocker,
-    [switch]$ForceRebuildCommon,
+    [Alias("ForceRebuildCommon")]
+    [switch]$ForceRebuildSharedModules,
     [switch]$RestartServices
 )
 
@@ -60,8 +61,7 @@ $infrastructureServices = @(
     @{ Name = "mysql"; Port = 3306 },
     @{ Name = "redis"; Port = 6379 },
     @{ Name = "nacos"; Port = 8848 },
-    @{ Name = "rabbitmq"; Port = 5672 },
-    @{ Name = "elasticsearch"; Port = 9200 }
+    @{ Name = "rabbitmq"; Port = 5672 }
 )
 
 function Get-ListeningPidsForPort {
@@ -641,18 +641,35 @@ function Get-TextSha256 {
     }
 }
 
-function Get-CommonBuildFingerprint {
+function Get-SharedModuleDefinitions {
+    return @(
+        @{ Name = "platform-kernel"; ArtifactId = "platform-kernel"; RelativePomPath = "platform-kernel\pom.xml"; SourceRoots = @("platform-kernel\src\main") },
+        @{ Name = "platform-web-support"; ArtifactId = "platform-web-support"; RelativePomPath = "platform-web-support\pom.xml"; SourceRoots = @("platform-web-support\src\main") },
+        @{ Name = "platform-events"; ArtifactId = "platform-events"; RelativePomPath = "platform-events\pom.xml"; SourceRoots = @("platform-events\src\main") },
+        @{ Name = "auth-contract"; ArtifactId = "auth-contract"; RelativePomPath = "auth-contract\pom.xml"; SourceRoots = @("auth-contract\src\main") },
+        @{ Name = "content-contract"; ArtifactId = "content-contract"; RelativePomPath = "content-contract\pom.xml"; SourceRoots = @("content-contract\src\main") },
+        @{ Name = "review-contract"; ArtifactId = "review-contract"; RelativePomPath = "review-contract\pom.xml"; SourceRoots = @("review-contract\src\main") }
+    )
+}
+
+function Get-SharedModulesBuildFingerprint {
     param([string]$RepoRoot)
 
     $paths = New-Object System.Collections.Generic.List[string]
     $paths.Add((Join-Path $RepoRoot "pom.xml"))
-    $paths.Add((Join-Path $RepoRoot "common\pom.xml"))
 
-    $commonMainPath = Join-Path $RepoRoot "common\src\main"
-    if (Test-Path $commonMainPath) {
-        Get-ChildItem -Path $commonMainPath -Recurse -File |
-            Sort-Object FullName |
-            ForEach-Object { $paths.Add($_.FullName) }
+    foreach ($module in Get-SharedModuleDefinitions) {
+        $pomPath = Join-Path $RepoRoot $module.RelativePomPath
+        $paths.Add($pomPath)
+
+        foreach ($sourceRoot in $module.SourceRoots) {
+            $absoluteSourceRoot = Join-Path $RepoRoot $sourceRoot
+            if (Test-Path $absoluteSourceRoot) {
+                Get-ChildItem -Path $absoluteSourceRoot -Recurse -File |
+                    Sort-Object FullName |
+                    ForEach-Object { $paths.Add($_.FullName) }
+            }
+        }
     }
 
     $builder = New-Object System.Text.StringBuilder
@@ -693,11 +710,11 @@ function Get-LauncherState {
 function Save-LauncherState {
     param(
         [string]$Path,
-        [string]$CommonBuildFingerprint
+        [string]$SharedModulesBuildFingerprint
     )
 
     $state = [ordered]@{
-        commonBuildFingerprint = $CommonBuildFingerprint
+        sharedModulesBuildFingerprint = $SharedModulesBuildFingerprint
         updatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     }
 
@@ -734,13 +751,21 @@ function Test-MavenArtifactsInstalled {
     param([string]$RepoLocal)
 
     $parentPom = Join-Path $RepoLocal "com\platform\now-demo-parent\1.0.0\now-demo-parent-1.0.0.pom"
-    $commonPom = Join-Path $RepoLocal "com\platform\common\1.0.0\common-1.0.0.pom"
-    $commonJar = Join-Path $RepoLocal "com\platform\common\1.0.0\common-1.0.0.jar"
+    $moduleArtifacts = @{}
+
+    foreach ($module in Get-SharedModuleDefinitions) {
+        $artifactBasePath = Join-Path $RepoLocal ("com\platform\{0}\1.0.0" -f $module.ArtifactId)
+        $pomPath = Join-Path $artifactBasePath ("{0}-1.0.0.pom" -f $module.ArtifactId)
+        $jarPath = Join-Path $artifactBasePath ("{0}-1.0.0.jar" -f $module.ArtifactId)
+        $moduleArtifacts[$module.Name] = @{
+            Pom = (Test-Path $pomPath)
+            Jar = (Test-Path $jarPath)
+        }
+    }
 
     return @{
         ParentPom = (Test-Path $parentPom)
-        CommonPom = (Test-Path $commonPom)
-        CommonJar = (Test-Path $commonJar)
+        ModuleArtifacts = $moduleArtifacts
     }
 }
 
@@ -780,6 +805,7 @@ function Start-ServiceLaunch {
     )
 
     $pidFile = Join-Path $PidRoot "$Service.pid"
+    $moduleDir = Join-Path $RepoRoot $Service
     Stop-ServiceProcesses -Service $Service -PidFile $pidFile
     Start-Sleep -Seconds 1
 
@@ -804,7 +830,7 @@ function Start-ServiceLaunch {
 
     $process = Start-Process -FilePath "powershell.exe" `
         -ArgumentList "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $encodedScript `
-        -WorkingDirectory $RepoRoot `
+        -WorkingDirectory $moduleDir `
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `
@@ -996,8 +1022,8 @@ $serviceResults = New-Object System.Collections.Generic.List[object]
 $reusedServices = New-Object System.Collections.Generic.List[string]
 $restartedServices = New-Object System.Collections.Generic.List[string]
 $forcedRestartReasons = @{}
-$rebuiltCommon = $false
-$commonBuildReason = ""
+$rebuiltSharedModules = $false
+$sharedModulesBuildReason = ""
 $fingerprintChanged = $false
 
 Write-Step "Startup mode: $StartupMode"
@@ -1062,54 +1088,64 @@ else {
 $dockerWatch.Stop()
 $phaseDurations["docker"] = [math]::Round($dockerWatch.Elapsed.TotalSeconds, 2)
 
-$currentFingerprint = Get-CommonBuildFingerprint -RepoRoot $repoRoot
+$currentFingerprint = Get-SharedModulesBuildFingerprint -RepoRoot $repoRoot
 $installedArtifacts = Test-MavenArtifactsInstalled -RepoLocal $mavenRuntimeConfig.RepoLocal
-$previousFingerprint = Get-LauncherStateValue -State $launcherState -PropertyName "commonBuildFingerprint"
+$previousFingerprint = Get-LauncherStateValue -State $launcherState -PropertyName "sharedModulesBuildFingerprint"
 $fingerprintChanged = ($previousFingerprint -ne $currentFingerprint)
+$sharedModules = Get-SharedModuleDefinitions
+$sharedModuleNames = @($sharedModules | ForEach-Object { $_.Name })
+$missingModuleNames = @(
+    foreach ($module in $sharedModules) {
+        $moduleState = $installedArtifacts.ModuleArtifacts[$module.Name]
+        if (-not $moduleState.Pom -or -not $moduleState.Jar) {
+            $module.Name
+        }
+    }
+)
 
 $mavenWatch = [System.Diagnostics.Stopwatch]::StartNew()
-$shouldBuildCommon = $true
+$shouldBuildSharedModules = $true
 
 if ($StartupMode -eq "fast") {
-    $shouldBuildCommon = $false
-    if ($ForceRebuildCommon) {
-        $shouldBuildCommon = $true
-        $commonBuildReason = "forced by -ForceRebuildCommon"
+    $shouldBuildSharedModules = $false
+    if ($ForceRebuildSharedModules) {
+        $shouldBuildSharedModules = $true
+        $sharedModulesBuildReason = "forced by -ForceRebuildSharedModules"
     }
     elseif (-not $installedArtifacts.ParentPom) {
-        $shouldBuildCommon = $true
-        $commonBuildReason = "local Maven repository is missing now-demo-parent"
+        $shouldBuildSharedModules = $true
+        $sharedModulesBuildReason = "local Maven repository is missing now-demo-parent"
     }
-    elseif (-not $installedArtifacts.CommonPom -or -not $installedArtifacts.CommonJar) {
-        $shouldBuildCommon = $true
-        $commonBuildReason = "local Maven repository is missing common artifacts"
+    elseif ($missingModuleNames.Count -gt 0) {
+        $shouldBuildSharedModules = $true
+        $sharedModulesBuildReason = "local Maven repository is missing shared module artifacts: $($missingModuleNames -join ', ')"
     }
     elseif ($fingerprintChanged) {
-        $shouldBuildCommon = $true
-        $commonBuildReason = "root/common sources changed"
+        $shouldBuildSharedModules = $true
+        $sharedModulesBuildReason = "shared module sources changed"
     }
 }
 
-if ($shouldBuildCommon) {
+if ($shouldBuildSharedModules) {
     if ($StartupMode -eq "stable") {
-        Write-Step "Installing parent POM and common module into local Maven repository"
+        Write-Step "Installing parent POM and shared modules into local Maven repository"
     }
     else {
-        Write-Step "Installing parent POM and common module into local Maven repository ($commonBuildReason)"
+        Write-Step "Installing parent POM and shared modules into local Maven repository ($sharedModulesBuildReason)"
     }
 
     Invoke-Maven -MavenCommand $mavenCommand `
         -Arguments ($mavenCommonArguments + @("-N", "install")) `
         -WorkingDirectory $repoRoot
     Invoke-Maven -MavenCommand $mavenCommand `
-        -Arguments ($mavenCommonArguments + @("-f", (Join-Path $repoRoot "common\pom.xml"), "install", "-DskipTests")) `
+        -Arguments ($mavenCommonArguments + @("-pl", ($sharedModuleNames -join ","), "-am", "install", "-DskipTests")) `
         -WorkingDirectory $repoRoot
 
-    Save-LauncherState -Path $statePath -CommonBuildFingerprint $currentFingerprint
-    $rebuiltCommon = $true
+    Save-LauncherState -Path $statePath -SharedModulesBuildFingerprint $currentFingerprint
+    $rebuiltSharedModules = $true
 }
 else {
-    Write-Step "Skipping parent/common install in fast mode (no changes detected)"
+    Write-Step "Skipping shared module install in fast mode (no changes detected)"
 }
 $mavenWatch.Stop()
 $phaseDurations["maven"] = [math]::Round($mavenWatch.Elapsed.TotalSeconds, 2)
@@ -1119,9 +1155,9 @@ if ($RestartServices) {
         $forcedRestartReasons[$service] = "forced by -RestartServices"
     }
 }
-elseif ($rebuiltCommon -and $fingerprintChanged) {
+elseif ($rebuiltSharedModules -and $fingerprintChanged) {
     foreach ($service in $Services) {
-        $forcedRestartReasons[$service] = "common sources changed"
+        $forcedRestartReasons[$service] = "shared module sources changed"
     }
 }
 
@@ -1205,7 +1241,7 @@ foreach ($phaseName in $phaseDurations.Keys) {
 Write-Host ""
 Write-Host ("reused services: {0}" -f ($(if ($reusedServices.Count -gt 0) { $reusedServices -join ", " } else { "none" }))) -ForegroundColor Yellow
 Write-Host ("restarted services: {0}" -f ($(if ($restartedServices.Count -gt 0) { $restartedServices -join ", " } else { "none" }))) -ForegroundColor Yellow
-Write-Host ("rebuilt common: {0}" -f ($(if ($rebuiltCommon) { "yes" } else { "no" }))) -ForegroundColor Yellow
+Write-Host ("rebuilt shared modules: {0}" -f ($(if ($rebuiltSharedModules) { "yes" } else { "no" }))) -ForegroundColor Yellow
 
 if ($serviceResults.Count -gt 0) {
     Write-Host ""
