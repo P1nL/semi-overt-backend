@@ -1,0 +1,9 @@
+platform:
+  events:
+    retry-delay-ms: 30000
+    consumer-max-retries: 3
+
+management:
+  endpoint:
+    health:
+      show-details: never

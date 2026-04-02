@@ -24,6 +24,8 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
+$utf8EncodingName = "UTF8"
+
 if (-not $env:NACOS_SERVER_ADDR) {
     $env:NACOS_SERVER_ADDR = "127.0.0.1:8848"
 }
@@ -45,6 +47,76 @@ function Write-StageTiming {
     )
 
     Write-Host ("    {0}: {1:N2}s" -f $Name, $Seconds) -ForegroundColor DarkGray
+}
+
+function Get-Utf8Content {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [switch]$Raw,
+        [int]$Tail = 0
+    )
+
+    $parameters = @{
+        Path = $Path
+        Encoding = $utf8EncodingName
+        ErrorAction = "Stop"
+    }
+
+    if ($Raw) {
+        $parameters.Raw = $true
+    }
+
+    if ($Tail -gt 0) {
+        $parameters.Tail = $Tail
+    }
+
+    return Get-Content @parameters
+}
+
+function Set-Utf8Content {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        $Value,
+        [switch]$NoNewline
+    )
+
+    $parameters = @{
+        Path = $Path
+        Value = $Value
+        Encoding = $utf8EncodingName
+    }
+
+    if ($NoNewline) {
+        $parameters.NoNewline = $true
+    }
+
+    Set-Content @parameters
+}
+
+function Merge-JavaToolOptions {
+    param([string]$ExistingValue)
+
+    $requiredOptions = @(
+        "-Dfile.encoding=UTF-8",
+        "-Dsun.jnu.encoding=UTF-8"
+    )
+
+    $result = $ExistingValue
+    foreach ($option in $requiredOptions) {
+        if ([string]::IsNullOrWhiteSpace($result)) {
+            $result = $option
+            continue
+        }
+
+        if ($result -notmatch [regex]::Escape($option)) {
+            $result = "$result $option"
+        }
+    }
+
+    return $result
 }
 
 $servicePorts = @{
@@ -126,7 +198,7 @@ function Stop-ServiceProcesses {
     $stoppedPids = @()
 
     if (Test-Path $PidFile) {
-        $pidValue = Get-Content $PidFile -ErrorAction SilentlyContinue
+        $pidValue = Get-Content -Path $PidFile -Encoding $utf8EncodingName -ErrorAction SilentlyContinue
         if (-not [string]::IsNullOrWhiteSpace($pidValue)) {
             $process = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
             if ($process) {
@@ -265,6 +337,31 @@ function Wait-ForTcpPort {
     throw "$Name did not open TCP port ${TargetHost}:$Port within $TimeoutSeconds seconds"
 }
 
+function Get-RecentLogExcerpt {
+    param(
+        [string]$Path,
+        [string]$Label,
+        [int]$Tail = 40
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        return ""
+    }
+
+    try {
+        $lines = Get-Utf8Content -Path $Path -Tail $Tail
+    }
+    catch {
+        return "Recent $Label log ($Path) could not be read: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $lines -or $lines.Count -eq 0) {
+        return ""
+    }
+
+    return "Recent $Label log ($Path):`n$($lines -join "`n")"
+}
+
 function Wait-ForServiceReadiness {
     param(
         [string]$Service,
@@ -313,7 +410,36 @@ function Wait-ForServiceReadiness {
         $missingChecks += "/actuator/info is not reachable"
     }
 
-    throw "$Service did not become ready within $TimeoutSeconds seconds: $($missingChecks -join '; ')"
+    if ($Process) {
+        try {
+            $Process.Refresh()
+            if ($Process.HasExited) {
+                $missingChecks += "launcher process exited with code $($Process.ExitCode)"
+            }
+        }
+        catch {
+            # Ignore launcher process state. The actual Java service may outlive the wrapper.
+        }
+    }
+
+    $diagnostics = @()
+
+    $stdoutExcerpt = Get-RecentLogExcerpt -Path $StdoutLog -Label "$Service stdout"
+    if (-not [string]::IsNullOrWhiteSpace($stdoutExcerpt)) {
+        $diagnostics += $stdoutExcerpt
+    }
+
+    $stderrExcerpt = Get-RecentLogExcerpt -Path $StderrLog -Label "$Service stderr"
+    if (-not [string]::IsNullOrWhiteSpace($stderrExcerpt)) {
+        $diagnostics += $stderrExcerpt
+    }
+
+    $message = "$Service did not become ready within $TimeoutSeconds seconds: $($missingChecks -join '; ')"
+    if ($diagnostics.Count -gt 0) {
+        $message += ".`nRecent logs:`n$($diagnostics -join "`n`n")"
+    }
+
+    throw $message
 }
 
 function Get-DockerServiceContainerId {
@@ -470,6 +596,20 @@ function Resolve-MavenCommand {
     }
 
     throw "Cannot resolve Maven command. Set MAVEN_CMD or install Maven."
+}
+
+function Resolve-PowerShellCommand {
+    $pwshCommand = Get-Command "pwsh" -ErrorAction SilentlyContinue
+    if ($pwshCommand) {
+        return $pwshCommand.Source
+    }
+
+    $powershellCommand = Get-Command "powershell.exe" -ErrorAction SilentlyContinue
+    if ($powershellCommand) {
+        return $powershellCommand.Source
+    }
+
+    throw "Cannot resolve a PowerShell host. Install PowerShell 7 (pwsh) or ensure powershell.exe is available."
 }
 
 function Resolve-AbsolutePath {
@@ -695,7 +835,7 @@ function Get-LauncherState {
     }
 
     try {
-        $raw = Get-Content -Path $Path -Raw -ErrorAction Stop
+        $raw = Get-Utf8Content -Path $Path -Raw
         if ([string]::IsNullOrWhiteSpace($raw)) {
             return @{}
         }
@@ -718,7 +858,7 @@ function Save-LauncherState {
         updatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     }
 
-    $state | ConvertTo-Json | Set-Content -Path $Path -Encoding UTF8
+    Set-Utf8Content -Path $Path -Value ($state | ConvertTo-Json)
 }
 
 function Get-LauncherStateValue {
@@ -799,6 +939,7 @@ function Start-ServiceLaunch {
         [string]$RepoRoot,
         [string]$LogRoot,
         [string]$PidRoot,
+        [string]$PowerShellCommand,
         [string]$MavenCommand,
         [string[]]$MavenCommonArguments,
         [string]$RunProfile
@@ -826,9 +967,18 @@ function Start-ServiceLaunch {
     $encodedArgumentArray = (($serviceArguments | ForEach-Object {
         ConvertTo-SingleQuotedPowerShellLiteral -Value $_
     }) -join ", ")
-    $encodedScript = "& $(ConvertTo-SingleQuotedPowerShellLiteral -Value $command.MavenCommand) @($encodedArgumentArray)"
+    $mergedJavaToolOptions = Merge-JavaToolOptions -ExistingValue $env:JAVA_TOOL_OPTIONS
+    $encodedJavaToolOptions = ConvertTo-SingleQuotedPowerShellLiteral -Value $mergedJavaToolOptions
+    $encodedScript = @(
+        '$utf8 = [System.Text.UTF8Encoding]::new($false)'
+        '[Console]::InputEncoding = $utf8'
+        '[Console]::OutputEncoding = $utf8'
+        '$OutputEncoding = $utf8'
+        ('$env:JAVA_TOOL_OPTIONS = ' + $encodedJavaToolOptions)
+        ("& " + (ConvertTo-SingleQuotedPowerShellLiteral -Value $command.MavenCommand) + " @(" + $encodedArgumentArray + ")")
+    ) -join "; "
 
-    $process = Start-Process -FilePath "powershell.exe" `
+    $process = Start-Process -FilePath $PowerShellCommand `
         -ArgumentList "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", $encodedScript `
         -WorkingDirectory $moduleDir `
         -WindowStyle Hidden `
@@ -836,7 +986,7 @@ function Start-ServiceLaunch {
         -RedirectStandardError $stderrLog `
         -PassThru
 
-    Set-Content -Path $pidFile -Value $process.Id -NoNewline
+    Set-Utf8Content -Path $pidFile -Value $process.Id -NoNewline
 
     return @{
         Process = $process
@@ -866,6 +1016,7 @@ function Invoke-ServiceStartupPass {
         [string]$RepoRoot,
         [string]$LogRoot,
         [string]$PidRoot,
+        [string]$PowerShellCommand,
         [string]$MavenCommand,
         [string[]]$MavenCommonArguments,
         [string]$RunProfile,
@@ -888,7 +1039,7 @@ function Invoke-ServiceStartupPass {
         if ($reuseAllowed) {
             $state = Get-ServiceCurrentState -Service $service
             if ($state.Ready) {
-                Set-Content -Path $pidFile -Value $state.ActivePid -NoNewline
+                Set-Utf8Content -Path $pidFile -Value $state.ActivePid -NoNewline
                 Write-Step "$service is already running with PID $($state.ActivePid)"
                 $serviceWatch.Stop()
                 $ServiceResults.Add((New-ServiceResult -Service $service -Action "reused" -Seconds $serviceWatch.Elapsed.TotalSeconds))
@@ -909,6 +1060,7 @@ function Invoke-ServiceStartupPass {
             -RepoRoot $RepoRoot `
             -LogRoot $LogRoot `
             -PidRoot $PidRoot `
+            -PowerShellCommand $PowerShellCommand `
             -MavenCommand $MavenCommand `
             -MavenCommonArguments $MavenCommonArguments `
             -RunProfile $RunProfile
@@ -930,7 +1082,7 @@ function Invoke-ServiceStartupPass {
 
             $activePid = Get-PrimaryListeningPidForService -Service $pendingItem.Service
             if ($null -ne $activePid) {
-                Set-Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
+                Set-Utf8Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
             }
 
             $pendingItem.Watch.Stop()
@@ -951,7 +1103,7 @@ function Invoke-ServiceStartupPass {
 
             $activePid = Get-PrimaryListeningPidForService -Service $pendingItem.Service
             if ($null -ne $activePid) {
-                Set-Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
+                Set-Utf8Content -Path $pendingItem.LaunchInfo.PidFile -Value $activePid -NoNewline
             }
 
             $pendingItem.Watch.Stop()
@@ -1012,6 +1164,8 @@ New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 
 $mavenRuntimeConfig = Ensure-MavenRuntimeConfig -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot
 $mavenCommand = Resolve-MavenCommand -RepoRoot $repoRoot
+$powerShellCommand = Resolve-PowerShellCommand
+$env:JAVA_TOOL_OPTIONS = Merge-JavaToolOptions -ExistingValue $env:JAVA_TOOL_OPTIONS
 $mavenCommonArguments = @(Get-MavenCommonArguments `
     -SettingsPath $mavenRuntimeConfig.SettingsPath `
     -RepoLocal $mavenRuntimeConfig.RepoLocal)
@@ -1027,6 +1181,8 @@ $sharedModulesBuildReason = ""
 $fingerprintChanged = $false
 
 Write-Step "Startup mode: $StartupMode"
+Write-Step "Using PowerShell host: $powerShellCommand"
+Write-Step "Using JAVA_TOOL_OPTIONS: $env:JAVA_TOOL_OPTIONS"
 Write-Step "Using Maven command: $mavenCommand"
 Write-Step "Using Maven settings: $($mavenRuntimeConfig.SettingsPath)"
 Write-Step "Using Maven local repository: $($mavenRuntimeConfig.RepoLocal)"
@@ -1174,6 +1330,7 @@ if ($StartupMode -eq "stable") {
             -RepoRoot $repoRoot `
             -LogRoot $logRoot `
             -PidRoot $pidRoot `
+            -PowerShellCommand $powerShellCommand `
             -MavenCommand $mavenCommand `
             -MavenCommonArguments $mavenCommonArguments `
             -RunProfile $RunProfile `
@@ -1210,6 +1367,7 @@ else {
             -RepoRoot $repoRoot `
             -LogRoot $logRoot `
             -PidRoot $pidRoot `
+            -PowerShellCommand $powerShellCommand `
             -MavenCommand $mavenCommand `
             -MavenCommonArguments $mavenCommonArguments `
             -RunProfile $RunProfile `
@@ -1231,6 +1389,7 @@ $phaseDurations["services_total"] = [math]::Round($servicesWatch.Elapsed.TotalSe
 Write-Step "Started services: $($Services -join ', ')"
 Write-Host "Logs: $logRoot" -ForegroundColor Green
 Write-Host "PIDs: $pidRoot" -ForegroundColor Green
+Write-Host "Recent errors: .\scripts\dev-logs.ps1" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Startup summary" -ForegroundColor Green

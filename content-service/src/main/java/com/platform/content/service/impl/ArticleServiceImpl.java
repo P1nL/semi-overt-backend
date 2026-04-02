@@ -45,6 +45,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * 文章服务实现，负责文章创建、提审、删除以及个人主页文章聚合等核心流程。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -72,7 +75,10 @@ public class ArticleServiceImpl implements ArticleService {
     private final ReviewReasonClient reviewInternalClient;
     private final EventOutboxService eventOutboxService;
 
-        @Override
+    /**
+     * 创建一篇空草稿，返回文章主键和初始状态。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> createArticle(Long userId) {
         Article article = new Article();
@@ -85,7 +91,11 @@ public class ArticleServiceImpl implements ArticleService {
         return Map.of("id", article.getId(), "status", ArticleStatus.DRAFT);
     }
 
-        @Override
+    /**
+     * 查询文章详情。
+     * 对可编辑文章优先返回 Redis 中的最新草稿内容，避免用户看到落后的数据库快照。
+     */
+    @Override
     public ArticleDetailResp getArticleDetail(Long articleId, Long currentUserId) {
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
@@ -104,7 +114,7 @@ public class ArticleServiceImpl implements ArticleService {
         String content = article.getContent();
         if (article.getStatus() == ArticleStatus.DRAFT
                 || article.getStatus() == ArticleStatus.RETURNED) {
-            // Prefer the latest draft content from Redis for editable articles.
+            // 可编辑文章优先读取 Redis 中尚未落库的最新草稿内容。
             String redisContent = redisTemplate.opsForValue()
                     .get(buildDraftKey(article.getAuthorId(), articleId));
             if (redisContent != null) {
@@ -137,7 +147,11 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        @Override
+    /**
+     * 提交文章进入审核流程。
+     * 会校验文章状态、正文最小长度，以及 30 分钟的重复提审冷却时间。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public SubmitResp submitForReview(Long articleId, Long userId) {
         Article article = getArticleByIdForWrite(articleId);
@@ -169,7 +183,7 @@ public class ArticleServiceImpl implements ArticleService {
             }
         }
 
-        // Validate submission against the latest draft content stored in Redis.
+        // 提审前再次以 Redis 中的最新草稿内容为准，避免提交旧版本正文。
         String redisContent = redisTemplate.opsForValue().get(buildDraftKey(userId, articleId));
         if (redisContent != null) {
             article.setContent(redisContent);
@@ -205,7 +219,10 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        @Override
+    /**
+     * 取消已发起但尚未处理的审核，把文章恢复为草稿状态。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> cancelReview(Long articleId, Long userId) {
         Article article = getArticleByIdForWrite(articleId);
@@ -231,7 +248,10 @@ public class ArticleServiceImpl implements ArticleService {
         return Map.of("status", ArticleStatus.DRAFT);
     }
 
-        @Override
+    /**
+     * 作者删除自己的文章，仅允许删除草稿、退回和拒绝状态的文章。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteArticle(Long articleId, Long userId) {
         Article article = getArticleByIdForWrite(articleId);
@@ -249,7 +269,11 @@ public class ArticleServiceImpl implements ArticleService {
         log.info("Delete article: articleId={}, userId={}", articleId, userId);
     }
 
-        @Override
+    /**
+     * 管理员删除文章。
+     * 相比作者侧删除，允许覆盖更广的状态范围。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> adminDeleteArticle(Long articleId, Long adminId) {
         if (!SecurityUtils.isAdmin()) {
@@ -272,7 +296,10 @@ public class ArticleServiceImpl implements ArticleService {
         return Map.of("ok", true);
     }
 
-        @Override
+    /**
+     * 给审核服务提供文章快照，避免审核链路直接依赖内容库表结构。
+     */
+    @Override
     public ArticleReviewSnapshotDto getReviewSnapshot(Long articleId) {
         Article article = getArticleByIdForWrite(articleId);
         return ArticleReviewSnapshotDto.builder()
@@ -288,7 +315,10 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        @Override
+    /**
+     * 应用审核服务回调的审核结果。
+     */
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void applyReviewResult(Long articleId, com.platform.contract.content.dto.ApplyReviewResultReq req) {
         Article article = getArticleByIdForWrite(articleId);
@@ -300,7 +330,10 @@ public class ArticleServiceImpl implements ArticleService {
         applyReviewDecision(article, req.getAction(), req.getAdminId(), req.getReason(), null);
     }
 
-        @Override
+    /**
+     * 查询个人主页文章列表，并根据访问者身份决定可见范围。
+     */
+    @Override
     public UserProfileArticlesResp getUserProfileArticles(UserProfileArticlesQueryReq req) {
         if (req == null || req.getAuthorId() == null) {
             throw BusinessException.badRequest("authorId is required");
@@ -360,7 +393,10 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        private void checkReadPermission(Article article, Long currentUserId) {
+    /**
+     * 校验当前用户是否可以读取指定文章。
+     */
+    private void checkReadPermission(Article article, Long currentUserId) {
         if (article.getStatus() == ArticleStatus.APPROVED) {
             return;
         }
@@ -380,6 +416,9 @@ public class ArticleServiceImpl implements ArticleService {
         }
     }
 
+    /**
+     * 按 ID 查询文章；不存在时抛出 404。
+     */
     private Article getArticleByIdForWrite(Long articleId) {
         Article article = articleMapper.selectById(articleId);
         if (article == null) {
@@ -388,23 +427,35 @@ public class ArticleServiceImpl implements ArticleService {
         return article;
     }
 
+    /**
+     * 校验当前用户是否是文章作者。
+     */
     private void checkOwnership(Article article, Long userId) {
         if (!userId.equals(article.getAuthorId())) {
             throw BusinessException.forbidden("Access denied");
         }
     }
 
+    /**
+     * 优先读取 Redis 中的最新草稿内容，缺失时回退到数据库正文。
+     */
     private String getLatestContent(Long userId, Long articleId, String mysqlContent) {
         String redisContent = redisTemplate.opsForValue().get(buildDraftKey(userId, articleId));
         return redisContent != null ? redisContent : mysqlContent;
     }
 
-        private String getLatestReviewReason(Long articleId) {
+    /**
+     * 查询文章最近一次退回或拒绝原因。
+     */
+    private String getLatestReviewReason(Long articleId) {
         LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(articleId));
         return dto != null ? dto.getReason() : null;
     }
 
-        public void applyReviewDecisionEvent(ReviewDecidedEvent event) {
+    /**
+     * 消费审核结果事件，并把审核状态回写到文章。
+     */
+    public void applyReviewDecisionEvent(ReviewDecidedEvent event) {
         Article article = getArticleByIdForWrite(event.getArticleId());
         if (article.getStatus() != ArticleStatus.PENDING) {
             if (article.getStatus() == event.getToStatus()) {
@@ -416,7 +467,10 @@ public class ArticleServiceImpl implements ArticleService {
         applyReviewDecision(article, event.getAction(), event.getAdminId(), event.getReason(), event);
     }
 
-        private void applyReviewDecision(Article article,
+    /**
+     * 应用审核动作，并同步写入状态变更事件。
+     */
+    private void applyReviewDecision(Article article,
                                      com.platform.kernel.enums.ReviewAction action,
                                      Long adminId,
                                      String reason,
@@ -446,7 +500,10 @@ public class ArticleServiceImpl implements ArticleService {
                 article.getId(), adminId, action, toStatus);
     }
 
-        private ArticleStatusChangedEvent buildStatusChangedEvent(Article article,
+    /**
+     * 构造文章状态变更事件，供搜索、通知等派生服务消费。
+     */
+    private ArticleStatusChangedEvent buildStatusChangedEvent(Article article,
                                                               ArticleStatus fromStatus,
                                                               ArticleStatus toStatus) {
         return ArticleStatusChangedEvent.builder()
@@ -467,11 +524,17 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        private String newEventId(String prefix, Long articleId) {
+    /**
+     * 生成事件唯一标识。
+     */
+    private String newEventId(String prefix, Long articleId) {
         return prefix + ":" + articleId + ":" + UUID.randomUUID();
     }
 
-        private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {
+    /**
+     * 构造个人主页统计信息；非作者和非管理员只返回公开可见统计。
+     */
+    private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {
         long approved = countByStatus(authorId, ArticleStatus.APPROVED);
         int totalWordCount = articleMapper.selectList(
                         new LambdaQueryWrapper<Article>()
@@ -499,13 +562,19 @@ public class ArticleServiceImpl implements ArticleService {
                 .build();
     }
 
-        private long countByStatus(Long authorId, ArticleStatus status) {
+    /**
+     * 统计作者在指定状态下的文章数量。
+     */
+    private long countByStatus(Long authorId, ArticleStatus status) {
         return articleMapper.selectCount(new LambdaQueryWrapper<Article>()
                 .eq(Article::getAuthorId, authorId)
                 .eq(Article::getStatus, status));
     }
 
-        private ArticleStatus resolveProfileTabStatus(String tab, boolean canViewAll) {
+    /**
+     * 根据主页 tab 参数解析筛选状态。
+     */
+    private ArticleStatus resolveProfileTabStatus(String tab, boolean canViewAll) {
         if (!canViewAll) {
             return ArticleStatus.APPROVED;
         }
@@ -522,6 +591,9 @@ public class ArticleServiceImpl implements ArticleService {
         };
     }
 
+    /**
+     * 只为退回和拒绝的文章补充审核原因映射。
+     */
     private Map<Long, String> buildReviewReasonMap(List<Article> articles) {
         if (articles.isEmpty()) {
             return Collections.emptyMap();
@@ -536,11 +608,17 @@ public class ArticleServiceImpl implements ArticleService {
                 ));
     }
 
+    /**
+     * 生成 Redis 草稿键。
+     */
     private String buildDraftKey(Long userId, Long articleId) {
         return DRAFT_KEY_PREFIX + userId + ":" + articleId;
     }
 
-        private UserSummaryDto fetchUser(Long userId) {
+    /**
+     * 通过内部鉴权服务查询作者概要信息。
+     */
+    private UserSummaryDto fetchUser(Long userId) {
         List<UserSummaryDto> users = ResultUtils.requireOk(authInternalClient.batchUsers(
                 new BatchUserQueryReq(Collections.singletonList(userId))));
         return users.isEmpty() ? null : users.get(0);

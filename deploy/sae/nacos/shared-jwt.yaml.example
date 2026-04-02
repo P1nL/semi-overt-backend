@@ -1,0 +1,6 @@
+jwt:
+  token:
+    sign-key: replace-me
+    expiration: 120
+    remember-me-expiration: 10080
+    refresh-threshold: 30

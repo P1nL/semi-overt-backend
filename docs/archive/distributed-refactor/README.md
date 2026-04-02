@@ -5,8 +5,8 @@
 ## 新入口
 
 - 历史背景请看 [历史演进背景](../../05-appendices/01-historical-evolution.md)
-- 当前结构请看 [Architecture](../../02-architecture/README.md)
-- 当前运行和发布请看 [Development And Operations](../../03-development-and-operations/README.md)
+- 当前结构请看 [架构](../../02-architecture/README.md)
+- 当前运行和发布请看 [开发与运维](../../03-development-and-operations/README.md)
 
 ## 使用建议
 

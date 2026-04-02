@@ -61,6 +61,11 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,notificationDependencies
   health:
     livenessstate:
       enabled: true

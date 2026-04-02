@@ -1,7 +1,8 @@
 package com.platform.file.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.platform.web.support.config.CorsProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -12,20 +13,20 @@ import java.nio.file.Paths;
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-        @Value("${storage.upload-path}")
-    private String uploadPath;
+    private final StorageConfig storageConfig;
+    private final CorsProperties corsProperties;
+    private final Environment environment;
 
-        @Value("${storage.access-prefix}")
-    private String accessPrefix;
+    public WebMvcConfig(StorageConfig storageConfig, CorsProperties corsProperties, Environment environment) {
+        this.storageConfig = storageConfig;
+        this.corsProperties = corsProperties;
+        this.environment = environment;
+    }
 
-        @Override
+    @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins(
-                        "http://localhost:5173",
-                        "http://localhost:3000",
-                        "http://127.0.0.1:5173"
-                )
+                .allowedOrigins(corsProperties.getAllowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .exposedHeaders("New-Token", "Authorization")
@@ -33,17 +34,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .maxAge(3600);
     }
 
-    /**
-     * 閹跺﹥婀伴崷棰佺瑐娴肩姷娲拌ぐ鏇熸Ё鐏忓嫪璐熼棃娆愨偓浣界カ濠ф劘鐭惧鍕┾偓?     */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        Path uploadRoot = Paths.get(uploadPath).toAbsolutePath().normalize();
+        if (environment.matchesProfiles("prod") || !"local".equalsIgnoreCase(storageConfig.getType())) {
+            return;
+        }
+
+        Path uploadRoot = Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
         String resourceLocation = uploadRoot.toUri().toString();
         if (!resourceLocation.endsWith("/")) {
             resourceLocation = resourceLocation + "/";
         }
-        registry.addResourceHandler(accessPrefix + "/**")
+        registry.addResourceHandler(storageConfig.getAccessPrefix() + "/**")
                 .addResourceLocations(resourceLocation);
     }
 }
-

@@ -5,7 +5,6 @@ import lombok.Getter;
 /**
  * 业务异常类型，用于在服务层抛出带有业务语义的错误。
  */
-
 @Getter
 public class BusinessException extends RuntimeException {
 
@@ -23,56 +22,56 @@ public class BusinessException extends RuntimeException {
     }
 
     /**
-     * 执行请求。
+     * 构造 400 Bad Request 业务异常。
      */
     public static BusinessException badRequest(String message) {
         return new BusinessException(400, message);
     }
 
     /**
-     * 执行相关数据。
+     * 构造 401 Unauthorized 业务异常。
      */
     public static BusinessException unauthorized(String message) {
         return new BusinessException(401, message);
     }
 
     /**
-     * 执行相关数据。
+     * 构造 403 Forbidden 业务异常。
      */
     public static BusinessException forbidden(String message) {
         return new BusinessException(403, message);
     }
 
     /**
-     * 执行found。
+     * 构造 404 Not Found 业务异常。
      */
     public static BusinessException notFound(String message) {
         return new BusinessException(404, message);
     }
 
     /**
-     * 执行相关数据。
+     * 构造 409 Conflict 业务异常。
      */
     public static BusinessException conflict(String message) {
         return new BusinessException(409, message);
     }
 
     /**
-     * 执行manyrequests。
+     * 构造 429 Too Many Requests 业务异常。
      */
     public static BusinessException tooManyRequests(String message) {
         return new BusinessException(429, message);
     }
 
     /**
-     * 执行manyrequests。
+     * 构造 429 Too Many Requests 业务异常，并附带额外数据。
      */
     public static BusinessException tooManyRequests(String message, Object details) {
         return new BusinessException(429, message, details);
     }
 
     /**
-     * 执行错误。
+     * 构造 500 Internal Server Error 业务异常。
      */
     public static BusinessException serverError(String message) {
         return new BusinessException(500, message);

@@ -5,4 +5,4 @@
 请改看：
 
 - [模块边界](../02-architecture/01-module-boundaries.md)
-- [Architecture 索引](../02-architecture/README.md)
+- [架构索引](../02-architecture/README.md)

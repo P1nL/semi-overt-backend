@@ -1,0 +1,6 @@
+storage:
+  type: oss
+  oss:
+    endpoint: https://oss-cn-hangzhou.aliyuncs.com
+    bucket: replace-me
+    public-base-url: https://cdn.example.com

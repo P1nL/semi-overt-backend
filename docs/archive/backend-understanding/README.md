@@ -5,8 +5,8 @@
 ## 新入口
 
 - 关键文件导读已迁移到 [关键文件深度导读](../../05-appendices/02-file-level-deep-dive.md)
-- API、权限和内部协作已迁移到 [Reference](../../04-reference/README.md)
-- 模块与链路说明已迁移到 [Architecture](../../02-architecture/README.md)
+- API、权限和内部协作已迁移到 [参考手册](../../04-reference/README.md)
+- 模块与链路说明已迁移到 [架构](../../02-architecture/README.md)
 
 ## 如何使用这个旧目录
 

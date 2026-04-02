@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: db-migration
+  main:
+    web-application-type: none
+    banner-mode: "off"
+
+logging:
+  level:
+    org.flywaydb: info

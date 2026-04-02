@@ -64,6 +64,7 @@ docker compose up -d
 7. `gateway-service`
 
 运行日志写入 `.codex-runtime/logs`，PID 写入 `.codex-runtime/pids`。
+排查最近错误可直接运行 `.\scripts\dev-logs.ps1`；要看原始日志尾部可运行 `.\scripts\dev-logs.ps1 -All`。
 
 ### 3. 跑通冒烟
 
@@ -82,7 +83,7 @@ docker compose up -d
 
 ### 起步
 
-- [Start Here 索引](./docs/01-start-here/README.md)
+- [起步索引](./docs/01-start-here/README.md)
 - [项目概览](./docs/01-start-here/01-project-overview.md)
 - [角色化阅读路径](./docs/01-start-here/02-reading-paths.md)
 - [首次接手与改需求入口](./docs/01-start-here/03-first-day-handoff.md)
@@ -90,7 +91,7 @@ docker compose up -d
 
 ### 架构
 
-- [Architecture 索引](./docs/02-architecture/README.md)
+- [架构索引](./docs/02-architecture/README.md)
 - [模块边界](./docs/02-architecture/01-module-boundaries.md)
 - [核心链路与状态流转](./docs/02-architecture/02-core-flow-and-state.md)
 - [事件与派生视图](./docs/02-architecture/03-events-and-derived-views.md)
@@ -126,12 +127,15 @@ docker compose up -d
 ## 常见入口
 
 - 本地启动脚本：[scripts/dev-up.ps1](./scripts/dev-up.ps1)
+- 本地日志排查脚本：[scripts/dev-logs.ps1](./scripts/dev-logs.ps1)
 - 本地停止脚本：[scripts/dev-down.ps1](./scripts/dev-down.ps1)
 - 冒烟脚本：[scripts/smoke-test.ps1](./scripts/smoke-test.ps1)
 - Linux 启动脚本：[scripts/run-service.sh](./scripts/run-service.sh)
 - 服务器环境变量样例：[scripts/env/server.env.example](./scripts/env/server.env.example)
 - 本地 SQL 初始化：[deploy/sql/init.sql](./deploy/sql/init.sql)
+- SQL 初始化与迁移策略：[deploy/sql/README.md](./deploy/sql/README.md)
 - Nginx 基线：[deploy/nginx/README.md](./deploy/nginx/README.md)
+- SAE / MSE / OSS 基线：[deploy/sae/README.md](./deploy/sae/README.md)
 - 架构约束测试：[architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java](./architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java)
 
 ## 当前事实边界

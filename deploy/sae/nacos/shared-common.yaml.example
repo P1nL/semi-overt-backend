@@ -1,0 +1,4 @@
+platform:
+  cors:
+    allowed-origins:
+      - https://app.example.com

@@ -1,11 +1,12 @@
 package com.platform.file.service.impl;
 
 import com.platform.file.api.resp.UploadResp;
+import com.platform.file.config.StorageConfig;
+import com.platform.file.service.ObjectStorageService;
+import com.platform.file.service.UploadService;
 import com.platform.kernel.enums.BizType;
 import com.platform.kernel.exception.BusinessException;
-import com.platform.file.service.UploadService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,11 +14,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,19 +24,19 @@ import java.util.UUID;
 public class UploadServiceImpl implements UploadService {
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
-    private static final Set<String> ALLOWED_MIME_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
-    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
     private static final int SAMPLE_SIZE = 20;
 
     static {
         ImageIO.scanForPlugins();
     }
 
-    @Value("${storage.upload-path}")
-    private String uploadBaseDir;
+    private final ObjectStorageService objectStorageService;
+    private final StorageConfig storageConfig;
 
-    @Value("${storage.access-prefix}")
-    private String staticUrlPrefix;
+    public UploadServiceImpl(ObjectStorageService objectStorageService, StorageConfig storageConfig) {
+        this.objectStorageService = objectStorageService;
+        this.storageConfig = storageConfig;
+    }
 
     @Override
     public UploadResp upload(MultipartFile file, String bizType, Long articleId) {
@@ -54,13 +52,15 @@ public class UploadServiceImpl implements UploadService {
                     "Unsupported biz type: " + bizType + ", expected AVATAR / COVER / ARTICLE_IMAGE");
         }
 
-        if (file.getSize() > MAX_FILE_SIZE) {
+        long maxFileSize = storageConfig.getMaxFileSize() > 0 ? storageConfig.getMaxFileSize() : 5 * 1024 * 1024;
+        if (file.getSize() > maxFileSize) {
             throw BusinessException.badRequest(
-                    "File size must not exceed 5MB, current size is " + (file.getSize() / 1024) + "KB");
+                    "File size must not exceed " + (maxFileSize / 1024 / 1024) + "MB, current size is " + (file.getSize() / 1024) + "KB");
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase())) {
+        List<String> allowedTypes = storageConfig.getAllowedTypes();
+        if (contentType == null || allowedTypes == null || allowedTypes.stream().noneMatch(contentType::equalsIgnoreCase)) {
             throw BusinessException.badRequest("Only JPG / PNG / WebP images are supported");
         }
 
@@ -86,26 +86,17 @@ public class UploadServiceImpl implements UploadService {
         String dominantColor = biz == BizType.COVER ? extractDominantColor(image) : null;
 
         LocalDate today = LocalDate.now();
-        String relativePath = String.format("%d/%02d/%02d/%s.%s",
+        String objectKey = String.format("%d/%02d/%02d/%s.%s",
                 today.getYear(), today.getMonthValue(), today.getDayOfMonth(), UUID.randomUUID(), ext);
 
-        Path uploadRoot = Paths.get(uploadBaseDir).toAbsolutePath().normalize();
-        Path physicalPath = uploadRoot.resolve(relativePath).normalize();
-        if (!physicalPath.startsWith(uploadRoot)) {
-            throw BusinessException.serverError("Invalid storage path");
-        }
-
+        String accessUrl;
         try {
-            Files.createDirectories(physicalPath.getParent());
-            try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, physicalPath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            accessUrl = objectStorageService.store(objectKey, file);
         } catch (IOException e) {
-            log.error("Failed to write image to disk: {}", physicalPath, e);
+            log.error("Failed to persist image object: {}", objectKey, e);
             throw BusinessException.serverError("Failed to save uploaded image");
         }
 
-        String accessUrl = staticUrlPrefix + "/" + relativePath;
         log.info("Upload succeeded: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
 
         return UploadResp.builder()

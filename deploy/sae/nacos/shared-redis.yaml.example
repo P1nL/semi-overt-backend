@@ -1,0 +1,6 @@
+spring:
+  data:
+    redis:
+      host: replace-with-redis-endpoint
+      port: 6379
+      database: 0

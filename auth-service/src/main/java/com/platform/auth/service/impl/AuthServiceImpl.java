@@ -28,6 +28,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 认证服务实现，负责注册、登录和密码找回主流程。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -52,6 +55,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${platform.frontend-base-url:http://localhost:5173}")
     private String frontendBaseUrl;
 
+    /**
+     * 注册新用户，并立即返回登录态。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AuthResp register(RegisterReq req) {
@@ -78,6 +84,9 @@ public class AuthServiceImpl implements AuthService {
         return buildAuthResp(token, user);
     }
 
+    /**
+     * 使用用户名或邮箱登录，校验成功后签发 token。
+     */
     @Override
     public AuthResp login(LoginReq req) {
         User user = req.getAccount().contains("@")
@@ -99,6 +108,10 @@ public class AuthServiceImpl implements AuthService {
         return buildAuthResp(token, user);
     }
 
+    /**
+     * 发起找回密码流程。
+     * 已发送过邮件的邮箱会进入冷却期，未知邮箱则静默忽略以避免泄露用户是否存在。
+     */
     @Override
     public void forgotPassword(ForgotPasswordReq req) {
         String email = req.getEmail().toLowerCase().trim();
@@ -136,6 +149,9 @@ public class AuthServiceImpl implements AuthService {
         log.info("Reset email sent: userId={}, email={}", user.getId(), email);
     }
 
+    /**
+     * 根据重置 token 更新用户密码，并销毁已使用的重置凭证。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void resetPassword(ResetPasswordReq req) {
@@ -157,22 +173,37 @@ public class AuthServiceImpl implements AuthService {
         log.info("Password reset: userId={}", userId);
     }
 
+    /**
+     * 判断用户名是否已被占用。
+     */
     private boolean existsByUsername(String username) {
         return userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getUsername, username)) > 0;
     }
 
+    /**
+     * 判断邮箱是否已被注册。
+     */
     private boolean existsByEmail(String email) {
         return userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getEmail, email)) > 0;
     }
 
+    /**
+     * 按用户名查询用户。
+     */
     private User findByUsername(String username) {
         return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
     }
 
+    /**
+     * 按邮箱查询用户。
+     */
     private User findByEmail(String email) {
         return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
     }
 
+    /**
+     * 统一构造认证成功后的返回体。
+     */
     private AuthResp buildAuthResp(String token, User user) {
         return AuthResp.builder()
                 .token(token)
@@ -185,6 +216,9 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    /**
+     * 发送重置密码邮件，把一次性 token 拼接到前端重置页面链接中。
+     */
     private void sendResetEmail(String username, String toEmail, String resetToken) {
         String resetLink = UriComponentsBuilder
                 .fromUriString(frontendBaseUrl)

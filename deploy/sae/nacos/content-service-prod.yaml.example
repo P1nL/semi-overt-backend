@@ -1,0 +1,9 @@
+platform:
+  submit-review-cooldown-minutes: 30
+  draft-cache-ttl-days: 7
+  draft-flush-interval-minutes: 5
+
+management:
+  endpoint:
+    health:
+      show-details: never

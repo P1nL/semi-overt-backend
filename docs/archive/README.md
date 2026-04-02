@@ -6,15 +6,15 @@
 
 请优先从下面这些目录开始：
 
-- [Start Here](../01-start-here/README.md)
-- [Architecture](../02-architecture/README.md)
-- [Development And Operations](../03-development-and-operations/README.md)
-- [Reference](../04-reference/README.md)
-- [Appendices](../05-appendices/README.md)
+- [起步](../01-start-here/README.md)
+- [架构](../02-architecture/README.md)
+- [开发与运维](../03-development-and-operations/README.md)
+- [参考手册](../04-reference/README.md)
+- [附录](../05-appendices/README.md)
 
 ## 旧路径现在代表什么
 
 - [backend-understanding](./backend-understanding/README.md)：旧“逐文件导读”路径，现已迁移到附录和参考手册
 - [distributed-refactor](./distributed-refactor/README.md)：旧历史改造资料路径，现已迁移到附录中的历史演进背景
 
-如果你是从旧链接进入本目录，建议直接跳转到 [Appendices](../05-appendices/README.md)。
+如果你是从旧链接进入本目录，建议直接跳转到 [附录](../05-appendices/README.md)。

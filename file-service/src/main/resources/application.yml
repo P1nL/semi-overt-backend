@@ -24,6 +24,7 @@ server:
   port: ${SERVER_PORT:8085}
 
 storage:
+  type: ${STORAGE_TYPE:local}
   upload-path: ${STORAGE_UPLOAD_PATH:E:/nowdata/app/uploads}
   access-prefix: ${STORAGE_ACCESS_PREFIX:/static/uploads}
   allowed-types:
@@ -31,6 +32,16 @@ storage:
     - image/png
     - image/webp
   max-file-size: ${STORAGE_MAX_FILE_SIZE:10485760}
+  oss:
+    endpoint: ${OSS_ENDPOINT:}
+    bucket: ${OSS_BUCKET:}
+    access-key-id: ${OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+    public-base-url: ${OSS_PUBLIC_BASE_URL:}
+
+platform:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
 
 management:
   endpoints:
@@ -41,6 +52,11 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,fileStorage
   health:
     livenessstate:
       enabled: true

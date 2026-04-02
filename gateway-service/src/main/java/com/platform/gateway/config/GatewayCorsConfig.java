@@ -1,5 +1,6 @@
 package com.platform.gateway.config;
 
+import com.platform.web.support.config.CorsProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -8,24 +9,13 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-/**
- * 网关跨域配置。
- * 统一在网关层放行本地开发环境前端域名，避免各下游服务重复维护 CORS 规则。
- */
 @Configuration
 public class GatewayCorsConfig {
 
-    /**
-     * 注册全局 CORS 过滤器。
-     */
     @Bean
-    public CorsWebFilter corsWebFilter() {
+    public CorsWebFilter corsWebFilter(CorsProperties corsProperties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://127.0.0.1:5173"
-        ));
+        configuration.setAllowedOrigins(corsProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.addAllowedHeader("*");
         configuration.setAllowCredentials(true);

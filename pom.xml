@@ -22,6 +22,7 @@
         <module>platform-kernel</module>
         <module>platform-web-support</module>
         <module>platform-events</module>
+        <module>db-migration</module>
         <module>auth-contract</module>
         <module>content-contract</module>
         <module>review-contract</module>
@@ -42,6 +43,7 @@
         <springdoc.version>2.5.0</springdoc.version>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <jjwt.version>0.12.7</jjwt.version>
+        <aliyun.oss.version>3.17.4</aliyun.oss.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
     </properties>
 
@@ -85,6 +87,11 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aliyun.oss</groupId>
+                <artifactId>aliyun-sdk-oss</artifactId>
+                <version>${aliyun.oss.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

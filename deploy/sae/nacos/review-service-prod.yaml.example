@@ -1,0 +1,10 @@
+platform:
+  events:
+    outbox-publish-delay-ms: 5000
+    retry-delay-ms: 30000
+    consumer-max-retries: 3
+
+management:
+  endpoint:
+    health:
+      show-details: never

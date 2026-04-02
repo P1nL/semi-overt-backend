@@ -5,4 +5,4 @@
 请改看：
 
 - [项目概览](../01-start-here/01-project-overview.md)
-- [Start Here 索引](../01-start-here/README.md)
+- [起步索引](../01-start-here/README.md)

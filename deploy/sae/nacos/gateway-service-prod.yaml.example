@@ -1,0 +1,9 @@
+platform:
+  cors:
+    allowed-origins:
+      - https://app.example.com
+
+management:
+  endpoint:
+    health:
+      show-details: never

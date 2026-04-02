@@ -1,0 +1,8 @@
+platform:
+  frontend-base-url: https://app.example.com
+  reset-pwd-token-ttl-minutes: 15
+
+management:
+  endpoint:
+    health:
+      show-details: never

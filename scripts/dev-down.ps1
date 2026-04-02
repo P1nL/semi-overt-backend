@@ -8,6 +8,8 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
+$utf8EncodingName = "UTF8"
+
 function Write-Step {
     param([string]$Message)
     Write-Host "==> $Message" -ForegroundColor Cyan
@@ -45,7 +47,7 @@ $pidRoot = Join-Path $repoRoot ".codex-runtime\pids"
 if (Test-Path $pidRoot) {
     Get-ChildItem -Path $pidRoot -Filter *.pid | ForEach-Object {
         $service = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
-        $pidValue = Get-Content $_.FullName -ErrorAction SilentlyContinue
+        $pidValue = Get-Content -Path $_.FullName -Encoding $utf8EncodingName -ErrorAction SilentlyContinue
         if (-not [string]::IsNullOrWhiteSpace($pidValue)) {
             $process = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
             if ($process) {

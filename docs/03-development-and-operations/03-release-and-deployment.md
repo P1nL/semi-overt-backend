@@ -50,6 +50,13 @@ cp ./scripts/env/server.env.example ./scripts/env/server.env
 - [deploy/nginx/README.md](../../deploy/nginx/README.md)
 - [deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf)
 
+云上 SAE / MSE / OSS 基线位于：
+
+- [deploy/sae/README.md](../../deploy/sae/README.md)
+- [deploy/sae/service-matrix.md](../../deploy/sae/service-matrix.md)
+- [deploy/sae/runbook.md](../../deploy/sae/runbook.md)
+- [deploy/sql/README.md](../../deploy/sql/README.md)
+
 链路是：
 
 `Nginx -> gateway-service -> internal services`

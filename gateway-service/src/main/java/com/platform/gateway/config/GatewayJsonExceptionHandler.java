@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 缃戝叧缁熶竴寮傚父杈撳嚭澶勭悊鍣ㄣ€?
- * 鎶婅矾鐢便€佽秴鏃躲€佹潈闄愮瓑寮傚父杞崲涓虹ǔ瀹氱殑 JSON 鍝嶅簲锛岄伩鍏嶉粯璁?HTML 閿欒椤佃繑鍥炵粰鍓嶇銆?
+ * 网关统一异常输出处理器。
+ * 把路由、超时、权限等异常转换为稳定的 JSON 响应，避免默认 HTML 错误页返回给前端。
  */
 @Slf4j
 @Component
@@ -33,7 +33,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     private final ObjectMapper objectMapper;
 
     /**
-     * 澶勭悊缃戝叧灞傛湭鎹曡幏寮傚父骞惰緭鍑虹粺涓€閿欒缁撴瀯銆?
+     * 处理网关层未捕获异常，并输出统一错误结构。
      */
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
@@ -56,7 +56,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 鏍规嵁寮傚父绫诲瀷鎺ㄦ柇 HTTP 鐘舵€佺爜銆?
+     * 根据异常类型推断 HTTP 状态码。
      */
     private HttpStatus resolveStatus(Throwable ex) {
         if (ex instanceof ResponseStatusException responseStatusException) {
@@ -72,7 +72,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 鏍规嵁鐘舵€佺爜鏋勯€犵粺涓€ Result 鍝嶅簲浣撱€?
+     * 按状态码构造统一 Result 响应体。
      */
     private Result<?> buildResult(HttpStatus status) {
         return switch (status) {
@@ -88,7 +88,7 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     /**
-     * 搴忓垪鍖栭敊璇搷搴斾綋銆?
+     * 把响应体序列化为 JSON；序列化失败时返回兜底 JSON 字符串。
      */
     private String toJson(Result<?> result) {
         try {
@@ -98,4 +98,3 @@ public class GatewayJsonExceptionHandler implements ErrorWebExceptionHandler {
         }
     }
 }
-

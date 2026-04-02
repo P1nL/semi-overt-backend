@@ -18,13 +18,12 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 /**
  * 全局异常处理器，统一把框架异常和业务异常转换为标准响应。
  */
-
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理业务异常，并按异常携带的状态码返回统一响应。
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<?>> handleBusinessException(BusinessException e) {
@@ -34,7 +33,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理 {@link MethodArgumentNotValidException}，提取首个字段校验错误。
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<?>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
@@ -46,7 +45,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理参数绑定异常，返回首个字段错误信息。
      */
     @ExceptionHandler(BindException.class)
     public ResponseEntity<Result<?>> handleBindException(BindException e) {
@@ -58,7 +57,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理约束校验异常，返回首个校验失败信息。
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Result<?>> handleConstraintViolation(ConstraintViolationException e) {
@@ -70,7 +69,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理请求体格式错误，例如 JSON 结构不合法或字段类型不匹配。
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<?>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
@@ -78,7 +77,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理认证异常，通常表示缺少凭证或 token 无效。
      */
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Result<?>> handleAuthenticationException(AuthenticationException e) {
@@ -87,7 +86,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理权限不足异常。
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Result<?>> handleAccessDeniedException(AccessDeniedException e) {
@@ -96,7 +95,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 处理上传文件超限异常。
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Result<?>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
@@ -104,7 +103,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理对应异常并返回统一响应。
+     * 兜底处理未被显式捕获的异常，避免把堆栈直接暴露给客户端。
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<?>> handleException(Exception e) {
@@ -114,7 +113,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 解析状态。
+     * 将业务异常中的状态码安全转换为 {@link HttpStatus}。
      */
     private HttpStatus resolveStatus(Integer code) {
         if (code == null) {
