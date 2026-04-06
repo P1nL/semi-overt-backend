@@ -36,9 +36,9 @@ import java.util.stream.Collectors;
 public class HomeServiceImpl implements HomeService {
 
     private static final int CARD_PREVIEW_MAX_LENGTH = 120;
-    private static final int HERO_TOTAL = 5;
+    private static final int HERO_TOTAL = 11;
     private static final int SECTION_LIMIT = 6;
-    private static final String HERO_CACHE_PREFIX = "home:hero:";
+    private static final String HERO_CACHE_PREFIX = "home:hero:v";
 
     private final ArticleMapper articleMapper;
     private final StringRedisTemplate redisTemplate;
@@ -84,7 +84,7 @@ public class HomeServiceImpl implements HomeService {
     }
 
     private List<Article> getOrCacheHeroArticles() {
-        String cacheKey = HERO_CACHE_PREFIX + LocalDate.now();
+        String cacheKey = HERO_CACHE_PREFIX + HERO_TOTAL + ":" + LocalDate.now();
 
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey);
