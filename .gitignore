@@ -32,6 +32,13 @@ build/
 ### VS Code ###
 .vscode/
 
+### AI Tools ###
+.opencode/
+.agents/
+.continue/
+.junie/
+.trae/
+
 # Local runtime overrides
 .codex-runtime/
 .runtime/
