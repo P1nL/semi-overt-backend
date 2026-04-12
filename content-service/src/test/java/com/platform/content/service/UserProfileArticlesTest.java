@@ -70,7 +70,6 @@ class UserProfileArticlesTest {
         when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder().id(8L).username("writer").nickname("Writer").avatarUrl("/a.png").build()
         )));
-        when(articleMapper.selectCount(any())).thenReturn(1L);
         when(articleMapper.selectList(any())).thenReturn(List.of(approved));
         when(articleMapper.selectPage(any(), any())).thenReturn(pageResult);
 
@@ -104,6 +103,11 @@ class UserProfileArticlesTest {
         Article rejected = buildArticle(12L, 8L, ArticleStatus.REJECTED);
         rejected.setContent("rejected content");
         rejected.setWordCount(120);
+        Article approved1 = buildArticle(21L, 8L, ArticleStatus.APPROVED);
+        Article approved2 = buildArticle(22L, 8L, ArticleStatus.APPROVED);
+        Article draft1 = buildArticle(23L, 8L, ArticleStatus.DRAFT);
+        Article draft2 = buildArticle(24L, 8L, ArticleStatus.DRAFT);
+        Article draft3 = buildArticle(25L, 8L, ArticleStatus.DRAFT);
 
         Page<Article> pageResult = new Page<>(1, 10, 1);
         pageResult.setRecords(List.of(rejected));
@@ -111,13 +115,14 @@ class UserProfileArticlesTest {
         when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder().id(8L).username("writer").nickname("Writer").avatarUrl("/a.png").build()
         )));
-        when(articleMapper.selectCount(any())).thenReturn(2L, 1L, 0L, 1L, 3L);
-        when(articleMapper.selectList(any())).thenReturn(List.of(rejected));
+        when(articleMapper.selectList(any())).thenReturn(List.of(
+                approved1, approved2, rejected, draft1, draft2, draft3
+        ));
         when(articleMapper.selectPage(any(), any())).thenReturn(pageResult);
-        when(reviewInternalClient.latestReason(12L)).thenReturn(Result.ok(LatestReviewReasonDto.builder()
+        when(reviewInternalClient.batchLatestReasons(any())).thenReturn(Result.ok(List.of(LatestReviewReasonDto.builder()
                 .articleId(12L)
                 .reason("needs more detail")
-                .build()));
+                .build())));
 
         try (MockedStatic<SecurityUtils> securityUtils = mockStatic(SecurityUtils.class)) {
             securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(8L);
@@ -155,13 +160,12 @@ class UserProfileArticlesTest {
         when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder().id(8L).username("writer").nickname("Writer").avatarUrl("/a.png").build()
         )));
-        when(articleMapper.selectCount(any())).thenReturn(2L, 0L, 1L, 0L, 1L);
         when(articleMapper.selectList(any())).thenReturn(List.of(returned));
         when(articleMapper.selectPage(any(), any())).thenReturn(pageResult);
-        when(reviewInternalClient.latestReason(13L)).thenReturn(Result.ok(LatestReviewReasonDto.builder()
+        when(reviewInternalClient.batchLatestReasons(any())).thenReturn(Result.ok(List.of(LatestReviewReasonDto.builder()
                 .articleId(13L)
                 .reason("revise intro")
-                .build()));
+                .build())));
 
         try (MockedStatic<SecurityUtils> securityUtils = mockStatic(SecurityUtils.class)) {
             securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(8L);
