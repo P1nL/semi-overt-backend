@@ -11,6 +11,7 @@ import com.platform.kernel.exception.BusinessException;
 import com.platform.kernel.enums.UserRole;
 import com.platform.auth.mapper.UserMapper;
 import com.platform.auth.service.AuthService;
+import com.platform.auth.service.TurnstileService;
 import com.platform.auth.util.JwtHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtHelper jwtHelper;
     private final StringRedisTemplate redisTemplate;
     private final JavaMailSender mailSender;
+    private final TurnstileService turnstileService;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
@@ -61,6 +63,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AuthResp register(RegisterReq req) {
+        turnstileService.verify(req.getCfTurnstileToken());
+
         if (RESERVED_NAMES.contains(req.getUsername().toLowerCase())) {
             throw new BusinessException(400, "Username is reserved");
         }
