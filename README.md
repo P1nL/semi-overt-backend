@@ -120,6 +120,13 @@ docker compose up -d
 - [关键文件深度导读](./docs/05-appendices/02-file-level-deep-dive.md)
 - [术语表](./docs/05-appendices/03-glossary.md)
 
+### 全栈新人指南
+
+- [全栈新人指南索引](./docs/06-fullstack-guide/README.md)
+- [项目全景：技术栈、模块关系与阅读路径](./docs/06-fullstack-guide/01-project-panorama.md)
+- [架构设计分析](./docs/06-fullstack-guide/02-architecture-analysis.md)
+- [登录功能全链路追踪](./docs/06-fullstack-guide/03-login-flow-trace.md)
+
 ### 兼容入口
 
 - [旧 `archive` 入口迁移说明](./docs/archive/README.md)
