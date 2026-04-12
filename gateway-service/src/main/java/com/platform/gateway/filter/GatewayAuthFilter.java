@@ -63,6 +63,12 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                                 Result.forbidden("没有审核权限"));
                     }
 
+                    if (path.startsWith("/api/v1/admin/")
+                            && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
+                        return writeResult(baseExchange, HttpStatus.FORBIDDEN,
+                                Result.forbidden("需要管理员权限"));
+                    }
+
                     return chain.filter(authContext.exchange());
                 });
     }
