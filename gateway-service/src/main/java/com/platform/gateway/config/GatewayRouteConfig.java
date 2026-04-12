@@ -38,7 +38,8 @@ public class GatewayRouteConfig {
                 .route("content-service", r -> r
                         .path("/api/v1/home",
                                 "/api/v1/categories/**",
-                                "/api/v1/articles/**")
+                                "/api/v1/articles/**",
+                                "/api/v1/admin/articles/**")
                         .filters(f -> applyRateLimit(f, defaultRedisRateLimiter, clientRateLimiterKeyResolver))
                         .uri("lb://content-service"))
                 .route("review-service", r -> r
