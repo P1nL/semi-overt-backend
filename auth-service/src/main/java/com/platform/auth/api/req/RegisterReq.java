@@ -23,4 +23,7 @@ public class RegisterReq {
     @NotBlank(message = "Password is required")
     @Size(min = 8, max = 20, message = "Password length must be 8-20 characters")
     private String password;
+
+    @NotBlank(message = "Captcha token is required")
+    private String cfTurnstileToken;
 }
