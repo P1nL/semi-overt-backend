@@ -55,12 +55,16 @@ jwt:
   token:
     expiration: ${JWT_EXPIRATION:120}
     remember-me-expiration: ${JWT_REMEMBER_ME_EXPIRATION:10080}
-    sign-key: ${JWT_SIGN_KEY:bXktc3VwZXItc2VjdXJlLWtleS1mb3Itand0LXNpZ25pbmctbmVlZHMtdG8tYmUtbG9uZy1lbm91Z2g=}
+    # [安全] 必须通过环境变量或 Nacos 配置真实密钥，Base64 编码后至少 32 字节
+    sign-key: ${JWT_SIGN_KEY}
     refresh-threshold: ${JWT_REFRESH_THRESHOLD:30}
 
 platform:
   reset-pwd-token-ttl-minutes: ${RESET_PWD_TOKEN_TTL_MINUTES:15}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  turnstile:
+    # [安全] 必须通过环境变量配置 Turnstile Secret Key，禁止使用默认值
+    secret-key: ${TURNSTILE_SECRET_KEY}
   feign:
     connect-timeout-ms: ${FEIGN_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${FEIGN_READ_TIMEOUT_MS:5000}

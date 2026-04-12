@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.contract.content.dto.ArticleReviewSnapshotDto;
 import com.platform.contract.auth.dto.BatchUserQueryReq;
+import com.platform.contract.review.dto.BatchLatestReviewReasonReq;
 import com.platform.contract.review.dto.LatestReviewReasonDto;
 import com.platform.contract.content.dto.UserProfileArticleItemDto;
 import com.platform.contract.content.dto.UserProfileArticleStatsDto;
@@ -39,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -445,7 +447,8 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     /**
-     * 查询文章最近一次退回或拒绝原因。
+     * 查询单篇文章最近一次退回或拒绝原因。
+     * 仅用于 getArticleDetail 单篇详情场景；列表场景请使用 buildReviewReasonMap（批量接口）。
      */
     private String getLatestReviewReason(Long articleId) {
         LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(articleId));
@@ -455,6 +458,7 @@ public class ArticleServiceImpl implements ArticleService {
     /**
      * 消费审核结果事件，并把审核状态回写到文章。
      */
+    @Transactional(rollbackFor = Exception.class)
     public void applyReviewDecisionEvent(ReviewDecidedEvent event) {
         Article article = getArticleByIdForWrite(event.getArticleId());
         if (article.getStatus() != ArticleStatus.PENDING) {
@@ -533,17 +537,28 @@ public class ArticleServiceImpl implements ArticleService {
 
     /**
      * 构造个人主页统计信息；非作者和非管理员只返回公开可见统计。
+     * 使用单条 SQL 查询 status + wordCount 两列，内存聚合各状态计数和总字数，
+     * 替代原来的 5×COUNT + 1×SELECT(wordCount) 共 6 次查询。
      */
     private UserProfileArticleStatsDto buildProfileStats(Long authorId, boolean canViewAll) {
-        long approved = countByStatus(authorId, ArticleStatus.APPROVED);
-        int totalWordCount = articleMapper.selectList(
-                        new LambdaQueryWrapper<Article>()
-                                .eq(Article::getAuthorId, authorId)
-                                .eq(Article::getStatus, ArticleStatus.APPROVED)
-                                .select(Article::getWordCount))
-                .stream()
-                .mapToInt(article -> article.getWordCount() != null ? article.getWordCount() : 0)
-                .sum();
+        // MyBatis-Plus @TableLogic 会自动追加 deleted = 0，无需手动指定
+        List<Article> allArticles = articleMapper.selectList(
+                new LambdaQueryWrapper<Article>()
+                        .eq(Article::getAuthorId, authorId)
+                        .select(Article::getStatus, Article::getWordCount));
+
+        long approved = 0, pending = 0, returned = 0, rejected = 0, draft = 0;
+        int totalWordCount = 0;
+        for (Article a : allArticles) {
+            totalWordCount += (a.getWordCount() != null ? a.getWordCount() : 0);
+            switch (a.getStatus()) {
+                case APPROVED -> approved++;
+                case PENDING -> pending++;
+                case RETURNED -> returned++;
+                case REJECTED -> rejected++;
+                case DRAFT -> draft++;
+            }
+        }
 
         if (!canViewAll) {
             return UserProfileArticleStatsDto.builder()
@@ -554,16 +569,17 @@ public class ArticleServiceImpl implements ArticleService {
 
         return UserProfileArticleStatsDto.builder()
                 .approved(approved)
-                .pending(countByStatus(authorId, ArticleStatus.PENDING))
-                .returned(countByStatus(authorId, ArticleStatus.RETURNED))
-                .rejected(countByStatus(authorId, ArticleStatus.REJECTED))
-                .draft(countByStatus(authorId, ArticleStatus.DRAFT))
+                .pending(pending)
+                .returned(returned)
+                .rejected(rejected)
+                .draft(draft)
                 .totalWordCount(totalWordCount)
                 .build();
     }
 
     /**
      * 统计作者在指定状态下的文章数量。
+     * 注意：buildProfileStats 已迁移至单次查询聚合，此方法暂保留供其他潜在调用方使用。
      */
     private long countByStatus(Long authorId, ArticleStatus status) {
         return articleMapper.selectCount(new LambdaQueryWrapper<Article>()
@@ -593,19 +609,35 @@ public class ArticleServiceImpl implements ArticleService {
 
     /**
      * 只为退回和拒绝的文章补充审核原因映射。
+     * 使用批量接口一次性查询，避免 N+1 远程调用。
      */
     private Map<Long, String> buildReviewReasonMap(List<Article> articles) {
         if (articles.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        return articles.stream()
+        List<Long> needReasonIds = articles.stream()
                 .filter(article -> article.getStatus() == ArticleStatus.RETURNED
                         || article.getStatus() == ArticleStatus.REJECTED)
-                .collect(Collectors.toMap(
-                        Article::getId,
-                        article -> getLatestReviewReason(article.getId())
-                ));
+                .map(Article::getId)
+                .collect(Collectors.toList());
+
+        if (needReasonIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<LatestReviewReasonDto> reasons = ResultUtils.requireOk(
+                reviewInternalClient.batchLatestReasons(new BatchLatestReviewReasonReq(needReasonIds)));
+
+        Map<Long, String> result = new HashMap<>();
+        if (reasons != null) {
+            for (LatestReviewReasonDto dto : reasons) {
+                if (dto.getReason() != null) {
+                    result.put(dto.getArticleId(), dto.getReason());
+                }
+            }
+        }
+        return result;
     }
 
     /**

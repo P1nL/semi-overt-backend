@@ -79,10 +79,8 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> handleWhitelistedRequest(AuthContext authContext, GatewayFilterChain chain) {
-        if (authContext.status() == AuthStatus.INVALID_TOKEN) {
-            return writeResult(authContext.exchange(), HttpStatus.UNAUTHORIZED,
-                    Result.unauthorized("Authentication required or token is invalid"));
-        }
+        // 白名单路径对无效/过期 token 容错：当作未登录放行，不返回 401
+        // 这样带着过期 token 的用户仍能正常浏览公开内容
         return chain.filter(authContext.exchange());
     }
 

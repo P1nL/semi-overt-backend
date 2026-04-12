@@ -264,7 +264,7 @@ function Reset-LogFile {
 function Invoke-HttpGet {
     param([string]$Uri)
 
-    return Invoke-WebRequest -Uri $Uri -Method Get -TimeoutSec 5
+    return Invoke-WebRequest -Uri $Uri -Method Get -TimeoutSec 5 -UseBasicParsing
 }
 
 function Test-ServiceHealthEndpoint {

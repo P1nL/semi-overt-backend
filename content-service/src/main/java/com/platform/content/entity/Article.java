@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.enums.DurationCategory;
 import lombok.Data;
@@ -33,6 +34,10 @@ public class Article {
     private Integer submitCount;
     private LocalDateTime lastSubmittedAt;
     private LocalDateTime publishedAt;
+
+    // 依赖数据库 articles 表存在 version 列（INT DEFAULT 0）以启用乐观锁
+    @Version
+    private Integer version;
 
     @TableLogic
     private Integer deleted;

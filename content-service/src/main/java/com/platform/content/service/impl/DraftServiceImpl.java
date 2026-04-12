@@ -3,6 +3,7 @@ package com.platform.content.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.dto.BatchLatestReviewReasonReq;
 import com.platform.contract.review.dto.LatestReviewReasonDto;
 import com.platform.content.api.req.SaveDraftReq;
 import com.platform.content.api.resp.DraftItemResp;
@@ -126,10 +127,15 @@ public class DraftServiceImpl implements DraftService {
                 .collect(Collectors.toList());
 
         Map<Long, String> reasonMap = new HashMap<>();
-        for (Long artId : returnedIds) {
-            LatestReviewReasonDto dto = ResultUtils.requireOk(reviewInternalClient.latestReason(artId));
-            if (dto != null && dto.getAction() == ReviewAction.RETURN) {
-                reasonMap.put(artId, dto.getReason());
+        if (!returnedIds.isEmpty()) {
+            List<LatestReviewReasonDto> reasons = ResultUtils.requireOk(
+                    reviewInternalClient.batchLatestReasons(new BatchLatestReviewReasonReq(returnedIds)));
+            if (reasons != null) {
+                for (LatestReviewReasonDto dto : reasons) {
+                    if (dto.getAction() == ReviewAction.RETURN) {
+                        reasonMap.put(dto.getArticleId(), dto.getReason());
+                    }
+                }
             }
         }
 

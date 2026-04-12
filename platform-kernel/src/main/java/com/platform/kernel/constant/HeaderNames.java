@@ -11,6 +11,9 @@ public final class HeaderNames {
     public static final String X_USER_ROLE = "X-User-Role";
     public static final String X_TRACE_ID = "X-Trace-Id";
 
+    /** 服务间内部调用鉴权令牌，由网关或 Feign 拦截器注入 */
+    public static final String X_INTERNAL_TOKEN = "X-Internal-Token";
+
     private HeaderNames() {
     }
 }

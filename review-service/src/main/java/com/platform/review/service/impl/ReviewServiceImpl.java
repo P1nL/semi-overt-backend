@@ -196,6 +196,9 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     private ReviewAction parseAction(String actionValue) {
+        if (actionValue == null || actionValue.isBlank()) {
+            throw BusinessException.badRequest("Review action is required");
+        }
         try {
             return ReviewAction.valueOf(actionValue.toUpperCase());
         } catch (IllegalArgumentException ex) {

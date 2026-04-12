@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit;
 public class FeignCommonConfig {
 
     @Bean
-    public FeignHeaderRelayInterceptor feignHeaderRelayInterceptor() {
-        return new FeignHeaderRelayInterceptor();
+    public FeignHeaderRelayInterceptor feignHeaderRelayInterceptor(
+            @Value("${platform.internal.token:}") String internalToken) {
+        return new FeignHeaderRelayInterceptor(internalToken);
     }
 
     @Bean

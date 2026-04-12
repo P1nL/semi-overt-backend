@@ -7,24 +7,51 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SecurityException;
+import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
 
 /**
- * 缃戝叧渚?JWT 杈呭姪绫汇€?
- * 璐熻矗瑙ｆ瀽 token銆佸垽鏂墿浣欐湁鏁堟湡浠ュ強鍦ㄩ渶瑕佹椂閲嶆柊绛惧彂鍒锋柊 token銆?
+ * 网关侧 JWT 辅助类。
+ * 负责解析 token、判断剩余有效期以及在需要时重新签发刷新 token。
  */
+@Slf4j
 @Component
 public class GatewayJwtHelper {
 
+    /** JWT 签名密钥最小字节长度（256 位） */
+    private static final int MIN_KEY_BYTES = 32;
+
     private final JwtProperties jwtProperties;
+
+    /** 缓存的签名密钥，启动时初始化一次 */
+    private SecretKey signingKey;
 
     public GatewayJwtHelper(JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;
+    }
+
+    /**
+     * 启动时校验并缓存签名密钥。
+     */
+    @PostConstruct
+    void initSigningKey() {
+        String key = jwtProperties.getSignKey();
+        if (key == null || key.isBlank()) {
+            throw new IllegalStateException("[安全] jwt.token.sign-key 未配置，请通过环境变量 JWT_SIGN_KEY 设置");
+        }
+        byte[] keyBytes = Decoders.BASE64.decode(key);
+        if (keyBytes.length < MIN_KEY_BYTES) {
+            throw new IllegalStateException(
+                    "[安全] jwt.token.sign-key 长度不足：需要至少 " + MIN_KEY_BYTES + " 字节（256 位），当前 " + keyBytes.length + " 字节");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        log.info("Gateway JWT 签名密钥初始化成功，密钥长度 {} 字节", keyBytes.length);
     }
 
     /**
@@ -94,11 +121,10 @@ public class GatewayJwtHelper {
     }
 
     /**
-     * 鑾峰彇绛惧悕瀵嗛挜銆?
+     * 获取缓存的签名密钥。
      */
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtProperties.getSignKey());
-        return Keys.hmacShaKeyFor(keyBytes);
+        return this.signingKey;
     }
 
     /**

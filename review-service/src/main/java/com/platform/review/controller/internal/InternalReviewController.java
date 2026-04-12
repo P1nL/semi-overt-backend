@@ -1,6 +1,7 @@
 package com.platform.review.controller.internal;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.platform.contract.review.dto.BatchLatestReviewReasonReq;
 import com.platform.contract.review.dto.LatestReviewReasonDto;
 import com.platform.contract.review.dto.ReviewTaskRemoveReq;
 import com.platform.contract.review.dto.ReviewTaskUpsertReq;
@@ -16,6 +17,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 
 @RestController
@@ -46,6 +52,37 @@ public class InternalReviewController {
                 .reason(log.getReason())
                 .createdAt(log.getCreatedAt())
                 .build());
+    }
+
+    /**
+     * POST /articles/batch-latest — 批量查询多篇文章最近一次退回/拒绝原因。
+     */
+    @PostMapping("/articles/batch-latest")
+    public Result<List<LatestReviewReasonDto>> batchLatest(@RequestBody BatchLatestReviewReasonReq req) {
+        if (req == null || req.getArticleIds() == null || req.getArticleIds().isEmpty()) {
+            return Result.ok(Collections.emptyList());
+        }
+        // 一次查出所有相关 ReviewLog，按 createdAt 降序
+        List<ReviewLog> logs = reviewLogMapper.selectList(new LambdaQueryWrapper<ReviewLog>()
+                .in(ReviewLog::getArticleId, req.getArticleIds())
+                .in(ReviewLog::getAction, ReviewAction.RETURN, ReviewAction.REJECT)
+                .orderByDesc(ReviewLog::getCreatedAt));
+
+        // 每篇文章只保留最新一条
+        Map<Long, ReviewLog> latestPerArticle = new LinkedHashMap<>();
+        for (ReviewLog log : logs) {
+            latestPerArticle.putIfAbsent(log.getArticleId(), log);
+        }
+
+        List<LatestReviewReasonDto> result = latestPerArticle.values().stream()
+                .map(log -> LatestReviewReasonDto.builder()
+                        .articleId(log.getArticleId())
+                        .action(log.getAction())
+                        .reason(log.getReason())
+                        .createdAt(log.getCreatedAt())
+                        .build())
+                .toList();
+        return Result.ok(result);
     }
 
     /**

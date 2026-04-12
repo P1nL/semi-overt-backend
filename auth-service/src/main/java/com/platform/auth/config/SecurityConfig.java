@@ -2,8 +2,10 @@ package com.platform.auth.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.web.support.security.HeaderAuthenticationFilter;
+import com.platform.web.support.security.InternalTokenFilter;
 import com.platform.kernel.util.Result;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -24,6 +26,9 @@ public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
 
+    @Value("${platform.internal.token:}")
+    private String internalToken;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -35,11 +40,18 @@ public class SecurityConfig {
     }
 
     @Bean
+    public InternalTokenFilter internalTokenFilter() {
+        return new InternalTokenFilter(internalToken);
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   HeaderAuthenticationFilter headerAuthenticationFilter) throws Exception {
+                                                   HeaderAuthenticationFilter headerAuthenticationFilter,
+                                                   InternalTokenFilter internalTokenFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(internalTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/internal/**").permitAll()
@@ -54,13 +66,13 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setContentType("application/json;charset=UTF-8");
-                            response.setStatus(200);
+                            response.setStatus(401);
                             response.getWriter().write(objectMapper.writeValueAsString(
                                     Result.unauthorized("Authentication required or token is invalid")));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setContentType("application/json;charset=UTF-8");
-                            response.setStatus(200);
+                            response.setStatus(403);
                             response.getWriter().write(objectMapper.writeValueAsString(
                                     Result.forbidden("Access denied")));
                         })

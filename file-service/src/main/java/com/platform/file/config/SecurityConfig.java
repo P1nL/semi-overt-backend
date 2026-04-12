@@ -38,13 +38,13 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setContentType("application/json;charset=UTF-8");
-                            response.setStatus(200);
+                            response.setStatus(401);
                             response.getWriter().write(objectMapper.writeValueAsString(
                                     Result.unauthorized("Authentication required or token is invalid")));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setContentType("application/json;charset=UTF-8");
-                            response.setStatus(200);
+                            response.setStatus(403);
                             response.getWriter().write(objectMapper.writeValueAsString(
                                     Result.forbidden("Access denied")));
                         })

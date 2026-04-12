@@ -13,11 +13,22 @@ import feign.RequestTemplate;
 
 public class FeignHeaderRelayInterceptor implements RequestInterceptor {
 
+    private final String internalToken;
+
+    public FeignHeaderRelayInterceptor(String internalToken) {
+        this.internalToken = internalToken;
+    }
+
     @Override
     public void apply(RequestTemplate template) {
         String traceId = TraceContextHolder.get();
         if (traceId != null && !traceId.isBlank()) {
             template.header(HeaderNames.X_TRACE_ID, traceId);
+        }
+
+        // 服务间调用自动附加内部鉴权令牌
+        if (internalToken != null && !internalToken.isBlank()) {
+            template.header(HeaderNames.X_INTERNAL_TOKEN, internalToken);
         }
 
         UserContext userContext = UserContextHolder.get();

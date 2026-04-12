@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -81,7 +82,11 @@ public class AuthServiceImpl implements AuthService {
         user.setEmail(req.getEmail());
         user.setPassword(passwordEncoder.encode(req.getPassword()));
         user.setRole(UserRole.USER);
-        userMapper.insert(user);
+        try {
+            userMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            throw BusinessException.conflict("用户名或邮箱已被注册");
+        }
 
         String token = jwtHelper.createToken(user.getId(), user.getUsername(), UserRole.USER.name(), false);
         log.info("User registered: userId={}, username={}", user.getId(), user.getUsername());
@@ -121,7 +126,8 @@ public class AuthServiceImpl implements AuthService {
         String email = req.getEmail().toLowerCase().trim();
         String lockKey = KEY_PWD_RESET_LOCK + email;
 
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+        Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", resetPwdTtlMinutes, TimeUnit.MINUTES);
+        if (Boolean.FALSE.equals(locked)) {
             throw BusinessException.tooManyRequests(
                     "Reset email already sent, try again in " + resetPwdTtlMinutes + " minutes");
         }
@@ -139,7 +145,6 @@ public class AuthServiceImpl implements AuthService {
                 resetPwdTtlMinutes,
                 TimeUnit.MINUTES
         );
-        redisTemplate.opsForValue().set(lockKey, "1", resetPwdTtlMinutes, TimeUnit.MINUTES);
 
         try {
             sendResetEmail(user.getUsername(), email, resetToken);

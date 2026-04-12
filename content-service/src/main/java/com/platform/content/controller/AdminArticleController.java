@@ -18,7 +18,7 @@ public class AdminArticleController {
     private final ArticleService articleService;
 
     @DeleteMapping("/{articleId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<Map<String, Object>> deleteArticle(@PathVariable Long articleId) {
         Long adminId = SecurityUtils.getCurrentUserId();
         return Result.ok(articleService.adminDeleteArticle(articleId, adminId));

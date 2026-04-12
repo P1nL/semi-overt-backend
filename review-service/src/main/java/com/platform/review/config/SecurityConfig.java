@@ -2,8 +2,10 @@ package com.platform.review.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.web.support.security.HeaderAuthenticationFilter;
+import com.platform.web.support.security.InternalTokenFilter;
 import com.platform.kernel.util.Result;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -22,17 +24,27 @@ public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
 
-        @Bean
+    @Value("${platform.internal.token:}")
+    private String internalToken;
+
+    @Bean
     public HeaderAuthenticationFilter headerAuthenticationFilter() {
         return new HeaderAuthenticationFilter();
     }
 
-        @Bean
+    @Bean
+    public InternalTokenFilter internalTokenFilter() {
+        return new InternalTokenFilter(internalToken);
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   HeaderAuthenticationFilter headerAuthenticationFilter) throws Exception {
+                                                   HeaderAuthenticationFilter headerAuthenticationFilter,
+                                                   InternalTokenFilter internalTokenFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(internalTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/internal/**").permitAll()

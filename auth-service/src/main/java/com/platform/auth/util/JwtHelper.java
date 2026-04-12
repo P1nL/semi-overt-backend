@@ -12,6 +12,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
+
 import javax.crypto.SecretKey;
 import java.util.Arrays;
 import java.util.Date;
@@ -25,6 +27,9 @@ import java.util.stream.Collectors;
 @Component
 public class JwtHelper {
 
+    /** JWT 签名密钥最小字节长度（256 位） */
+    private static final int MIN_KEY_BYTES = 32;
+
     @Value("${jwt.token.expiration}")
     private long expiration;
 
@@ -37,12 +42,32 @@ public class JwtHelper {
     @Value("${jwt.token.refresh-threshold}")
     private long refreshThreshold;
 
+    /** 缓存的签名密钥，启动时初始化一次 */
+    private SecretKey signingKey;
+
     /**
-     * 根据配置中的 Base64 密钥构造签名密钥。
+     * 启动时校验并缓存签名密钥。
+     * 密钥 Base64 解码后长度必须 >= 32 字节（256 位），否则拒绝启动。
+     */
+    @PostConstruct
+    void initSigningKey() {
+        if (signKey == null || signKey.isBlank()) {
+            throw new IllegalStateException("[安全] jwt.token.sign-key 未配置，请通过环境变量 JWT_SIGN_KEY 设置");
+        }
+        byte[] keyBytes = Decoders.BASE64.decode(signKey);
+        if (keyBytes.length < MIN_KEY_BYTES) {
+            throw new IllegalStateException(
+                    "[安全] jwt.token.sign-key 长度不足：需要至少 " + MIN_KEY_BYTES + " 字节（256 位），当前 " + keyBytes.length + " 字节");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        log.info("JWT 签名密钥初始化成功，密钥长度 {} 字节", keyBytes.length);
+    }
+
+    /**
+     * 获取缓存的签名密钥。
      */
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(signKey);
-        return Keys.hmacShaKeyFor(keyBytes);
+        return this.signingKey;
     }
 
     /**
