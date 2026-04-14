@@ -54,7 +54,7 @@ class UploadServiceImplTest {
         try (MockedStatic<ImageIO> imageIoMock = Mockito.mockStatic(ImageIO.class, Mockito.CALLS_REAL_METHODS)) {
             imageIoMock.when(() -> ImageIO.read(Mockito.any(InputStream.class))).thenReturn(image);
 
-            UploadResp result = service.upload(file, "ARTICLE_IMAGE", 9L);
+            UploadResp result = service.upload(file, "ARTICLE_IMAGE", 9L, null);
 
             assertThat(result.getWidth()).isEqualTo(12);
             assertThat(result.getHeight()).isEqualTo(8);
@@ -75,7 +75,7 @@ class UploadServiceImplTest {
                 "fake".getBytes(StandardCharsets.UTF_8)
         );
 
-        assertThatThrownBy(() -> service.upload(file, "ARTICLE_IMAGE", 9L))
+        assertThatThrownBy(() -> service.upload(file, "ARTICLE_IMAGE", 9L, null))
                 .hasMessageContaining("Only JPG / PNG / WebP images are supported");
     }
 }
