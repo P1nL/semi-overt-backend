@@ -83,6 +83,17 @@ public class HomeServiceImpl implements HomeService {
         return HomeResp.builder().hero(hero).sections(sections).build();
     }
 
+    @Override
+    public void invalidateHeroCache() {
+        String cacheKey = HERO_CACHE_PREFIX + HERO_TOTAL + ":" + LocalDate.now();
+        try {
+            redisTemplate.delete(cacheKey);
+            log.info("Hero 缓存已失效（新文章通过审核）: key={}", cacheKey);
+        } catch (Exception e) {
+            log.warn("清除 Hero 缓存失败: {}", e.getMessage());
+        }
+    }
+
     private List<Article> getOrCacheHeroArticles() {
         String cacheKey = HERO_CACHE_PREFIX + HERO_TOTAL + ":" + LocalDate.now();
 

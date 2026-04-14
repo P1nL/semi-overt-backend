@@ -76,6 +76,7 @@ public class ArticleServiceImpl implements ArticleService {
     private final AuthUserQueryClient authInternalClient;
     private final ReviewReasonClient reviewInternalClient;
     private final EventOutboxService eventOutboxService;
+    private final com.platform.content.service.HomeService homeService;
 
     /**
      * 创建一篇空草稿，返回文章主键和初始状态。
@@ -492,6 +493,8 @@ public class ArticleServiceImpl implements ArticleService {
             article.setPublishedAt(event != null && event.getReviewedAt() != null
                     ? event.getReviewedAt()
                     : LocalDateTime.now());
+            // 新文章通过审核，使首页 Hero 缓存失效，下次请求重新选取
+            homeService.invalidateHeroCache();
         }
         articleMapper.updateById(article);
         eventOutboxService.saveEvent(
