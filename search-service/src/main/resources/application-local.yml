@@ -3,6 +3,7 @@
 spring:
   main:
     lazy-initialization: true
+    lazy-initialization-exclude-packages: org.springframework.amqp
   jmx:
     enabled: false
 
