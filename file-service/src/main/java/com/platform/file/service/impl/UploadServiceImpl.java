@@ -39,7 +39,7 @@ public class UploadServiceImpl implements UploadService {
     }
 
     @Override
-    public UploadResp upload(MultipartFile file, String bizType, Long articleId) {
+    public UploadResp upload(MultipartFile file, String bizType, Long articleId, String oldUrl) {
         if (file == null || file.isEmpty()) {
             throw BusinessException.badRequest("Uploaded file is required");
         }
@@ -99,6 +99,12 @@ public class UploadServiceImpl implements UploadService {
 
         log.info("Upload succeeded: bizType={}, url={}, size={}", biz, accessUrl, file.getSize());
 
+        // AVATAR / COVER 场景：新文件上传成功后删除旧文件（仅删除同一存储根下的文件）
+        if ((biz == BizType.AVATAR || biz == BizType.COVER)
+                && oldUrl != null && !oldUrl.isBlank()) {
+            deleteOldFile(oldUrl);
+        }
+
         return UploadResp.builder()
                 .url(accessUrl)
                 .width(width)
@@ -106,6 +112,30 @@ public class UploadServiceImpl implements UploadService {
                 .size(file.getSize())
                 .dominantColor(dominantColor)
                 .build();
+    }
+
+    /**
+     * 从旧文件 URL 中解析出 objectKey，并调用存储层删除。
+     * 仅删除同一 accessPrefix 下的文件，防止误删外部 URL。
+     */
+    private void deleteOldFile(String oldUrl) {
+        try {
+            String prefix = storageConfig.getAccessPrefix();
+            if (prefix == null || prefix.isBlank()) {
+                return;
+            }
+            String normalizedPrefix = prefix.endsWith("/") ? prefix : prefix + "/";
+            if (!oldUrl.startsWith(normalizedPrefix)) {
+                // 不是本服务托管的文件，跳过
+                return;
+            }
+            String objectKey = oldUrl.substring(normalizedPrefix.length());
+            if (!objectKey.isBlank()) {
+                objectStorageService.delete(objectKey);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to delete old file: {}, reason: {}", oldUrl, e.getMessage());
+        }
     }
 
     private String extractExtension(String filename) {

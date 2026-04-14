@@ -1,0 +1,12 @@
+# Local development profile — activated by dev-up.ps1 via spring.profiles.active=local
+# Optimizations that speed up Spring context startup on developer machines.
+spring:
+  main:
+    lazy-initialization: true
+  jmx:
+    enabled: false
+
+logging:
+  level:
+    com.alibaba.nacos: WARN
+    org.apache.catalina: WARN

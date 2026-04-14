@@ -3,6 +3,7 @@ package com.platform.file.service.impl;
 import com.platform.file.config.StorageConfig;
 import com.platform.file.service.ObjectStorageService;
 import com.platform.kernel.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
+@Slf4j
 @Service
 @ConditionalOnProperty(name = "storage.type", havingValue = "local", matchIfMissing = true)
 public class LocalObjectStorageService implements ObjectStorageService {
@@ -38,6 +40,25 @@ public class LocalObjectStorageService implements ObjectStorageService {
         }
 
         return normalizeBaseUrl(storageConfig.getAccessPrefix()) + "/" + objectKey;
+    }
+
+    @Override
+    public void delete(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return;
+        }
+        try {
+            Path uploadRoot = Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
+            Path physicalPath = uploadRoot.resolve(objectKey).normalize();
+            if (!physicalPath.startsWith(uploadRoot)) {
+                log.warn("Skipping delete — resolved path escapes upload root: {}", objectKey);
+                return;
+            }
+            Files.deleteIfExists(physicalPath);
+            log.info("Deleted local object: {}", objectKey);
+        } catch (IOException e) {
+            log.warn("Failed to delete local object: {}, reason: {}", objectKey, e.getMessage());
+        }
     }
 
     @Override

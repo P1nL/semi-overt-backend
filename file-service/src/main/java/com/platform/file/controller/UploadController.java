@@ -22,9 +22,10 @@ public class UploadController {
     public Result<UploadResp> uploadImage(
             @RequestPart("file") MultipartFile file,
             @RequestParam String bizType,
-            @RequestParam(required = false) Long articleId) {
+            @RequestParam(required = false) Long articleId,
+            @RequestParam(required = false) String oldUrl) {
 
-        return Result.ok(uploadService.upload(file, bizType, articleId));
+        return Result.ok(uploadService.upload(file, bizType, articleId, oldUrl));
     }
 }
 

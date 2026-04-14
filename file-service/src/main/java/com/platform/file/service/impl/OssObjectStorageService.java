@@ -46,6 +46,26 @@ public class OssObjectStorageService implements ObjectStorageService {
     }
 
     @Override
+    public void delete(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return;
+        }
+        StorageConfig.Oss ossConfig = storageConfig.getOss();
+        OSS ossClient = buildClient();
+        try {
+            ossClient.deleteObject(ossConfig.getBucket(), objectKey);
+        } catch (Exception e) {
+            // 对象不存在时静默忽略；其余异常仅记录不抛出，不影响上传主流程
+            if (e.getMessage() != null && e.getMessage().contains("NoSuchKey")) {
+                return;
+            }
+            throw e;
+        } finally {
+            ossClient.shutdown();
+        }
+    }
+
+    @Override
     public void validateReadiness() {
         StorageConfig.Oss ossConfig = storageConfig.getOss();
         validateConfig(ossConfig);
