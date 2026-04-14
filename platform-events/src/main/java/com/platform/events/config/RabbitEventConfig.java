@@ -10,11 +10,13 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,6 +86,20 @@ public class RabbitEventConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(converter);
         return rabbitTemplate;
+    }
+
+    /**
+     * 注册 RabbitAdmin，用于在连接建立时自动声明 exchanges、queues 和 bindings。
+     * 没有此 Bean，Spring AMQP 不会自动将 Declarables 中的拓扑结构声明到 RabbitMQ。
+     * 注意：必须标注 @Lazy(false)，防止 spring.main.lazy-initialization=true 时
+     * RabbitAdmin 延迟初始化导致拓扑结构未声明。
+     */
+    @Bean
+    @Lazy(false)
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        RabbitAdmin admin = new RabbitAdmin(connectionFactory);
+        admin.setAutoStartup(true);
+        return admin;
     }
 
     /**
