@@ -34,6 +34,7 @@ public class Article {
     private Integer submitCount;
     private LocalDateTime lastSubmittedAt;
     private LocalDateTime publishedAt;
+    private LocalDateTime lastFeaturedAt;
 
     // 依赖数据库 articles 表存在 version 列（INT DEFAULT 0）以启用乐观锁
     @Version

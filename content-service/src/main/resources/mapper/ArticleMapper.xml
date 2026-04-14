@@ -25,6 +25,7 @@
         <result column="submit_count"        property="submitCount"/>
         <result column="last_submitted_at"   property="lastSubmittedAt"/>
         <result column="published_at"        property="publishedAt"/>
+        <result column="last_featured_at"    property="lastFeaturedAt"/>
         <result column="deleted"             property="deleted"/>
         <result column="created_at"          property="createdAt"/>
         <result column="updated_at"          property="updatedAt"/>
@@ -78,6 +79,55 @@
         ORDER BY RAND()
         LIMIT #{limit}
     </select>
+
+    <!--
+        首页轮替：查询尚未上过首页的已审核文章（last_featured_at IS NULL），随机返回
+    -->
+    <select id="selectUnfeaturedApproved" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+          AND a.last_featured_at IS NULL
+        ORDER BY RAND()
+        LIMIT #{limit}
+    </select>
+
+    <!--
+        首页轮替补充：查询已上过首页的文章（last_featured_at IS NOT NULL），随机返回
+    -->
+    <select id="selectFeaturedApproved" resultMap="ArticleBaseMap">
+        SELECT a.*
+        FROM articles a
+        WHERE a.status = 'APPROVED'
+          AND a.deleted = 0
+          AND a.last_featured_at IS NOT NULL
+        ORDER BY a.last_featured_at ASC, RAND()
+        LIMIT #{limit}
+    </select>
+
+    <!--
+        批量标记为"已曝光"
+    -->
+    <update id="markAsFeatured">
+        UPDATE articles
+        SET last_featured_at = NOW()
+        WHERE id IN
+        <foreach item="id" collection="ids" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!--
+        清空所有 last_featured_at，开始新一轮轮替
+    -->
+    <update id="resetAllFeatured">
+        UPDATE articles
+        SET last_featured_at = NULL
+        WHERE status = 'APPROVED'
+          AND deleted = 0
+          AND last_featured_at IS NOT NULL
+    </update>
 
     <!--
         首页各分类 section：按 duration_category 过滤，取最新 N 篇

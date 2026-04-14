@@ -100,11 +100,11 @@ public class HomeServiceImpl implements HomeService {
                 }
             }
         } catch (Exception e) {
-            log.warn("读取 Hero 缓存失败，回退到数据库随机查询: {}", e.getMessage());
-            return articleMapper.selectRandomApproved(HERO_TOTAL);
+            log.warn("读取 Hero 缓存失败，回退到轮替查询: {}", e.getMessage());
+            return selectHeroArticlesFair(HERO_TOTAL);
         }
 
-        List<Article> articles = articleMapper.selectRandomApproved(HERO_TOTAL);
+        List<Article> articles = selectHeroArticlesFair(HERO_TOTAL);
         if (articles.isEmpty()) {
             return Collections.emptyList();
         }
@@ -120,6 +120,52 @@ public class HomeServiceImpl implements HomeService {
         }
 
         return articles;
+    }
+
+    /**
+     * 公平轮替选取首页文章：
+     * 1. 优先从未曝光（last_featured_at IS NULL）的文章中随机取 limit 条
+     * 2. 若不足，从已曝光的文章中随机补充
+     * 3. 若所有文章都已曝光（已补充完），先重置标记再重新取
+     * 4. 成功选取后批量标记为"已曝光"
+     */
+    private List<Article> selectHeroArticlesFair(int limit) {
+        List<Article> unfeatured = articleMapper.selectUnfeaturedApproved(limit);
+
+        List<Article> result;
+        if (unfeatured.size() >= limit) {
+            // 场景1：未曝光文章充足
+            result = unfeatured;
+        } else if (!unfeatured.isEmpty()) {
+            // 场景2：未曝光文章不足，从已曝光文章中补充
+            int needed = limit - unfeatured.size();
+            List<Article> featured = articleMapper.selectFeaturedApproved(needed);
+            result = new java.util.ArrayList<>(unfeatured);
+            result.addAll(featured);
+            // 随机打乱保证顺序不总是"未曝光在前"
+            Collections.shuffle(result);
+        } else {
+            // 场景3：全部文章都已曝光，清空标记后重新轮替
+            articleMapper.resetAllFeatured();
+            log.info("Hero 轮替：所有文章已曝光，重置 last_featured_at 开始新一轮");
+            result = articleMapper.selectUnfeaturedApproved(limit);
+            if (result.isEmpty()) {
+                // 降级：直接随机（文章数量极少时兜底）
+                return articleMapper.selectRandomApproved(limit);
+            }
+        }
+
+        // 批量标记选中的文章为"已曝光"
+        if (!result.isEmpty()) {
+            List<Long> ids = result.stream().map(Article::getId).collect(Collectors.toList());
+            try {
+                articleMapper.markAsFeatured(ids);
+            } catch (Exception e) {
+                log.warn("批量更新 last_featured_at 失败（不影响展示）: {}", e.getMessage());
+            }
+        }
+
+        return result;
     }
 
     private List<Article> fetchArticlesByIds(List<Long> ids) {

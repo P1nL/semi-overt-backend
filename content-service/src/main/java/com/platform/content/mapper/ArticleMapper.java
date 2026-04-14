@@ -20,6 +20,18 @@ public interface ArticleMapper extends BaseMapper<Article> {
 
     List<Article> selectRandomApproved(@Param("limit") int limit);
 
+    /** 查询尚未上过首页的已审核文章（last_featured_at IS NULL），随机返回 limit 条 */
+    List<Article> selectUnfeaturedApproved(@Param("limit") int limit);
+
+    /** 查询已上过首页的文章，用于首页卡片不足时补充（last_featured_at IS NOT NULL） */
+    List<Article> selectFeaturedApproved(@Param("limit") int limit);
+
+    /** 批量标记文章为"已曝光"（更新 last_featured_at = NOW()） */
+    void markAsFeatured(@Param("ids") List<Long> ids);
+
+    /** 清空所有文章的 last_featured_at，开始新一轮轮替 */
+    void resetAllFeatured();
+
     List<Article> selectApprovedByCategory(
             @Param("category") DurationCategory category,
             @Param("limit") int limit
