@@ -84,37 +84,55 @@ function Invoke-Api {
         ErrorAction = "Stop"
     }
 
-    if ($null -ne $Body) {
-        $params.ContentType = "application/json"
-        $params.Body = ($Body | ConvertTo-Json -Depth 10 -Compress)
-    }
-
     try {
-        $response = Invoke-WebRequest @params
-        $statusCode = [int]$response.StatusCode
-        $rawBody = $response.Content
+        $restParams = @{
+            Uri = $Uri
+            Method = $Method
+            Headers = $Headers
+            TimeoutSec = 15
+            ErrorAction = "Stop"
+        }
+
+        if (-not $Headers.ContainsKey("Accept")) {
+            $restParams.Headers["Accept"] = "application/json"
+        }
+
+        if ($null -ne $Body) {
+            $restParams.ContentType = "application/json"
+            $restParams.Body = ($Body | ConvertTo-Json -Depth 10 -Compress)
+        }
+
+        $result = Invoke-RestMethod @restParams
+        $statusCode = 200
+        $rawBody = if ($result -is [string]) { $result } else { $result | ConvertTo-Json -Depth 10 -Compress }
     }
     catch {
-        if ($_.Exception.Response -eq $null) {
-            throw
+        $statusCode = 0
+        $rawBody = $null
+
+        # Try to extract status code and body from the error
+        try {
+            $errResp = $_.Exception.Response
+            if ($null -ne $errResp) {
+                $statusCode = [int]$errResp.StatusCode
+            }
+        } catch {}
+
+        if ($null -ne $_.ErrorDetails -and $null -ne $_.ErrorDetails.PSObject.Properties["Message"]) {
+            $rawBody = $_.ErrorDetails.Message
         }
 
-        $statusCode = [int]$_.Exception.Response.StatusCode
-        $rawBody = if ($null -ne $_.ErrorDetails -and $null -ne $_.ErrorDetails.PSObject.Properties["Message"]) {
-            $_.ErrorDetails.Message
+        if ($statusCode -eq 0) {
+            throw
         }
-        else {
-            $null
-        }
-        if ([string]::IsNullOrWhiteSpace($rawBody)) {
-            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-            $rawBody = $reader.ReadToEnd()
-            $reader.Dispose()
-        }
+    }
+
+    if ($rawBody -is [byte[]]) {
+        $rawBody = [System.Text.Encoding]::UTF8.GetString($rawBody)
     }
 
     $json = $null
-    if (-not [string]::IsNullOrWhiteSpace($rawBody)) {
+    if ($rawBody -is [string] -and -not [string]::IsNullOrWhiteSpace($rawBody)) {
         try {
             $json = $rawBody | ConvertFrom-Json
         }
@@ -291,6 +309,7 @@ function Invoke-E2ESmoke {
         username = $authorUsername
         email = $authorEmail
         password = $password
+        cfTurnstileToken = "smoke-test-token"
     }
     Assert-StatusCode -Response $authorRegister -ExpectedStatus 200 -Context "Author register"
     Assert-ResultCode -Response $authorRegister -Context "Author register"
@@ -300,6 +319,7 @@ function Invoke-E2ESmoke {
         username = $adminUsername
         email = $adminEmail
         password = $password
+        cfTurnstileToken = "smoke-test-token"
     }
     Assert-StatusCode -Response $adminRegister -ExpectedStatus 200 -Context "Reviewer register"
     Assert-ResultCode -Response $adminRegister -Context "Reviewer register"
