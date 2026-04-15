@@ -2,6 +2,7 @@ package com.platform.content.service;
 
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.kernel.event.ArticleStatusChangedEvent;
 import com.platform.kernel.event.ReviewDecidedEvent;
 import com.platform.events.support.EventOutboxService;
@@ -9,6 +10,7 @@ import com.platform.content.entity.Article;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.enums.ReviewAction;
 import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +44,13 @@ class ArticleReviewEventFlowTest {
     private ReviewReasonClient reviewInternalClient;
 
     @Mock
+    private ReviewTaskClient reviewTaskInternalClient;
+
+    @Mock
     private EventOutboxService eventOutboxService;
+
+    @Mock
+    private HomeService homeService;
 
     @Test
     void reviewDecidedEventAppliesArticleStateAndPublishesStatusChanged() {
@@ -51,7 +59,9 @@ class ArticleReviewEventFlowTest {
                 redisTemplate,
                 authInternalClient,
                 reviewInternalClient,
-                eventOutboxService
+                reviewTaskInternalClient,
+                eventOutboxService,
+                homeService
         );
 
         Article article = new Article();
@@ -93,7 +103,9 @@ class ArticleReviewEventFlowTest {
                 redisTemplate,
                 authInternalClient,
                 reviewInternalClient,
-                eventOutboxService
+                reviewTaskInternalClient,
+                eventOutboxService,
+                homeService
         );
 
         Article article = new Article();

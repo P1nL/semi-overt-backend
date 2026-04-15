@@ -8,6 +8,7 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.events.config.PlatformEventsConfig;
 import com.platform.web.support.config.PlatformWebSupportConfig;
 
@@ -17,7 +18,7 @@ import com.platform.web.support.config.PlatformWebSupportConfig;
 
 @SpringBootApplication(scanBasePackageClasses = ContentServiceApplication.class)
 @Import({PlatformWebSupportConfig.class, PlatformEventsConfig.class})
-@EnableFeignClients(clients = {AuthUserQueryClient.class, ReviewReasonClient.class})
+@EnableFeignClients(clients = {AuthUserQueryClient.class, ReviewReasonClient.class, ReviewTaskClient.class})
 @EnableScheduling
 @MapperScan({"com.platform.content.mapper", "com.platform.events.mapper"})
 public class ContentServiceApplication {

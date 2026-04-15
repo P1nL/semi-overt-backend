@@ -39,6 +39,7 @@ class SearchServiceImplTest {
     void searchNormalizesPageAndEscapesKeywordAndMapsResults() {
         SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
         SearchArticleRow row = buildRow(1001L, 9L, "cloud_native", "summary for search");
+        row.setContent("## 搜索标题\n\n搜索正文");
 
         when(searchArticleMapper.countByKeyword("cloud\\_")).thenReturn(11L);
         when(searchArticleMapper.searchByKeyword("cloud\\_", 0, 50)).thenReturn(List.of(row));
@@ -70,10 +71,34 @@ class SearchServiceImplTest {
         ArticleCardResp card = response.getList().get(0);
         assertThat(card.getArticleId()).isEqualTo(1001L);
         assertThat(card.getTitle()).isEqualTo("cloud_native");
-        assertThat(card.getPreviewText()).isEqualTo("summary for search");
+        assertThat(card.getPreviewText()).isEqualTo("搜索标题");
         assertThat(card.getAuthorId()).isEqualTo(9L);
         assertThat(card.getAuthorName()).isEqualTo("Search Author");
         assertThat(card.getAuthorAvatar()).isEqualTo("/avatars/9.png");
+    }
+
+    @Test
+    void searchBuildsPreviewFromContentWhenSummaryIsEmpty() {
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
+        SearchArticleRow row = buildRow(1003L, 18L, "heading only", null);
+        row.setContent("## 富文本标题\n\n正文摘要");
+
+        when(searchArticleMapper.countByKeyword("heading")).thenReturn(1L);
+        when(searchArticleMapper.searchByKeyword("heading", 0, 10)).thenReturn(List.of(row));
+        when(authInternalClient.batchUsers(any(BatchUserQueryReq.class))).thenReturn(Result.ok(List.of(
+                UserSummaryDto.builder()
+                        .id(18L)
+                        .username("author18")
+                        .nickname("Author 18")
+                        .avatarUrl("/avatars/18.png")
+                        .build()
+        )));
+
+        SearchResp response = service.search("heading", 1, 10);
+
+        assertThat(response.getList()).hasSize(1);
+        assertThat(response.getList().get(0).getSummary()).isNull();
+        assertThat(response.getList().get(0).getPreviewText()).isEqualTo("富文本标题");
     }
 
     @Test

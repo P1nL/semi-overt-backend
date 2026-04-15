@@ -7,6 +7,7 @@ import com.platform.contract.content.dto.ArticleReviewSnapshotDto;
 import com.platform.contract.auth.dto.BatchUserQueryReq;
 import com.platform.contract.review.dto.BatchLatestReviewReasonReq;
 import com.platform.contract.review.dto.LatestReviewReasonDto;
+import com.platform.contract.review.dto.ReviewTaskRemoveReq;
 import com.platform.contract.content.dto.UserProfileArticleItemDto;
 import com.platform.contract.content.dto.UserProfileArticleStatsDto;
 import com.platform.contract.content.dto.UserProfileArticlesQueryReq;
@@ -14,6 +15,7 @@ import com.platform.contract.content.dto.UserProfileArticlesResp;
 import com.platform.contract.auth.dto.UserSummaryDto;
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.kernel.api.ResultUtils;
 import com.platform.kernel.constant.EventConstants;
 import com.platform.kernel.context.TraceContextHolder;
@@ -75,6 +77,7 @@ public class ArticleServiceImpl implements ArticleService {
     private final StringRedisTemplate redisTemplate;
     private final AuthUserQueryClient authInternalClient;
     private final ReviewReasonClient reviewInternalClient;
+    private final ReviewTaskClient reviewTaskInternalClient;
     private final EventOutboxService eventOutboxService;
     private final com.platform.content.service.HomeService homeService;
 
@@ -240,11 +243,16 @@ public class ArticleServiceImpl implements ArticleService {
         ArticleStatus fromStatus = article.getStatus();
         article.setStatus(ArticleStatus.DRAFT);
         articleMapper.updateById(article);
+        String eventId = newEventId("article-status", article.getId());
+        ResultUtils.requireOk(reviewTaskInternalClient.removeTask(ReviewTaskRemoveReq.builder()
+                .articleId(articleId)
+                .lastEventId(eventId)
+                .build()));
         eventOutboxService.saveEvent(
                 "article",
                 String.valueOf(articleId),
                 EventConstants.ARTICLE_STATUS_CHANGED,
-                buildStatusChangedEvent(article, fromStatus, ArticleStatus.DRAFT)
+                buildStatusChangedEvent(article, fromStatus, ArticleStatus.DRAFT, eventId)
         );
 
         log.info("Cancel article review: articleId={}, userId={}", articleId, userId);
@@ -501,7 +509,7 @@ public class ArticleServiceImpl implements ArticleService {
                 "article",
                 String.valueOf(article.getId()),
                 EventConstants.ARTICLE_STATUS_CHANGED,
-                buildStatusChangedEvent(article, fromStatus, toStatus)
+                buildStatusChangedEvent(article, fromStatus, toStatus, newEventId("article-status", article.getId()))
         );
         log.info("Apply review decision: articleId={}, adminId={}, action={}, toStatus={}",
                 article.getId(), adminId, action, toStatus);
@@ -512,9 +520,10 @@ public class ArticleServiceImpl implements ArticleService {
      */
     private ArticleStatusChangedEvent buildStatusChangedEvent(Article article,
                                                               ArticleStatus fromStatus,
-                                                              ArticleStatus toStatus) {
+                                                              ArticleStatus toStatus,
+                                                              String eventId) {
         return ArticleStatusChangedEvent.builder()
-                .eventId(newEventId("article-status", article.getId()))
+                .eventId(eventId)
                 .traceId(TraceContextHolder.get())
                 .articleId(article.getId())
                 .authorId(article.getAuthorId())

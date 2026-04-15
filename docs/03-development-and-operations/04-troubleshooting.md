@@ -16,6 +16,7 @@
 - 端口是否被占用
 - Maven 是否可用
 - `NACOS_NAMESPACE` 是否正确
+- `PLATFORM_INTERNAL_TOKEN` 是否已通过环境变量或 Nacos 提供
 - 中间件是否健康
 
 ## Docker 中间件异常

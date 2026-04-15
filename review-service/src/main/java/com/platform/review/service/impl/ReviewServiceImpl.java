@@ -15,6 +15,7 @@ import com.platform.kernel.context.TraceContextHolder;
 import com.platform.kernel.event.ReviewDecisionPayload;
 import com.platform.kernel.event.ReviewDecidedEvent;
 import com.platform.events.support.EventOutboxService;
+import com.platform.kernel.util.Result;
 import com.platform.review.api.req.ReviewActionReq;
 import com.platform.review.api.resp.ReviewActionResp;
 import com.platform.review.api.resp.ReviewListItemResp;
@@ -62,7 +63,7 @@ public class ReviewServiceImpl implements ReviewService {
                         .orderByDesc(ReviewTask::getSubmittedAt, ReviewTask::getArticleId)
         );
 
-        List<ReviewTask> tasks = pageResult.getRecords();
+        List<ReviewTask> tasks = sanitizePendingTasks(pageResult.getRecords());
         Map<Long, UserSummaryDto> userMap = batchFetchUsers(tasks.stream()
                 .map(ReviewTask::getAuthorId)
                 .collect(Collectors.toSet()));
@@ -91,6 +92,52 @@ public class ReviewServiceImpl implements ReviewService {
                 .pageSize(pageResult.getSize())
                 .pages(pageResult.getPages())
                 .build();
+    }
+
+    private List<ReviewTask> sanitizePendingTasks(List<ReviewTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return tasks.stream()
+                .filter(this::isStillPendingTask)
+                .toList();
+    }
+
+    private boolean isStillPendingTask(ReviewTask task) {
+        Result<ArticleReviewSnapshotDto> result = contentInternalClient.reviewSnapshot(task.getArticleId());
+        if (result == null) {
+            log.warn("Skip review task validation because snapshot result is null: articleId={}", task.getArticleId());
+            return true;
+        }
+
+        if (result.getCode() == null) {
+            log.warn("Skip review task validation because snapshot result code is null: articleId={}", task.getArticleId());
+            return true;
+        }
+
+        if (result.getCode() != 200) {
+            if (result.getCode() == 404) {
+                removeStaleTask(task.getArticleId());
+                return false;
+            }
+            log.warn("Skip review task validation because snapshot query failed: articleId={}, code={}, message={}",
+                    task.getArticleId(), result.getCode(), result.getMessage());
+            return true;
+        }
+
+        ArticleReviewSnapshotDto snapshot = result.getData();
+        if (snapshot == null || snapshot.getStatus() != ArticleStatus.PENDING) {
+            removeStaleTask(task.getArticleId());
+            return false;
+        }
+        return true;
+    }
+
+    private void removeStaleTask(Long articleId) {
+        reviewTaskMapper.delete(new LambdaQueryWrapper<ReviewTask>()
+                .eq(ReviewTask::getArticleId, articleId));
+        log.info("Remove stale review task from pending list: articleId={}", articleId);
     }
 
         @Override

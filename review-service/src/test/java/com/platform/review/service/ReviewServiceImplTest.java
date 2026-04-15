@@ -81,6 +81,11 @@ class ReviewServiceImplTest {
         page.setRecords(List.of(task));
 
         when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(contentInternalClient.reviewSnapshot(21L)).thenReturn(Result.ok(ArticleReviewSnapshotDto.builder()
+                .articleId(21L)
+                .authorId(9L)
+                .status(ArticleStatus.PENDING)
+                .build()));
         when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder().id(9L).username("writer9").build()
         )));
@@ -91,6 +96,66 @@ class ReviewServiceImplTest {
         assertThat(result.getList()).hasSize(1);
         assertThat(result.getList().get(0).getId()).isEqualTo(21L);
         assertThat(result.getList().get(0).getAuthor().getUsername()).isEqualTo("writer9");
+    }
+
+    @Test
+    void pendingListRemovesStaleTaskWhenSnapshotMissing() {
+        ReviewServiceImpl service = new ReviewServiceImpl(
+                reviewTaskMapper,
+                reviewLogMapper,
+                authInternalClient,
+                contentInternalClient,
+                eventOutboxService
+        );
+
+        ReviewTask task = new ReviewTask();
+        task.setArticleId(35L);
+        task.setAuthorId(9L);
+        task.setTitle("stale-title");
+        task.setStatus(ArticleStatus.PENDING);
+
+        Page<ReviewTask> page = new Page<>(1, 10, 1);
+        page.setRecords(List.of(task));
+
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(contentInternalClient.reviewSnapshot(35L)).thenReturn(Result.notFound("Article not found"));
+
+        PageResponse<ReviewListItemResp> result = service.getPendingList(100L, 1, 10);
+
+        assertThat(result.getList()).isEmpty();
+        verify(reviewTaskMapper).delete(any());
+    }
+
+    @Test
+    void pendingListRemovesTaskWhenSnapshotNoLongerPending() {
+        ReviewServiceImpl service = new ReviewServiceImpl(
+                reviewTaskMapper,
+                reviewLogMapper,
+                authInternalClient,
+                contentInternalClient,
+                eventOutboxService
+        );
+
+        ReviewTask task = new ReviewTask();
+        task.setArticleId(36L);
+        task.setAuthorId(9L);
+        task.setTitle("returned-title");
+        task.setStatus(ArticleStatus.PENDING);
+
+        Page<ReviewTask> page = new Page<>(1, 10, 1);
+        page.setRecords(List.of(task));
+
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(contentInternalClient.reviewSnapshot(36L)).thenReturn(Result.ok(ArticleReviewSnapshotDto.builder()
+                .articleId(36L)
+                .authorId(9L)
+                .status(ArticleStatus.RETURNED)
+                .build()));
+
+        PageResponse<ReviewListItemResp> result = service.getPendingList(100L, 1, 10);
+
+        assertThat(result.getList()).isEmpty();
+        verify(reviewTaskMapper).delete(any());
     }
 
     @Test

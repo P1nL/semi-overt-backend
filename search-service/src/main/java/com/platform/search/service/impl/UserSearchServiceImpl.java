@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -42,7 +43,17 @@ public class UserSearchServiceImpl implements UserSearchService {
             users = Collections.emptyList();
         }
 
+        if (users == null || users.isEmpty()) {
+            return UserSearchResp.builder()
+                    .keyword(normalized)
+                    .list(Collections.emptyList())
+                    .total(0L)
+                    .build();
+        }
+
         List<UserSearchResp.UserCardResp> list = users.stream()
+                .filter(Objects::nonNull)
+                .filter(u -> u.getUsername() != null && !u.getUsername().isBlank())
                 .map(u -> UserSearchResp.UserCardResp.builder()
                         .id(u.getId())
                         .username(u.getUsername())

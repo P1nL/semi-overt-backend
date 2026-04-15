@@ -2,6 +2,7 @@ package com.platform.content.service;
 
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.events.support.EventOutboxService;
 import com.platform.contract.auth.dto.UserSummaryDto;
 import com.platform.content.api.resp.ArticleDetailResp;
@@ -9,6 +10,7 @@ import com.platform.content.entity.Article;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.exception.BusinessException;
 import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.kernel.util.Result;
 import org.junit.jupiter.api.Test;
@@ -47,12 +49,18 @@ class ArticleDetailAccessTest {
     private ReviewReasonClient reviewInternalClient;
 
     @Mock
+    private ReviewTaskClient reviewTaskInternalClient;
+
+    @Mock
     private EventOutboxService eventOutboxService;
+
+    @Mock
+    private HomeService homeService;
 
     @Test
     void authorCanReadOwnDraftWithout404AndGetsRedisContent() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         Article article = new Article();
         article.setId(15L);
@@ -78,7 +86,7 @@ class ArticleDetailAccessTest {
     @Test
     void anonymousCanReadApprovedButNotReturnedArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         Article approved = new Article();
         approved.setId(16L);

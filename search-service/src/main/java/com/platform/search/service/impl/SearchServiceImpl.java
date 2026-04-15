@@ -9,6 +9,7 @@ import com.platform.search.api.resp.SearchResp;
 import com.platform.search.mapper.SearchArticleMapper;
 import com.platform.search.model.SearchArticleRow;
 import com.platform.search.service.SearchService;
+import com.platform.search.util.ArticlePreviewUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class SearchServiceImpl implements SearchService {
 
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int CARD_PREVIEW_MAX_LENGTH = 120;
 
     private final SearchArticleMapper searchArticleMapper;
     private final AuthUserQueryClient authInternalClient;
@@ -63,7 +65,7 @@ public class SearchServiceImpl implements SearchService {
                             .articleId(row.getArticleId())
                             .title(row.getTitle())
                             .summary(row.getSummary())
-                            .previewText(row.getSummary())
+                            .previewText(ArticlePreviewUtils.extractPreviewText(row.getContent(), CARD_PREVIEW_MAX_LENGTH))
                             .coverUrl(row.getCoverUrl())
                             .coverColor(row.getCoverColor())
                             .readMinutes(row.getReadMinutes())

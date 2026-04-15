@@ -2,11 +2,13 @@ package com.platform.content.service;
 
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.events.support.EventOutboxService;
 import com.platform.content.entity.Article;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.exception.BusinessException;
 import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.kernel.util.SecurityUtils;
 import org.junit.jupiter.api.Test;
@@ -37,15 +39,21 @@ class AdminDeleteArticleTest {
     private ReviewReasonClient reviewInternalClient;
 
     @Mock
+    private ReviewTaskClient reviewTaskInternalClient;
+
+    @Mock
     private StringRedisTemplate redisTemplate;
 
     @Mock
     private EventOutboxService eventOutboxService;
 
+    @Mock
+    private HomeService homeService;
+
     @Test
     void adminCanDeletePendingArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
         Article article = buildArticle(12L, 3L, ArticleStatus.PENDING);
         when(articleMapper.selectById(12L)).thenReturn(article);
 
@@ -63,7 +71,7 @@ class AdminDeleteArticleTest {
     @Test
     void adminCanDeleteApprovedArticle() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
         Article article = buildArticle(13L, 4L, ArticleStatus.APPROVED);
         when(articleMapper.selectById(13L)).thenReturn(article);
 
@@ -81,7 +89,7 @@ class AdminDeleteArticleTest {
     @Test
     void nonAdminCannotDeleteThroughAdminCapability() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
             securityUtils.when(SecurityUtils::isAdmin).thenReturn(false);

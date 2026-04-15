@@ -9,7 +9,9 @@ target/
 .classpath
 .factorypath
 .project
-.settings
+.settings/
+.metadata/
+__CREATED_BY_JAVA_LANGUAGE_SERVER__
 .springBeans
 .sts4-cache
 
@@ -42,8 +44,7 @@ build/
 # Local runtime overrides
 .codex-runtime/
 .runtime/
-.cache/m2/
-.cache/m2-settings.xml
+.cache/
 scripts/env/*.env
 !scripts/env/server.env.example
 

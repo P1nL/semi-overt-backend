@@ -25,6 +25,7 @@
             a.author_id,
             a.title,
             a.summary,
+            a.content,
             a.cover_url,
             a.cover_color,
             a.read_minutes,

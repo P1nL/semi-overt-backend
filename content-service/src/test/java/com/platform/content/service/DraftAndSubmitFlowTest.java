@@ -3,6 +3,8 @@ package com.platform.content.service;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
+import com.platform.contract.review.dto.ReviewTaskRemoveReq;
 import com.platform.kernel.event.ArticleStatusChangedEvent;
 import com.platform.kernel.event.ArticleSubmittedEvent;
 import com.platform.events.support.EventOutboxService;
@@ -11,6 +13,7 @@ import com.platform.content.api.resp.SubmitResp;
 import com.platform.content.entity.Article;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.content.service.impl.DraftServiceImpl;
 import com.platform.kernel.util.Result;
@@ -52,6 +55,9 @@ class DraftAndSubmitFlowTest {
     private ReviewReasonClient reviewInternalClient;
 
     @Mock
+    private ReviewTaskClient reviewTaskInternalClient;
+
+    @Mock
     private StringRedisTemplate redisTemplate;
 
     @Mock
@@ -59,6 +65,9 @@ class DraftAndSubmitFlowTest {
 
     @Mock
     private EventOutboxService eventOutboxService;
+
+    @Mock
+    private HomeService homeService;
 
     @Test
     void clearingTitleBeforeSubmitKeepsTitleEmptyAndCreatesProjectionTask() {
@@ -68,7 +77,9 @@ class DraftAndSubmitFlowTest {
                 redisTemplate,
                 authInternalClient,
                 reviewInternalClient,
-                eventOutboxService
+                reviewTaskInternalClient,
+                eventOutboxService,
+                homeService
         );
 
         Long articleId = 8L;
@@ -119,7 +130,9 @@ class DraftAndSubmitFlowTest {
                 redisTemplate,
                 authInternalClient,
                 reviewInternalClient,
-                eventOutboxService
+                reviewTaskInternalClient,
+                eventOutboxService,
+                homeService
         );
 
         Long articleId = 18L;
@@ -133,12 +146,14 @@ class DraftAndSubmitFlowTest {
         article.setLastSubmittedAt(java.time.LocalDateTime.parse("2026-03-26T10:15:30"));
 
         when(articleMapper.selectById(articleId)).thenReturn(article);
+        when(reviewTaskInternalClient.removeTask(any(ReviewTaskRemoveReq.class))).thenReturn(Result.ok());
         Map<String, Object> result = articleService.cancelReview(articleId, userId);
 
         ArgumentCaptor<ArticleStatusChangedEvent> eventCaptor = ArgumentCaptor.forClass(ArticleStatusChangedEvent.class);
 
         assertThat(result).containsEntry("status", ArticleStatus.DRAFT);
         assertThat(article.getStatus()).isEqualTo(ArticleStatus.DRAFT);
+        verify(reviewTaskInternalClient).removeTask(any(ReviewTaskRemoveReq.class));
         verify(eventOutboxService).saveEvent(any(), any(), any(), eventCaptor.capture());
         assertThat(eventCaptor.getValue().getArticleId()).isEqualTo(articleId);
         assertThat(eventCaptor.getValue().getFromStatus()).isEqualTo(ArticleStatus.PENDING);

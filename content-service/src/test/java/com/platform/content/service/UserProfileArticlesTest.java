@@ -3,6 +3,7 @@ package com.platform.content.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
+import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.contract.review.dto.LatestReviewReasonDto;
 import com.platform.contract.content.dto.UserProfileArticlesQueryReq;
 import com.platform.contract.content.dto.UserProfileArticlesResp;
@@ -11,6 +12,7 @@ import com.platform.events.support.EventOutboxService;
 import com.platform.content.entity.Article;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.kernel.util.Result;
 import com.platform.kernel.util.SecurityUtils;
@@ -50,15 +52,21 @@ class UserProfileArticlesTest {
     private ReviewReasonClient reviewInternalClient;
 
     @Mock
+    private ReviewTaskClient reviewTaskInternalClient;
+
+    @Mock
     private StringRedisTemplate redisTemplate;
 
     @Mock
     private EventOutboxService eventOutboxService;
 
+    @Mock
+    private HomeService homeService;
+
     @Test
     void anonymousViewerOnlyGetsApprovedArticles() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         Article approved = buildArticle(11L, 8L, ArticleStatus.APPROVED);
         approved.setContent("approved content");
@@ -98,7 +106,7 @@ class UserProfileArticlesTest {
     @Test
     void ownerCanViewRejectedArticlesWithLatestReason() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         Article rejected = buildArticle(12L, 8L, ArticleStatus.REJECTED);
         rejected.setContent("rejected content");
@@ -149,7 +157,7 @@ class UserProfileArticlesTest {
     @Test
     void ownerGetsReturnedReasonInAllTab() {
         ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, eventOutboxService);
+                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
 
         Article returned = buildArticle(13L, 8L, ArticleStatus.RETURNED);
         returned.setContent("returned content");

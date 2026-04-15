@@ -8,36 +8,14 @@ param(
     [switch]$Follow
 )
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+. "$PSScriptRoot\_dev-common.ps1"
 
-$utf8EncodingName = "UTF8"
-
-function Write-Section {
-    param(
-        [string]$Title,
-        [ConsoleColor]$Color = [ConsoleColor]::Cyan
-    )
-
-    Write-Host ""
-    Write-Host "==> $Title" -ForegroundColor $Color
-}
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 function Resolve-LogFiles {
-    param(
-        [string]$LogRoot,
-        [string[]]$TargetServices
-    )
-
-    if (-not (Test-Path $LogRoot)) {
-        throw "Log directory does not exist yet: $LogRoot"
-    }
-
-    $files = New-Object System.Collections.Generic.List[System.IO.FileInfo]
-
+    param([string]$LogRoot, [string[]]$TargetServices)
+    if (-not (Test-Path $LogRoot)) { throw "Log directory does not exist: $LogRoot" }
+    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
     if ($TargetServices.Count -eq 0) {
         Get-ChildItem -Path $LogRoot -File |
             Where-Object { $_.Name -match '^[^.].*\.(out|err)\.log$' } |
@@ -45,151 +23,98 @@ function Resolve-LogFiles {
             ForEach-Object { $files.Add($_) }
         return $files
     }
-
-    foreach ($service in $TargetServices) {
-        foreach ($suffix in @("out", "err")) {
-            $path = Join-Path $LogRoot "$service.$suffix.log"
-            if (Test-Path $path) {
-                $files.Add((Get-Item $path))
-            }
+    foreach ($svc in $TargetServices) {
+        foreach ($sfx in @("out", "err")) {
+            $p = Join-Path $LogRoot "$svc.$sfx.log"
+            if (Test-Path $p) { $files.Add((Get-Item $p)) }
         }
     }
-
     return $files | Sort-Object FullName -Unique
 }
 
 function Merge-Ranges {
     param([object[]]$Ranges)
-
-    if ($null -eq $Ranges -or $Ranges.Count -eq 0) {
-        return @()
-    }
-
+    if ($null -eq $Ranges -or $Ranges.Count -eq 0) { return @() }
     $ordered = $Ranges | Sort-Object Start, End
-    $merged = New-Object System.Collections.Generic.List[object]
-    $current = [pscustomobject]@{
-        Start = $ordered[0].Start
-        End = $ordered[0].End
+    $merged  = [System.Collections.Generic.List[object]]::new()
+    $cur     = [pscustomobject]@{ Start = $ordered[0].Start; End = $ordered[0].End }
+    for ($i = 1; $i -lt $ordered.Count; $i++) {
+        $c = $ordered[$i]
+        if ($c.Start -le ($cur.End + 1)) { $cur.End = [Math]::Max($cur.End, $c.End); continue }
+        $merged.Add([pscustomobject]@{ Start = $cur.Start; End = $cur.End })
+        $cur = [pscustomobject]@{ Start = $c.Start; End = $c.End }
     }
-
-    for ($index = 1; $index -lt $ordered.Count; $index++) {
-        $candidate = $ordered[$index]
-        if ($candidate.Start -le ($current.End + 1)) {
-            $current.End = [Math]::Max($current.End, $candidate.End)
-            continue
-        }
-
-        $merged.Add([pscustomobject]@{
-            Start = $current.Start
-            End = $current.End
-        })
-        $current = [pscustomobject]@{
-            Start = $candidate.Start
-            End = $candidate.End
-        }
-    }
-
-    $merged.Add([pscustomobject]@{
-        Start = $current.Start
-        End = $current.End
-    })
-
+    $merged.Add([pscustomobject]@{ Start = $cur.Start; End = $cur.End })
     return $merged
 }
 
 function Write-RecentErrorBlocks {
-    param(
-        [System.IO.FileInfo]$File,
-        [int]$TailLines,
-        [int]$Before,
-        [int]$After
-    )
-
-    $lines = @(Get-Content -Path $File.FullName -Tail $TailLines -Encoding $utf8EncodingName -ErrorAction SilentlyContinue)
-    if ($lines.Count -eq 0) {
-        return $false
-    }
+    param([System.IO.FileInfo]$File, [int]$TailLines, [int]$Before, [int]$After)
+    $lines = @(Get-Content -Path $File.FullName -Tail $TailLines -Encoding UTF8 -ErrorAction SilentlyContinue)
+    if ($lines.Count -eq 0) { return $false }
 
     $pattern = '(?i)(\bERROR\b|\bException\b|Caused by:|\bFATAL\b|\bUnhandled\b|APPLICATION FAILED TO START|\bFailed to\b)'
-    $ranges = New-Object System.Collections.Generic.List[object]
-
-    for ($index = 0; $index -lt $lines.Count; $index++) {
-        if ($lines[$index] -match $pattern) {
+    $ranges  = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match $pattern) {
             $ranges.Add([pscustomobject]@{
-                Start = [Math]::Max(0, $index - $Before)
-                End = [Math]::Min($lines.Count - 1, $index + $After)
+                Start = [Math]::Max(0, $i - $Before)
+                End   = [Math]::Min($lines.Count - 1, $i + $After)
             })
         }
     }
 
-    $mergedRanges = @(Merge-Ranges -Ranges $ranges)
-    if ($mergedRanges.Count -eq 0) {
-        return $false
-    }
+    $merged = @(Merge-Ranges -Ranges $ranges)
+    if ($merged.Count -eq 0) { return $false }
 
-    Write-Section -Title $File.Name
-    foreach ($range in $mergedRanges) {
-        for ($index = $range.Start; $index -le $range.End; $index++) {
-            Write-Host $lines[$index]
-        }
-        if ($range.End -lt ($lines.Count - 1)) {
-            Write-Host "..."
-        }
+    Write-Host ""
+    Write-Host "==> $($File.Name)" -ForegroundColor Cyan
+    foreach ($r in $merged) {
+        for ($i = $r.Start; $i -le $r.End; $i++) { Write-Host $lines[$i] }
+        if ($r.End -lt ($lines.Count - 1)) { Write-Host "..." }
     }
-
     return $true
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$logRoot = Join-Path $repoRoot ".codex-runtime\logs"
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+$logRoot  = Join-Path (Split-Path -Parent $PSScriptRoot) ".codex-runtime\logs"
 $logFiles = @(Resolve-LogFiles -LogRoot $logRoot -TargetServices $Services)
 
 if ($logFiles.Count -eq 0) {
-    if ($Services.Count -gt 0) {
-        throw "No matching log files found under $logRoot for services: $($Services -join ', ')"
-    }
-
+    if ($Services.Count -gt 0) { throw "No matching log files for: $($Services -join ', ')" }
     throw "No log files found under $logRoot"
 }
 
-if ($Follow -and -not $All) {
-    throw "-Follow currently requires -All so the output stays readable."
-}
+if ($Follow -and -not $All) { throw "-Follow requires -All so output stays readable." }
 
 Write-Host "Log root: $logRoot" -ForegroundColor Green
 
 if ($All) {
-    Write-Section -Title "Recent logs"
-    foreach ($file in $logFiles) {
-        Write-Host $file.FullName -ForegroundColor Yellow
-    }
+    Write-Host ""
+    Write-Host "==> Recent logs" -ForegroundColor Cyan
+    foreach ($f in $logFiles) { Write-Host $f.FullName -ForegroundColor Yellow }
 
     if ($Follow) {
         Write-Host ""
         Write-Host "Following log output..." -ForegroundColor Green
-        Get-Content -Path ($logFiles | ForEach-Object { $_.FullName }) -Tail $Tail -Encoding $utf8EncodingName -Wait
+        Get-Content -Path ($logFiles | ForEach-Object { $_.FullName }) -Tail $Tail -Encoding UTF8 -Wait
         exit 0
     }
 
-    foreach ($file in $logFiles) {
-        Write-Section -Title $file.Name
-        $lines = @(Get-Content -Path $file.FullName -Tail $Tail -Encoding $utf8EncodingName -ErrorAction SilentlyContinue)
-        if ($lines.Count -eq 0) {
-            Write-Host "(empty)" -ForegroundColor DarkGray
-            continue
-        }
-
-        foreach ($line in $lines) {
-            Write-Host $line
-        }
+    foreach ($f in $logFiles) {
+        Write-Host ""
+        Write-Host "==> $($f.Name)" -ForegroundColor Cyan
+        $lines = @(Get-Content -Path $f.FullName -Tail $Tail -Encoding UTF8 -ErrorAction SilentlyContinue)
+        if ($lines.Count -eq 0) { Write-Host "(empty)" -ForegroundColor DarkGray; continue }
+        foreach ($l in $lines) { Write-Host $l }
     }
-
     exit 0
 }
 
 $foundAny = $false
-foreach ($file in $logFiles) {
-    if (Write-RecentErrorBlocks -File $file -TailLines $Tail -Before $ContextBefore -After $ContextAfter) {
+foreach ($f in $logFiles) {
+    if (Write-RecentErrorBlocks -File $f -TailLines $Tail -Before $ContextBefore -After $ContextAfter) {
         $foundAny = $true
     }
 }
@@ -197,5 +122,5 @@ foreach ($file in $logFiles) {
 if (-not $foundAny) {
     Write-Host ""
     Write-Host "No obvious error lines were found in the last $Tail lines." -ForegroundColor Yellow
-    Write-Host "Use .\\scripts\\dev-logs.ps1 -All to inspect the raw tail output." -ForegroundColor Yellow
+    Write-Host "Use .\scripts\dev-logs.ps1 -All to inspect the raw tail output." -ForegroundColor Yellow
 }

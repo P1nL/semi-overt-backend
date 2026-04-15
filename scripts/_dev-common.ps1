@@ -29,6 +29,18 @@ $script:InfrastructureServices = @(
     @{ Name = "rabbitmq"; Port = 5672 }
 )
 
+# Which infrastructure containers each service actually needs.
+# nacos is always required (all services register with it).
+$script:ServiceInfraDeps = @{
+    "auth-service"          = @("mysql", "redis", "nacos")
+    "content-service"       = @("mysql", "redis", "nacos", "rabbitmq")
+    "review-service"        = @("mysql", "nacos", "rabbitmq")
+    "search-service"        = @("mysql", "nacos", "rabbitmq")
+    "notification-service"  = @("mysql", "nacos", "rabbitmq")
+    "file-service"          = @("nacos")
+    "gateway-service"       = @("redis", "nacos")
+}
+
 $script:SharedModuleDefinitions = @(
     @{ Name = "platform-kernel";      ArtifactId = "platform-kernel";      RelativePomPath = "platform-kernel\pom.xml";      SourceRoots = @("platform-kernel\src\main") },
     @{ Name = "platform-web-support"; ArtifactId = "platform-web-support"; RelativePomPath = "platform-web-support\pom.xml"; SourceRoots = @("platform-web-support\src\main") },

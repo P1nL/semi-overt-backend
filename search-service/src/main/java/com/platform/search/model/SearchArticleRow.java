@@ -16,6 +16,7 @@ public class SearchArticleRow {
     private Long authorId;
     private String title;
     private String summary;
+    private String content;
     private String coverUrl;
     private String coverColor;
     private BigDecimal readMinutes;

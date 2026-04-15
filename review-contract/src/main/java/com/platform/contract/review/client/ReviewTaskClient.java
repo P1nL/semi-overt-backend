@@ -8,7 +8,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "review-service", configuration = FeignCommonConfig.class)
+@FeignClient(name = "review-service", contextId = "reviewTaskClient", configuration = FeignCommonConfig.class)
 public interface ReviewTaskClient {
 
     @PostMapping("/internal/reviews/tasks/upsert")
