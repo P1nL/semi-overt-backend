@@ -15,6 +15,9 @@ public class UserSearchResp {
     private String keyword;
     private List<UserCardResp> list;
     private Long total;
+    private Long page;
+    private Long pageSize;
+    private Long pages;
 
     @Data
     @Builder

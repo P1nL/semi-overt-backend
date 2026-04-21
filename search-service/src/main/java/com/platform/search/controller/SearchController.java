@@ -33,7 +33,8 @@ public class SearchController {
     @GetMapping("/users")
     public Result<UserSearchResp> searchUsers(
             @RequestParam @NotBlank(message = "Keyword is required") String keyword,
-            @RequestParam(defaultValue = "10") int limit) {
-        return Result.ok(userSearchService.searchUsers(keyword, limit));
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return Result.ok(userSearchService.searchUsers(keyword, page, pageSize));
     }
 }

@@ -2,6 +2,7 @@ package com.platform.contract.auth.client;
 
 import com.platform.contract.auth.dto.BatchUserQueryReq;
 import com.platform.contract.auth.dto.UserSummaryDto;
+import com.platform.kernel.api.PageResponse;
 import com.platform.kernel.util.Result;
 import com.platform.web.support.feign.FeignCommonConfig;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -19,9 +20,10 @@ public interface AuthUserQueryClient {
     Result<List<UserSummaryDto>> batchUsers(@RequestBody BatchUserQueryReq req);
 
     /**
-     * 按用户名或昵称模糊搜索用户，最多返回 limit 条。
+     * 按用户名或昵称模糊搜索用户，返回分页结果。
      */
     @GetMapping("/internal/users/search")
-    Result<List<UserSummaryDto>> searchUsers(@RequestParam("keyword") String keyword,
-                                              @RequestParam(value = "limit", defaultValue = "10") int limit);
+    Result<PageResponse<UserSummaryDto>> searchUsers(@RequestParam("keyword") String keyword,
+                                                     @RequestParam(value = "page", defaultValue = "1") int page,
+                                                     @RequestParam(value = "pageSize", defaultValue = "10") int pageSize);
 }

@@ -2,6 +2,7 @@ package com.platform.search.service.impl;
 
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.auth.dto.UserSummaryDto;
+import com.platform.kernel.api.PageResponse;
 import com.platform.kernel.api.ResultUtils;
 import com.platform.search.api.resp.UserSearchResp;
 import com.platform.search.service.UserSearchService;
@@ -18,36 +19,47 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class UserSearchServiceImpl implements UserSearchService {
 
-    private static final int MAX_LIMIT = 20;
+    private static final int MAX_PAGE_SIZE = 20;
 
     private final AuthUserQueryClient authInternalClient;
 
     @Override
-    public UserSearchResp searchUsers(String keyword, int limit) {
+    public UserSearchResp searchUsers(String keyword, int page, int pageSize) {
         String normalized = keyword == null ? "" : keyword.trim();
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, MAX_PAGE_SIZE));
+
         if (normalized.isEmpty()) {
             return UserSearchResp.builder()
                     .keyword(normalized)
                     .list(Collections.emptyList())
                     .total(0L)
+                    .page((long) safePage)
+                    .pageSize((long) safePageSize)
+                    .pages(0L)
                     .build();
         }
 
-        int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
-
-        List<UserSummaryDto> users;
+        PageResponse<UserSummaryDto> userPage;
         try {
-            users = ResultUtils.requireOk(authInternalClient.searchUsers(normalized, safeLimit));
+            userPage = ResultUtils.requireOk(authInternalClient.searchUsers(normalized, safePage, safePageSize));
         } catch (Exception e) {
             log.warn("Failed to search users from auth-service for keyword='{}': {}", normalized, e.getMessage());
-            users = Collections.emptyList();
+            userPage = null;
         }
+
+        List<UserSummaryDto> users = userPage == null ? Collections.emptyList() : userPage.getList();
+        long total = userPage == null ? 0L : userPage.getTotal();
+        long pages = userPage == null ? 0L : userPage.getPages();
 
         if (users == null || users.isEmpty()) {
             return UserSearchResp.builder()
                     .keyword(normalized)
                     .list(Collections.emptyList())
-                    .total(0L)
+                    .total(total)
+                    .page((long) safePage)
+                    .pageSize((long) safePageSize)
+                    .pages(pages)
                     .build();
         }
 
@@ -66,7 +78,10 @@ public class UserSearchServiceImpl implements UserSearchService {
         return UserSearchResp.builder()
                 .keyword(normalized)
                 .list(list)
-                .total((long) list.size())
+                .total(total)
+                .page((long) safePage)
+                .pageSize((long) safePageSize)
+                .pages(pages)
                 .build();
     }
 }

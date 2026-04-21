@@ -1,10 +1,12 @@
 package com.platform.auth.controller.internal;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.contract.auth.dto.BatchUserQueryReq;
 import com.platform.contract.auth.dto.UserSummaryDto;
 import com.platform.auth.entity.User;
 import com.platform.auth.mapper.UserMapper;
+import com.platform.kernel.api.PageResponse;
 import com.platform.kernel.util.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,33 +50,50 @@ public class InternalUserController {
     }
 
     /**
-     * GET /search?keyword=x&limit=10 — 按用户名或昵称模糊搜索用户
+     * GET /search?keyword=x&page=1&pageSize=10 — 按用户名或昵称模糊搜索用户
      */
     @GetMapping("/search")
-    public Result<List<UserSummaryDto>> searchUsers(
+    public Result<PageResponse<UserSummaryDto>> searchUsers(
             @RequestParam String keyword,
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         if (keyword == null || keyword.isBlank()) {
-            return Result.ok(Collections.emptyList());
+            return Result.ok(PageResponse.<UserSummaryDto>builder()
+                    .list(Collections.emptyList())
+                    .total(0)
+                    .page(Math.max(1, page))
+                    .pageSize(Math.max(1, pageSize))
+                    .pages(0)
+                    .build());
         }
 
-        int safeLimit = Math.max(1, Math.min(limit, 50));
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, 50));
 
-        List<User> users = userMapper.selectList(
+        Page<User> pageResult = userMapper.selectPage(
+                new Page<>(safePage, safePageSize),
                 new LambdaQueryWrapper<User>()
                         .and(w -> w.like(User::getUsername, keyword.trim())
                                    .or()
                                    .like(User::getNickname, keyword.trim()))
-                        .last("LIMIT " + safeLimit));
+                        .orderByDesc(User::getId));
 
-        return Result.ok(users.stream()
-                .map(user -> UserSummaryDto.builder()
-                        .id(user.getId())
-                        .username(user.getUsername())
-                        .nickname(user.getNickname())
-                        .avatarUrl(user.getAvatarUrl())
-                        .build())
-                .toList());
+        List<User> users = pageResult.getRecords();
+
+        return Result.ok(PageResponse.<UserSummaryDto>builder()
+                .list(users.stream()
+                        .map(user -> UserSummaryDto.builder()
+                                .id(user.getId())
+                                .username(user.getUsername())
+                                .nickname(user.getNickname())
+                                .avatarUrl(user.getAvatarUrl())
+                                .build())
+                        .toList())
+                .total(pageResult.getTotal())
+                .page(pageResult.getCurrent())
+                .pageSize(pageResult.getSize())
+                .pages(pageResult.getPages())
+                .build());
     }
 }
 
