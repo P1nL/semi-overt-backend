@@ -1,0 +1,295 @@
+{
+  "fixtureVersion": "s0-2026-09-09",
+  "generatedAt": "2026-09-09",
+  "synthetic": true,
+  "containsSecrets": false,
+  "basePaths": ["/api/v1", "/api"],
+  "envelope": {
+    "success": {
+      "code": 200,
+      "message": "success",
+      "data": {}
+    },
+    "error": {
+      "code": 409,
+      "message": "synthetic conflict",
+      "data": null
+    }
+  },
+  "auth": {
+    "registerCodeRequest": {
+      "email": "alice@example.test",
+      "cfTurnstileToken": "<synthetic-turnstile-token>"
+    },
+    "registerRequest": {
+      "email": "alice@example.test",
+      "username": "alice_demo",
+      "password": "synthetic-password-only",
+      "emailCode": "123456",
+      "cfTurnstileToken": "<synthetic-turnstile-token>"
+    },
+    "loginRequest": {
+      "account": "alice_demo",
+      "password": "synthetic-password-only",
+      "rememberMe": false
+    },
+    "authResponseRaw": {
+      "token": "<synthetic-short-access-token>",
+      "userId": 7,
+      "username": "alice_demo",
+      "nickname": "Alice Demo",
+      "email": "alice@example.test",
+      "role": "USER",
+      "avatarUrl": null
+    },
+    "refreshRequestCookieOnly": {
+      "authorizationHeader": null,
+      "cookies": {
+        "semi_overt_refresh": "<synthetic-refresh-cookie>"
+      }
+    },
+    "logoutRequestCookieOnly": {
+      "authorizationHeader": null,
+      "cookies": {
+        "semi_overt_refresh": "<synthetic-refresh-cookie>"
+      },
+      "expectedResponse": {
+        "code": 200,
+        "message": "success",
+        "data": null
+      }
+    },
+    "resetPasswordRequest": {
+      "email": "alice@example.test",
+      "code": "654321",
+      "newPassword": "synthetic-new-password"
+    }
+  },
+  "articles": {
+    "currentFrontendSaveDraftRequestWithoutVersion": {
+      "title": "Synthetic draft",
+      "content": "A synthetic article body with enough characters for contract fixtures.",
+      "summary": "Synthetic summary",
+      "coverUrl": "https://assets.example.test/cover.png",
+      "coverColor": "#DDEEFF",
+      "clientWordCount": 58
+    },
+    "serverArticleAfterSaveRaw": {
+      "id": 101,
+      "authorId": 7,
+      "title": "Synthetic draft",
+      "content": "A synthetic article body with enough characters for contract fixtures.",
+      "summary": "Synthetic summary",
+      "coverUrl": "https://assets.example.test/cover.png",
+      "coverColor": "#DDEEFF",
+      "status": "DRAFT",
+      "wordCount": 58,
+      "readMinutes": 0.2,
+      "durationCategory": "QUICK",
+      "submitCount": 0,
+      "lastSubmittedAt": null,
+      "draftVisible": false,
+      "version": 8,
+      "updatedAt": "2026-09-09T10:05:00+08:00"
+    },
+    "frontendSaveProjection": {
+      "savedAt": "2026-09-09T10:05:00+08:00",
+      "wordCount": 58,
+      "readMinutes": 0.2,
+      "durationCategory": "QUICK",
+      "status": "DRAFT",
+      "draftVisible": false,
+      "savedAtIsDerivedFromRawUpdatedAt": true
+    },
+    "draftBoxFourStatuses": [
+      {
+        "id": 101,
+        "title": "Draft",
+        "status": "DRAFT",
+        "wordCount": 58,
+        "updatedAt": "2026-09-09T10:05:00+08:00",
+        "latestReason": null,
+        "draftVisible": false
+      },
+      {
+        "id": 102,
+        "title": "Pending",
+        "status": "PENDING",
+        "wordCount": 80,
+        "updatedAt": "2026-09-09T09:00:00+08:00",
+        "latestReason": null,
+        "draftVisible": false
+      },
+      {
+        "id": 103,
+        "title": "Returned",
+        "status": "RETURNED",
+        "wordCount": 120,
+        "updatedAt": "2026-09-08T18:20:00+08:00",
+        "latestReason": "请补充来源说明",
+        "draftVisible": false
+      },
+      {
+        "id": 104,
+        "title": "Rejected",
+        "status": "REJECTED",
+        "wordCount": 90,
+        "updatedAt": "2026-09-08T17:00:00+08:00",
+        "latestReason": "内容不符合规范",
+        "draftVisible": false
+      }
+    ],
+    "publicArticleWithInvalidToken": {
+      "request": {
+        "method": "GET",
+        "path": "/articles/201",
+        "authorization": "Bearer <synthetic-invalid-token>"
+      },
+      "expectedBoundary": "treat_as_anonymous",
+      "response": {
+        "code": 200,
+        "message": "success",
+        "data": {
+          "id": 201,
+          "status": "APPROVED",
+          "title": "Public synthetic article",
+          "content": "Public synthetic content",
+          "updatedAt": "2026-09-09T08:00:00+08:00"
+        }
+      }
+    },
+    "privateArticleWithInvalidToken": {
+      "request": {
+        "method": "GET",
+        "path": "/articles/101",
+        "authorization": "Bearer <synthetic-invalid-token>"
+      },
+      "expectedBoundary": "reject_without_exposing_private_content",
+      "response": {
+        "httpStatus": 401,
+        "code": 401,
+        "message": "Authentication required",
+        "data": null
+      }
+    }
+  },
+  "reviews": {
+    "pendingPage": {
+      "list": [
+        {
+          "id": 301,
+          "title": "Pending synthetic article",
+          "submitCount": 1,
+          "submittedAt": "2026-09-09T09:10:00+08:00",
+          "wordCount": 320,
+          "assignedAdminId": 9001,
+          "author": {
+            "id": 7,
+            "username": "alice_demo",
+            "nickname": "Alice Demo",
+            "avatarUrl": null
+          }
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "pageSize": 10,
+      "pages": 1
+    },
+    "currentFrontendDecisionRequest": {
+      "action": "RETURN",
+      "reason": "请补充来源说明"
+    },
+    "futureIdempotentDecisionRequest": {
+      "decisionId": "decision-synthetic-301-1",
+      "action": "RETURN",
+      "reason": "请补充来源说明"
+    },
+    "finalDecisionRawResponse": {
+      "status": "RETURNED",
+      "updatedAt": "2026-09-09T10:20:00+08:00",
+      "decisionId": "decision-synthetic-301-1"
+    },
+    "frontendDecisionProjection": {
+      "status": "RETURNED",
+      "reviewedAt": "2026-09-09T10:20:00+08:00",
+      "reviewedAtIsDerivedFromRawUpdatedAt": true
+    },
+    "unknownResultQueryStates": [
+      {
+        "state": "PROCESSING",
+        "decisionId": "decision-synthetic-301-1",
+        "isFinalSuccess": false
+      },
+      {
+        "state": "FINAL",
+        "decisionId": "decision-synthetic-301-1",
+        "status": "RETURNED",
+        "updatedAt": "2026-09-09T10:20:00+08:00",
+        "isFinalSuccess": true
+      }
+    ]
+  },
+  "search": {
+    "articleRequest": {
+      "method": "GET",
+      "path": "/search?keyword=synthetic&page=1&pageSize=10"
+    },
+    "articleResponse": {
+      "keyword": "synthetic",
+      "list": [],
+      "total": 0,
+      "page": 1,
+      "pageSize": 10,
+      "pages": 0
+    },
+    "userResponse": {
+      "keyword": "alice",
+      "list": [],
+      "total": 0,
+      "page": 1,
+      "pageSize": 10,
+      "pages": 0
+    }
+  },
+  "upload": {
+    "requestFields": {
+      "file": "<synthetic-image-file>",
+      "bizType": "COVER",
+      "articleId": "101",
+      "oldUrl": "https://assets.example.test/old-cover.png"
+    },
+    "response": {
+      "url": "https://assets.example.test/new-cover.png",
+      "width": 1200,
+      "height": 800,
+      "size": 4096,
+      "dominantColor": "#DDEEFF"
+    }
+  },
+  "errorCases": [
+    {
+      "case": "stale-draft-version",
+      "httpStatus": 409,
+      "code": 409,
+      "data": null
+    },
+    {
+      "case": "rate-limit",
+      "httpStatus": 429,
+      "code": 429,
+      "retryAfter": "60",
+      "data": null
+    },
+    {
+      "case": "review-timeout-result-unknown",
+      "httpStatus": 504,
+      "code": 504,
+      "message": "Decision result is unknown; query the same decisionId",
+      "data": {
+        "decisionId": "decision-synthetic-301-1",
+        "isFinalSuccess": false
+      }
+    }
+  ]
+}

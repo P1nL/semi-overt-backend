@@ -59,6 +59,28 @@ class GatewayAuthFilterTest {
     }
 
     @Test
+    void publicRequestWithForgedIdentityHeadersDropsThoseHeaders() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/articles/12")
+                        .header(HeaderNames.X_USER_ID, "999")
+                        .header(HeaderNames.X_USERNAME, "mallory")
+                        .header(HeaderNames.X_USER_ROLE, "ADMIN")
+                        .header(HeaderNames.X_TRACE_ID, "client-trace")
+                        .build()
+        );
+        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
+        GatewayFilterChain chain = chainCapturing(forwardedRequest);
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertThat(forwardedRequest.get()).isNotNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_TRACE_ID)).isEqualTo("client-trace");
+        verify(redisTemplate, never()).hasKey(anyString());
+    }
+    @Test
     void whitelistedRequestWithValidTokenInjectsUserHeaders() {
         when(redisTemplate.hasKey("jwt:blacklist:valid-token")).thenReturn(Mono.just(false));
         when(jwtHelper.parse("valid-token")).thenReturn(JwtUser.builder()
@@ -116,7 +138,7 @@ class GatewayAuthFilterTest {
     }
 
     @Test
-    void whitelistedRequestWithBlacklistedTokenReturnsUnauthorized() {
+    void whitelistedRequestWithBlacklistedTokenFallsBackToAnonymous() {
         when(redisTemplate.hasKey("jwt:blacklist:revoked-token")).thenReturn(Mono.just(true));
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
@@ -124,15 +146,32 @@ class GatewayAuthFilterTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer revoked-token")
                         .build()
         );
-        AtomicBoolean chainCalled = new AtomicBoolean(false);
-        GatewayFilterChain chain = currentExchange -> {
-            chainCalled.set(true);
-            return Mono.empty();
-        };
+        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
+        GatewayFilterChain chain = chainCapturing(forwardedRequest);
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        assertThat(chainCalled.get()).isFalse();
+        assertThat(forwardedRequest.get()).isNotNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isNull();
+        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isNull();
+    }
+
+    @Test
+    void protectedRequestWithBlacklistedTokenReturnsUnauthorized() {
+        when(redisTemplate.hasKey("jwt:blacklist:revoked-token")).thenReturn(Mono.just(true));
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/articles/drafts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer revoked-token")
+                        .build()
+        );
+        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
+        GatewayFilterChain chain = chainCapturing(forwardedRequest);
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertThat(forwardedRequest.get()).isNull();
         assertThat(exchange.getResponse().getStatusCode()).hasToString("401 UNAUTHORIZED");
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
     }
