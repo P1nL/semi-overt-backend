@@ -22,6 +22,9 @@ public class DbMigrationApplication implements CommandLineRunner {
     @Value("${DB_PASSWORD}")
     private String dbPassword;
 
+    @Value("${MIGRATION_MODE:AUTO}")
+    private String migrationMode;
+
     public static void main(String[] args) {
         SpringApplication.run(DbMigrationApplication.class, args);
     }
@@ -35,22 +38,9 @@ public class DbMigrationApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws java.sql.SQLException {
-        Flyway flyway = createConfiguration(dbUrl, dbUsername, dbPassword).load();
-        SchemaPreflight.Report report;
-        try (java.sql.Connection connection = flyway.getConfiguration().getDataSource().getConnection()) {
-            report = SchemaPreflight.inspect(connection);
-        }
-        log.info("Schema preflight: kind={}, historyPresent={}", report.kind(), report.historyPresent());
-        report.requireMigrationAllowed();
-        if (report.historyPresent()) {
-            flyway.validate();
-            boolean appliedV2 = java.util.Arrays.stream(flyway.info().applied())
-                    .anyMatch(info -> info.getVersion() != null && "2".equals(info.getVersion().toString()));
-            if (appliedV2 != report.featuredColumnPresent()) {
-                throw new IllegalStateException("Migration refused: V2 history and last_featured_at disagree.");
-            }
-        }
-        MigrateResult result = flyway.migrate();
+        MigrateResult result = MigrationRunner.migrate(
+                createConfiguration(dbUrl, dbUsername, dbPassword).getDataSource(),
+                MigrationRunner.Mode.valueOf(migrationMode));
         log.info("Flyway migration finished. Initial schema version={}, target schema version={}, migrations executed={}",
                 result.initialSchemaVersion,
                 result.targetSchemaVersion,

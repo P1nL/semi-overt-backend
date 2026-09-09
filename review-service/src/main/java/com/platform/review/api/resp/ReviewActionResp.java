@@ -14,6 +14,7 @@ public class ReviewActionResp {
         private ArticleStatus status;
 
         private LocalDateTime reviewedAt;
-}
-
-
+    /** Wire alias only; does not claim that asynchronous article application is complete. */
+    public LocalDateTime getUpdatedAt() {
+        return reviewedAt;
+    }}

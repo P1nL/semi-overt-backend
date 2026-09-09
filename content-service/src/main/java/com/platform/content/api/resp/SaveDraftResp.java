@@ -20,4 +20,11 @@ public class SaveDraftResp {
     private BigDecimal readMinutes;
     private DurationCategory durationCategory;
     private ArticleStatus status;
-}
+    /** Compatibility alias: the current frontend reads updatedAt from the wire. */
+    public LocalDateTime getUpdatedAt() {
+        return savedAt;
+    }
+
+    public boolean isDraftVisible() {
+        return false;
+    }}
