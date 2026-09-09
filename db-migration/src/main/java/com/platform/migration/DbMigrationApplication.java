@@ -2,6 +2,7 @@ package com.platform.migration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -25,15 +26,16 @@ public class DbMigrationApplication implements CommandLineRunner {
         SpringApplication.run(DbMigrationApplication.class, args);
     }
 
+    static FluentConfiguration createConfiguration(String url, String user, String password) {
+        return Flyway.configure()
+                .dataSource(url, user, password)
+                .baselineOnMigrate(false)
+                .locations("classpath:db/migration");
+    }
+
     @Override
     public void run(String... args) {
-        Flyway flyway = Flyway.configure()
-                .dataSource(dbUrl, dbUsername, dbPassword)
-                .baselineOnMigrate(true)
-                .baselineVersion("1")
-                .locations("classpath:db/migration")
-                .load();
-
+        Flyway flyway = createConfiguration(dbUrl, dbUsername, dbPassword).load();
         MigrateResult result = flyway.migrate();
         log.info("Flyway migration finished. Initial schema version={}, target schema version={}, migrations executed={}",
                 result.initialSchemaVersion,
