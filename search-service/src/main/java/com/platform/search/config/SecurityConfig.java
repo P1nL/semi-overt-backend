@@ -13,10 +13,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    @org.springframework.beans.factory.annotation.Value("${platform.internal.token:}")
+    private String internalToken;
+
 
         @Bean
     public HeaderAuthenticationFilter headerAuthenticationFilter() {
-        return new HeaderAuthenticationFilter();
+        return new HeaderAuthenticationFilter(internalToken);
     }
 
         @Bean
@@ -30,5 +33,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-
-

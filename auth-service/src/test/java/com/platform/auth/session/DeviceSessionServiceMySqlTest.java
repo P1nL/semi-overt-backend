@@ -48,7 +48,14 @@ class DeviceSessionServiceMySqlTest {
         assertEquals(DeviceSessionService.Status.EXPIRED,service.refresh(again.tokens().refreshToken()).status());
         assertEquals(DeviceSessionService.Status.UNKNOWN,service.refresh("invalid").status());
         assertEquals(DeviceSessionService.Status.USER_MISSING,service.openForAuthenticatedUser(999,true,null).status());
-        assertFalse(tokens.toString().contains(tokens.refreshToken()));
+        assertFalse(tokens.toString().contains(tokens.refreshToken()));        assertNull(service.validateAccess(tokens.accessToken()));
+        var valid=service.openForAuthenticatedUser(1,7L,true,null);
+        assertNotNull(service.validateAccess(valid.tokens().accessToken()));
+        jdbc.update("UPDATE users SET session_version=8 WHERE id=1");
+        assertNull(service.validateAccess(valid.tokens().accessToken()));
+        assertEquals(DeviceSessionService.Status.VERSION_CHANGED,service.openForAuthenticatedUser(1,7L,true,null).status());
+        assertNull(service.validateAccess("not-a-jwt"));        String legacy=Jwts.builder().subject("1").claim("role","ADMIN").issuedAt(new java.util.Date()).expiration(new java.util.Date(System.currentTimeMillis()+60000)).signWith(Keys.hmacShaKeyFor(KEY)).compact();
+        assertNull(service.validateAccess(legacy));
     }
     @Test void rejectsUnboundedAccessTtl() {
         assertThrows(IllegalArgumentException.class,()->new SessionAccessTokenIssuer(Base64.getEncoder().encodeToString(KEY),901));

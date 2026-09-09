@@ -21,6 +21,7 @@ public class User {
     private String nickname;
     private String email;
     private String password;
+    private Long sessionVersion;
     private UserRole role;
     private String avatarUrl;
     private String coverUrl;

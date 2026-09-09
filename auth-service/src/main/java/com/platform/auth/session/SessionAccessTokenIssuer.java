@@ -9,7 +9,7 @@ import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.Date;
 
-/** Issuer reserved for durable sessions. Legacy login is not switched until gateway integration. */
+/** Short access token issuer and verifier for durable device sessions. */
 @Component
 public final class SessionAccessTokenIssuer {
     private final SecretKey key;
@@ -25,5 +25,16 @@ public final class SessionAccessTokenIssuer {
         return Jwts.builder().subject(Long.toString(userId)).claim("username",username).claim("role",role)
                 .claim("sid",sessionId).claim("sessionVersion",sessionVersion)
                 .issuedAt(Date.from(now)).expiration(Date.from(now.plusSeconds(ttlSeconds))).signWith(key).compact();
+    }
+    public io.jsonwebtoken.Claims validate(String token) {
+        var claims=Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        if(claims.getExpiration()==null || claims.getIssuedAt()==null
+                || claims.getExpiration().getTime()-claims.getIssuedAt().getTime()>900000
+                || claims.getIssuedAt().after(new Date(System.currentTimeMillis()+30000))
+                || claims.getExpiration().before(claims.getIssuedAt())
+                || claims.get("sid",String.class)==null || claims.get("sid",String.class).isBlank()
+                || claims.get("sessionVersion",Number.class)==null)
+            throw new IllegalArgumentException("Not a device access token");
+        return claims;
     }
 }

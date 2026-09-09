@@ -39,9 +39,9 @@ public class GatewayRateLimitConfig {
                 return Mono.just("user:" + userId);
             }
 
-            String forwardedFor = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+            String forwardedFor = exchange.getRequest().getHeaders().getFirst("X-Verified-Client-IP");
             if (StringUtils.hasText(forwardedFor)) {
-                return Mono.just("ip:" + forwardedFor.split(",")[0].trim());
+                return Mono.just("ip:" + forwardedFor.trim());
             }
 
             InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();

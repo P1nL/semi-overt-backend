@@ -31,8 +31,9 @@ class GatewayRoutingHttpTest {
     @MockBean RedisRateLimiter limiter;
     @MockBean ReactiveStringRedisTemplate redis;
     @MockBean GatewayJwtHelper jwt;
+    @MockBean com.platform.gateway.session.SessionAuthorityClient authority;
     @SpringBootConfiguration @EnableAutoConfiguration
-    @Import({GatewayRouteConfig.class,ApiCompatibilityWebFilter.class,GatewayAuthFilter.class})
+    @Import({GatewayRouteConfig.class,ApiCompatibilityWebFilter.class,GatewayAuthFilter.class,com.platform.gateway.session.ClientIpResolver.class})
     static class App {
         @Bean KeyResolver clientRateLimiterKeyResolver(){return e->Mono.just("synthetic");}
         @Bean Capture capture(){return new Capture();}
@@ -47,6 +48,8 @@ class GatewayRoutingHttpTest {
         }
     }
     @Test void productionRoutePredicatesMatchBothPrefixesAndKeepAuth() {
+        org.mockito.Mockito.when(authority.internalToken()).thenReturn("test-internal");
+        org.mockito.Mockito.when(authority.consume(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.isNull(),org.mockito.ArgumentMatchers.eq("SEARCH"))).thenReturn(Mono.just(new com.platform.gateway.session.SessionAuthorityClient.Budget(true,0)));
         for(String prefix:new String[]{"/api","/api/v1"}) {
             String result=HttpClient.create().get().uri("http://127.0.0.1:"+port+prefix+"/search?keyword=a%2Fb")
                 .responseSingle((r,b)->{assertEquals(200,r.status().code());return b.asString();}).block(Duration.ofSeconds(10));

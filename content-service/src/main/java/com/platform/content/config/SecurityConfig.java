@@ -31,7 +31,7 @@ public class SecurityConfig {
 
     @Bean
     public HeaderAuthenticationFilter headerAuthenticationFilter() {
-        return new HeaderAuthenticationFilter();
+        return new HeaderAuthenticationFilter(internalToken);
     }
 
     @Bean
@@ -72,6 +72,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-
-
-

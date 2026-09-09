@@ -1,232 +1,27 @@
 package com.platform.gateway.filter;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.kernel.constant.HeaderNames;
-import com.platform.gateway.security.GatewayJwtHelper;
-import com.platform.gateway.security.GatewayJwtHelper.JwtUser;
+import com.platform.gateway.session.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-/**
- * 缃戝叧璁よ瘉杩囨护鍣═est娴嬭瘯鐢ㄤ緥锛岄獙璇佸搴斿満鏅笅鐨勮涓烘槸鍚︾鍚堥鏈熴€?
- */
-
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 class GatewayAuthFilterTest {
-
-    private ReactiveStringRedisTemplate redisTemplate;
-    private GatewayJwtHelper jwtHelper;
-    private GatewayAuthFilter filter;
-
-    @BeforeEach
-    void setUp() {
-        redisTemplate = mock(ReactiveStringRedisTemplate.class);
-        jwtHelper = mock(GatewayJwtHelper.class);
-        filter = new GatewayAuthFilter(redisTemplate, jwtHelper, new ObjectMapper());
+    SessionAuthorityClient authority;GatewayAuthFilter filter;
+    @BeforeEach void setup(){authority=mock(SessionAuthorityClient.class);when(authority.internalToken()).thenReturn("test-internal");filter=new GatewayAuthFilter(authority,new ClientIpResolver(""),new ObjectMapper());}
+    @Test void publicInvalidTokenAnonymousAndForgedHeadersRemoved(){
+        when(authority.validate("revoked")).thenReturn(Mono.empty());var e=MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/articles/12").header("Authorization","Bearer revoked").header("X-User-Id","1").header("X-User-Role","ADMIN").header("X-Internal-Token","forged"));
+        var seen=new AtomicReference<org.springframework.web.server.ServerWebExchange>();StepVerifier.create(filter.filter(e,x->{seen.set(x);return Mono.empty();})).verifyComplete();
+        assertNotNull(seen.get());assertNull(seen.get().getRequest().getHeaders().getFirst("X-User-Id"));assertEquals("test-internal",seen.get().getRequest().getHeaders().getFirst("X-Internal-Token"));
     }
-
-    @Test
-    void whitelistedRequestWithoutTokenStaysAnonymous() {
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/12").build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNotNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_TRACE_ID)).isNotBlank();
-        verify(redisTemplate, never()).hasKey(anyString());
-    }
-
-    @Test
-    void publicRequestWithForgedIdentityHeadersDropsThoseHeaders() {
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/12")
-                        .header(HeaderNames.X_USER_ID, "999")
-                        .header(HeaderNames.X_USERNAME, "mallory")
-                        .header(HeaderNames.X_USER_ROLE, "ADMIN")
-                        .header(HeaderNames.X_TRACE_ID, "client-trace")
-                        .build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNotNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_TRACE_ID)).isEqualTo("client-trace");
-        verify(redisTemplate, never()).hasKey(anyString());
-    }
-    @Test
-    void whitelistedRequestWithValidTokenInjectsUserHeaders() {
-        when(redisTemplate.hasKey("jwt:blacklist:valid-token")).thenReturn(Mono.just(false));
-        when(jwtHelper.parse("valid-token")).thenReturn(JwtUser.builder()
-                .userId(7L)
-                .username("alice")
-                .role("USER")
-                .build());
-        when(jwtHelper.shouldRefresh("valid-token")).thenReturn(false);
-
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/12")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
-                        .build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNotNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isEqualTo("7");
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isEqualTo("alice");
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isEqualTo("USER");
-    }
-
-    @Test
-    void forgedUserHeadersAreOverwrittenByGateway() {
-        when(redisTemplate.hasKey("jwt:blacklist:valid-token")).thenReturn(Mono.just(false));
-        when(jwtHelper.parse("valid-token")).thenReturn(JwtUser.builder()
-                .userId(7L)
-                .username("alice")
-                .role("USER")
-                .build());
-        when(jwtHelper.shouldRefresh("valid-token")).thenReturn(false);
-
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/users/alice/profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
-                        .header(HeaderNames.X_USER_ID, "999")
-                        .header(HeaderNames.X_USERNAME, "mallory")
-                        .header(HeaderNames.X_USER_ROLE, "ADMIN")
-                        .header(HeaderNames.X_TRACE_ID, "client-trace")
-                        .build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNotNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isEqualTo("7");
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isEqualTo("alice");
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isEqualTo("USER");
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_TRACE_ID)).isEqualTo("client-trace");
-    }
-
-    @Test
-    void whitelistedRequestWithBlacklistedTokenFallsBackToAnonymous() {
-        when(redisTemplate.hasKey("jwt:blacklist:revoked-token")).thenReturn(Mono.just(true));
-
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/12")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer revoked-token")
-                        .build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNotNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ID)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USERNAME)).isNull();
-        assertThat(forwardedRequest.get().getHeaders().getFirst(HeaderNames.X_USER_ROLE)).isNull();
-    }
-
-    @Test
-    void protectedRequestWithBlacklistedTokenReturnsUnauthorized() {
-        when(redisTemplate.hasKey("jwt:blacklist:revoked-token")).thenReturn(Mono.just(true));
-
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/drafts")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer revoked-token")
-                        .build()
-        );
-        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
-        GatewayFilterChain chain = chainCapturing(forwardedRequest);
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(forwardedRequest.get()).isNull();
-        assertThat(exchange.getResponse().getStatusCode()).hasToString("401 UNAUTHORIZED");
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
-    }
-
-    @Test
-    void protectedRequestWithoutTokenReturnsUnauthorized() {
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/articles/drafts").build()
-        );
-        AtomicBoolean chainCalled = new AtomicBoolean(false);
-        GatewayFilterChain chain = currentExchange -> {
-            chainCalled.set(true);
-            return Mono.empty();
-        };
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(chainCalled.get()).isFalse();
-        assertThat(exchange.getResponse().getStatusCode()).hasToString("401 UNAUTHORIZED");
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
-    }
-
-    @Test
-    void reviewRequestForNonAdminReturnsForbidden() {
-        when(redisTemplate.hasKey("jwt:blacklist:user-token")).thenReturn(Mono.just(false));
-        when(jwtHelper.parse("user-token")).thenReturn(JwtUser.builder()
-                .userId(9L)
-                .username("bob")
-                .role("USER")
-                .build());
-        when(jwtHelper.shouldRefresh("user-token")).thenReturn(false);
-
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/reviews/pending")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer user-token")
-                        .build()
-        );
-        AtomicBoolean chainCalled = new AtomicBoolean(false);
-        GatewayFilterChain chain = currentExchange -> {
-            chainCalled.set(true);
-            return Mono.empty();
-        };
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertThat(chainCalled.get()).isFalse();
-        assertThat(exchange.getResponse().getStatusCode()).hasToString("403 FORBIDDEN");
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":403");
-    }
-
-    private GatewayFilterChain chainCapturing(AtomicReference<ServerHttpRequest> forwardedRequest) {
-        return exchange -> {
-            forwardedRequest.set(exchange.getRequest());
-            return Mono.empty();
-        };
-    }
+    @Test void protectedInvalidTokenDenied(){when(authority.validate("revoked")).thenReturn(Mono.empty());var e=MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/articles/drafts").header("Authorization","Bearer revoked"));StepVerifier.create(filter.filter(e,x->Mono.error(new AssertionError("must not forward")))).verifyComplete();assertEquals(401,e.getResponse().getStatusCode().value());}
+    @Test void authorityOutageIs503Not401(){when(authority.validate("valid")).thenReturn(Mono.error(new IllegalStateException()));var e=MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/articles/drafts").header("Authorization","Bearer valid"));StepVerifier.create(filter.filter(e,x->Mono.empty())).verifyComplete();assertEquals(503,e.getResponse().getStatusCode().value());}
+    @Test void cookieLogoutDoesNotValidateBearer(){when(authority.consume(anyString(),isNull(),eq("WRITE"))).thenReturn(Mono.just(new SessionAuthorityClient.Budget(true,0)));var e=MockServerWebExchange.from(MockServerHttpRequest.post("/api/v1/auth/logout").header("Cookie","semi_overt_refresh=opaque").header("Authorization","Bearer obsolete"));var seen=new AtomicReference<String>();StepVerifier.create(filter.filter(e,x->{seen.set(x.getRequest().getHeaders().getFirst("Cookie"));return Mono.empty();})).verifyComplete();assertEquals("semi_overt_refresh=opaque",seen.get());verify(authority,never()).validate(anyString());}
+    @Test void budgetRejectSetsRetryAfter(){when(authority.consume(anyString(),isNull(),eq("SEARCH"))).thenReturn(Mono.just(new SessionAuthorityClient.Budget(false,30)));var e=MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/search/articles"));StepVerifier.create(filter.filter(e,x->Mono.error(new AssertionError()))).verifyComplete();assertEquals(429,e.getResponse().getStatusCode().value());assertEquals("30",e.getResponse().getHeaders().getFirst("Retry-After"));}
+    @Test void validIdentityUsesAuthorityRoleNotClientRole(){when(authority.validate("valid")).thenReturn(Mono.just(new SessionAuthorityClient.Identity(7L,"writer","USER")));var e=MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/reviews/pending").header("Authorization","Bearer valid").header("X-User-Role","ADMIN"));StepVerifier.create(filter.filter(e,x->Mono.error(new AssertionError()))).verifyComplete();assertEquals(403,e.getResponse().getStatusCode().value());}
+    @Test void internalPathsNeverPublic(){var e=MockServerWebExchange.from(MockServerHttpRequest.post("/internal/auth/session/validate"));StepVerifier.create(filter.filter(e,x->Mono.error(new AssertionError()))).verifyComplete();assertEquals(404,e.getResponse().getStatusCode().value());}
 }
-

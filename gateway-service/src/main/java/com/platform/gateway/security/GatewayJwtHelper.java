@@ -21,7 +21,7 @@ import java.util.Date;
  * 负责解析 token、判断剩余有效期以及在需要时重新签发刷新 token。
  */
 @Slf4j
-@Component
+@Deprecated
 public class GatewayJwtHelper {
 
     /** JWT 签名密钥最小字节长度（256 位） */
@@ -138,4 +138,3 @@ public class GatewayJwtHelper {
         String role;
     }
 }
-

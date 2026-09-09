@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * JWT 工具类，负责 token 的生成、解析和刷新判断。
  */
 @Slf4j
-@Component
+@Deprecated
 public class JwtHelper {
 
     /** JWT 签名密钥最小字节长度（256 位） */

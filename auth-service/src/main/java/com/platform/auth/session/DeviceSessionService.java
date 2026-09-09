@@ -17,7 +17,7 @@ import java.util.*;
 /** Outcomes are returned after commit. The HTTP caller must map a failure outside the transaction. */
 @Service
 public class DeviceSessionService {
-    public enum Status { ISSUED, UNKNOWN, REPLAYED, EXPIRED, USER_MISSING }
+    public enum Status { ISSUED, UNKNOWN, REPLAYED, EXPIRED, USER_MISSING, VERSION_CHANGED }
     public record Tokens(String accessToken,String refreshToken,String sessionId,long userId,
                          boolean persistent,LocalDateTime absoluteExpiresAt) {
         @Override public String toString(){return "Tokens[redacted]";}
@@ -39,11 +39,16 @@ public class DeviceSessionService {
         tx=new TransactionTemplate(transactions);
         // This durable boundary must survive later HTTP exception translation, including an outer transaction.
         tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        tx.setTimeout(5);
     }
     /** Call only after password/registration checks have committed; never trust a client-supplied userId. */
-    public Outcome openForAuthenticatedUser(long userId,boolean persistent,String previousRefresh) {
+    Outcome openForAuthenticatedUser(long userId,boolean persistent,String previousRefresh) {
+        return openForAuthenticatedUser(userId,null,persistent,previousRefresh);
+    }
+    public Outcome openForAuthenticatedUser(long userId,Long expectedVersion,boolean persistent,String previousRefresh) {
         return tx.execute(s->{
             User user=user(userId);if(user==null)return new Outcome(Status.USER_MISSING,null);
+            if(expectedVersion!=null && user.version()!=expectedVersion)return new Outcome(Status.VERSION_CHANGED,null);
             LocalDateTime now=LocalDateTime.now();
             if(validFormat(previousRefresh)) sessions.revokeByRefreshToken(hash(previousRefresh),now);
             String token=randomToken(), id=UUID.randomUUID().toString(),family=UUID.randomUUID().toString();
@@ -55,23 +60,49 @@ public class DeviceSessionService {
     public Outcome refresh(String token) {
         if(!validFormat(token))return new Outcome(Status.UNKNOWN,null);
         return tx.execute(s->{
+            // Lock user before token/session, matching password reset and access validation.
+            Long owner=owner(token);
+            if(owner==null)return new Outcome(Status.UNKNOWN,null);
+            User user=user(owner);
             LocalDateTime now=LocalDateTime.now();String replacement=randomToken();
             var rotation=sessions.rotateRefreshToken(hash(token),hash(replacement),now,now.plusDays(idleDays));
             if(rotation.status()!=RefreshTokenRotation.Status.ROTATED)
                 return new Outcome(Status.valueOf(rotation.status().name()),null);
-            User user=user(rotation.userId());
+
             if(user==null){sessions.revokeSession(rotation.sessionId(),now);return new Outcome(Status.USER_MISSING,null);}
             return issued(user,rotation.sessionId(),replacement,rotation.persistent(),rotation.absoluteExpiresAt());
         });
     }
     public void logout(String token) {
-        if(validFormat(token)) tx.executeWithoutResult(s->sessions.revokeByRefreshToken(hash(token),LocalDateTime.now()));
+        if(validFormat(token)) tx.executeWithoutResult(s->{
+            Long owner=owner(token);if(owner!=null)user(owner);
+            sessions.revokeByRefreshToken(hash(token),LocalDateTime.now());
+        });
+    }
+    public record Identity(long userId,String username,String role) {}
+    public Identity validateAccess(String access) {
+        final io.jsonwebtoken.Claims claims;
+        try { claims=issuer.validate(access); }
+        catch(io.jsonwebtoken.JwtException|IllegalArgumentException e){return null;}
+        final long id;
+        try{id=Long.parseLong(claims.getSubject());}catch(RuntimeException e){return null;}
+        return tx.execute(s->{
+            User user=user(id);
+            if(user==null || user.version()!=claims.get("sessionVersion",Number.class).longValue())return null;
+            var now=LocalDateTime.now();
+            if(!sessions.touchForAccess(claims.get("sid",String.class),id,now,now.plusDays(idleDays)))return null;
+            return new Identity(id,user.username(),user.role());
+        });
     }
     private Outcome issued(User user,String id,String refresh,boolean persistent,LocalDateTime absolute) {
         return new Outcome(Status.ISSUED,new Tokens(issuer.issue(user.id(),user.username(),user.role(),id,user.version()),refresh,id,user.id(),persistent,absolute));
     }
+    private Long owner(String token) {
+        return jdbc.query("SELECT s.user_id FROM auth_refresh_tokens t JOIN auth_device_sessions s ON s.session_id=t.session_id WHERE t.token_hash=?",
+                (r,n)->r.getLong(1),hash(token)).stream().findFirst().orElse(null);
+    }
     private User user(long id) {
-        return jdbc.query("SELECT id,username,role,session_version FROM users WHERE id=?",
+        return jdbc.query("SELECT id,username,role,session_version FROM users WHERE id=? FOR UPDATE",
                 (r,n)->new User(r.getLong(1),r.getString(2),r.getString(3),r.getLong(4)),id).stream().findFirst().orElse(null);
     }
     private String randomToken(){byte[] bytes=new byte[32];random.nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}

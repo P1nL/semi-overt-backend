@@ -1,10 +1,9 @@
 package com.platform.auth.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.platform.kernel.util.Result;
 import com.platform.web.support.security.HeaderAuthenticationFilter;
 import com.platform.web.support.security.InternalTokenFilter;
-import com.platform.kernel.util.Result;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,13 +20,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
-
     private final ObjectMapper objectMapper;
+    private final String internalToken;
 
-    @Value("${platform.internal.token:}")
-    private String internalToken;
+    public SecurityConfig(ObjectMapper objectMapper,
+                          @Value("${platform.internal.token:}") String internalToken) {
+        this.objectMapper = objectMapper;
+        this.internalToken = internalToken;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -36,7 +37,7 @@ public class SecurityConfig {
 
     @Bean
     public HeaderAuthenticationFilter headerAuthenticationFilter() {
-        return new HeaderAuthenticationFilter();
+        return new HeaderAuthenticationFilter(internalToken);
     }
 
     @Bean
@@ -48,21 +49,22 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    HeaderAuthenticationFilter headerAuthenticationFilter,
                                                    InternalTokenFilter internalTokenFilter) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
+        http.csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(internalTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/internal/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
+                                "/api/v1/auth/register-code",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/logout",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/profile").permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setContentType("application/json;charset=UTF-8");
@@ -75,10 +77,8 @@ public class SecurityConfig {
                             response.setStatus(403);
                             response.getWriter().write(objectMapper.writeValueAsString(
                                     Result.forbidden("Access denied")));
-                        })
-                )
+                        }))
                 .addFilterBefore(headerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-
         return http.build();
     }
 }

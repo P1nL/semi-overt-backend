@@ -88,9 +88,11 @@ class ApiCompatibilityWebFilterTest {
 
     @Test
     void keepsAdminAliasProtectedByTheExistingAuthenticationBoundary() {
+        var authority = mock(com.platform.gateway.session.SessionAuthorityClient.class);
+        when(authority.internalToken()).thenReturn("test-internal");
         ReactiveStringRedisTemplate redisTemplate = mock(ReactiveStringRedisTemplate.class);
         GatewayJwtHelper jwtHelper = mock(GatewayJwtHelper.class);
-        GatewayAuthFilter authFilter = new GatewayAuthFilter(redisTemplate, jwtHelper, new ObjectMapper());
+        GatewayAuthFilter authFilter = new GatewayAuthFilter(authority, new com.platform.gateway.session.ClientIpResolver(""), new ObjectMapper());
         AtomicBoolean downstreamCalled = new AtomicBoolean();
 
         MockServerWebExchange exchange = exchange(HttpMethod.GET, "/api/admin/articles/1");
@@ -109,13 +111,16 @@ class ApiCompatibilityWebFilterTest {
 
     @Test
     void keepsReviewAliasProtectedByTheExistingRoleBoundary() {
+        var authority = mock(com.platform.gateway.session.SessionAuthorityClient.class);
+        when(authority.internalToken()).thenReturn("test-internal");
         ReactiveStringRedisTemplate redisTemplate = mock(ReactiveStringRedisTemplate.class);
         GatewayJwtHelper jwtHelper = mock(GatewayJwtHelper.class);
         when(redisTemplate.hasKey("jwt:blacklist:user-token")).thenReturn(Mono.just(false));
         when(jwtHelper.parse("user-token")).thenReturn(JwtUser.builder()
                 .userId(9L).username("bob").role("USER").build());
         when(jwtHelper.shouldRefresh("user-token")).thenReturn(false);
-        GatewayAuthFilter authFilter = new GatewayAuthFilter(redisTemplate, jwtHelper, new ObjectMapper());
+        when(authority.validate("user-token")).thenReturn(Mono.just(new com.platform.gateway.session.SessionAuthorityClient.Identity(9L,"bob","USER")));
+        GatewayAuthFilter authFilter = new GatewayAuthFilter(authority, new com.platform.gateway.session.ClientIpResolver(""), new ObjectMapper());
         AtomicBoolean downstreamCalled = new AtomicBoolean();
 
         MockServerWebExchange exchange = MockServerWebExchange.from(

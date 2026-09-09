@@ -25,7 +25,7 @@ public class GatewayRouteConfig {
                                      KeyResolver clientRateLimiterKeyResolver) {
         return builder.routes()
                 .route("auth-service-public", r -> r
-                        .path("/api/v1/auth/register",
+                        .path("/api/v1/auth/register-code", "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password")

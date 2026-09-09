@@ -51,6 +51,7 @@ class ReviewSecurityConfigTest {
     @Test
     void pendingListForNormalUserReturns403() throws Exception {
         mockMvc.perform(get("/api/v1/reviews/pending")
+                        .header("X-Internal-Token", "test-only-review-security-token")
                         .header("X-User-Id", "12")
                         .header("X-Username", "user12")
                         .header("X-User-Role", "USER"))
@@ -64,6 +65,7 @@ class ReviewSecurityConfigTest {
                 .thenThrow(BusinessException.forbidden("Access denied"));
 
         mockMvc.perform(get("/api/v1/reviews/99/logs")
+                        .header("X-Internal-Token", "test-only-review-security-token")
                         .header("X-User-Id", "12")
                         .header("X-Username", "user12")
                         .header("X-User-Role", "USER"))
@@ -84,6 +86,7 @@ class ReviewSecurityConfigTest {
         ));
 
         mockMvc.perform(get("/api/v1/reviews/99/logs")
+                        .header("X-Internal-Token", "test-only-review-security-token")
                         .header("X-User-Id", "12")
                         .header("X-Username", "author12")
                         .header("X-User-Role", "USER"))
@@ -91,7 +94,7 @@ class ReviewSecurityConfigTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].action").value("RETURN"));
     }
-}
-
-
-
+    @Test void forgedUserHeadersWithoutInternalTokenAreRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/pending").header("X-User-Id","12").header("X-User-Role","ADMIN"))
+            .andExpect(status().isUnauthorized());
+    }}

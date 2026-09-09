@@ -22,6 +22,11 @@ import java.util.List;
  */
 
 public class HeaderAuthenticationFilter extends OncePerRequestFilter {
+    private final String internalToken;
+    public HeaderAuthenticationFilter(String internalToken) {
+        if(internalToken==null || internalToken.isBlank()) throw new IllegalArgumentException("Internal token required for forwarded identity");
+        this.internalToken=internalToken;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -37,7 +42,10 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
             String username = request.getHeader(HeaderNames.X_USERNAME);
             String role = request.getHeader(HeaderNames.X_USER_ROLE);
 
-            if (userIdHeader != null && !userIdHeader.isBlank()) {
+            String provided=request.getHeader(HeaderNames.X_INTERNAL_TOKEN);
+            boolean trusted=provided!=null && java.security.MessageDigest.isEqual(
+                    internalToken.getBytes(java.nio.charset.StandardCharsets.UTF_8),provided.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (trusted && userIdHeader != null && userIdHeader.matches("[0-9]{1,18}")) {
                 Long userId = Long.valueOf(userIdHeader);
                 String normalizedRole = (role == null || role.isBlank()) ? "USER" : role;
                 List<SimpleGrantedAuthority> authorities =

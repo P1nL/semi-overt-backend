@@ -1,207 +1,59 @@
 package com.platform.gateway.filter;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.gateway.security.GatewayJwtHelper;
-import com.platform.gateway.security.GatewayJwtHelper.JwtUser;
-import com.platform.kernel.constant.HeaderNames;
+import com.platform.gateway.session.SessionAuthorityClient;
+import com.platform.gateway.session.ClientIpResolver;
 import com.platform.kernel.util.Result;
-import lombok.RequiredArgsConstructor;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.filter.*;
 import org.springframework.core.Ordered;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
-import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
-
+import java.util.*;
 @Component
-@RequiredArgsConstructor
-public class GatewayAuthFilter implements GlobalFilter, Ordered {
-
-    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
-
-    private final ReactiveStringRedisTemplate redisTemplate;
-    private final GatewayJwtHelper jwtHelper;
-    private final ObjectMapper objectMapper;
-
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String path = exchange.getRequest().getPath().value();
-        if (path.startsWith("/internal/")) {
-            return writeResult(exchange, HttpStatus.NOT_FOUND, Result.notFound("Not found"));
-        }
-
-        String traceId = resolveTraceId(exchange.getRequest());
-        ServerHttpRequest baseRequest = sanitizeHeaders(exchange.getRequest(), traceId);
-        ServerWebExchange baseExchange = exchange.mutate().request(baseRequest).build();
-
-        return authenticate(baseExchange, baseRequest)
-                .flatMap(authContext -> {
-                    if (isWhitelisted(exchange.getRequest().getMethod(), path)) {
-                        return handleWhitelistedRequest(authContext, chain);
-                    }
-
-                    if (authContext.status() != AuthStatus.AUTHENTICATED) {
-                        return writeResult(baseExchange, HttpStatus.UNAUTHORIZED,
-                                Result.unauthorized("Authentication required or token is invalid"));
-                    }
-
-                    if (path.startsWith("/api/v1/reviews/")
-                            && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
-                        return writeResult(baseExchange, HttpStatus.FORBIDDEN,
-                                Result.forbidden("没有审核权限"));
-                    }
-
-                    if (path.startsWith("/api/v1/admin/")
-                            && !"ADMIN".equalsIgnoreCase(authContext.jwtUser().getRole())) {
-                        return writeResult(baseExchange, HttpStatus.FORBIDDEN,
-                                Result.forbidden("需要管理员权限"));
-                    }
-
-                    return chain.filter(authContext.exchange());
-                });
+public class GatewayAuthFilter implements GlobalFilter,Ordered {
+    private final SessionAuthorityClient authority;private final ClientIpResolver ips;private final ObjectMapper mapper;
+    public GatewayAuthFilter(SessionAuthorityClient authority,ClientIpResolver ips,ObjectMapper mapper){this.authority=authority;this.ips=ips;this.mapper=mapper;}
+    public int getOrder(){return -100;}
+    public Mono<Void> filter(ServerWebExchange exchange,GatewayFilterChain chain){
+        String path=exchange.getRequest().getPath().value();String method=exchange.getRequest().getMethod().name();
+        if(path.startsWith("/internal/"))return error(exchange,404,"Not found",0);
+        String ip=ips.resolve(exchange.getRequest());
+        var request=exchange.getRequest().mutate().headers(h->{
+            for(String name:List.of("X-User-Id","X-Username","X-User-Role","X-Internal-Token","X-Verified-Client-IP","X-Forwarded-For","X-Real-IP","Forwarded"))h.remove(name);
+            h.set("X-Internal-Token",authority.internalToken());h.set("X-Verified-Client-IP",ip);
+            h.set("X-Trace-Id",UUID.randomUUID().toString());
+        }).build();
+        var clean=exchange.mutate().request(request).build();
+        boolean auth=method.equals("POST") && Set.of("/api/v1/auth/login","/api/v1/auth/register","/api/v1/auth/register-code","/api/v1/auth/refresh","/api/v1/auth/logout","/api/v1/auth/forgot-password","/api/v1/auth/reset-password").contains(path);
+        String bearer=request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        Mono<Optional<SessionAuthorityClient.Identity>> identity=auth || bearer==null || !bearer.startsWith("Bearer ")
+            ?Mono.just(Optional.empty()):authority.validate(bearer.substring(7).trim()).map(Optional::of).defaultIfEmpty(Optional.empty());
+        return identity.flatMap(result->{
+            if(!auth&&!isPublic(method,path)&&result.isEmpty())return error(clean,401,"会话已失效，请重新登录",0);
+            if(result.isPresent()&&(path.startsWith("/api/v1/admin/")||path.startsWith("/api/v1/reviews/")&&!path.matches("/api/v1/reviews/[0-9]+/logs"))&&!"ADMIN".equals(result.get().role()))return error(clean,403,"没有操作权限",0);
+            var forwarded=clean;
+            if(result.isPresent()){
+                var user=result.get();forwarded=clean.mutate().request(clean.getRequest().mutate().headers(h->{h.set("X-User-Id",user.userId().toString());h.set("X-Username",user.username());h.set("X-User-Role",user.role());}).build()).build();
+            }
+            ServerWebExchange finalExchange=forwarded;
+            String operation=method.equals("GET")&&path.startsWith("/api/v1/search")?"SEARCH":Set.of("POST","PUT","PATCH","DELETE").contains(method)?(path.startsWith("/api/v1/uploads")?"UPLOAD":"WRITE"):null;
+            if(operation==null)return chain.filter(finalExchange);
+            return authority.consume(ip,result.map(SessionAuthorityClient.Identity::userId).orElse(null),operation)
+                .flatMap(b->b.allowed()?chain.filter(finalExchange):error(finalExchange,429,"请求过于频繁，请稍后重试",b.retryAfterSeconds()));
+        }).onErrorResume(e->error(clean,503,"认证服务暂时不可用，请稍后重试",0));
     }
-
-    @Override
-    public int getOrder() {
-        return -100;
+    private boolean isPublic(String method,String path){
+        return method.equals("OPTIONS")||path.startsWith("/static/uploads/")||method.equals("GET")&&(
+            path.equals("/api/v1/home")||path.startsWith("/api/v1/categories/")||path.startsWith("/api/v1/search/")
+            ||path.matches("/api/v1/articles/[0-9]+")||path.matches("/api/v1/users/[^/]+/profile")||path.matches("/api/v1/reviews/[0-9]+/logs"));
     }
-
-    private Mono<Void> handleWhitelistedRequest(AuthContext authContext, GatewayFilterChain chain) {
-        // 白名单路径对无效/过期 token 容错：当作未登录放行，不返回 401
-        // 这样带着过期 token 的用户仍能正常浏览公开内容
-        return chain.filter(authContext.exchange());
-    }
-
-    private String resolveTraceId(ServerHttpRequest request) {
-        String traceId = request.getHeaders().getFirst(HeaderNames.X_TRACE_ID);
-        return (traceId == null || traceId.isBlank()) ? UUID.randomUUID().toString() : traceId;
-    }
-
-    private ServerHttpRequest sanitizeHeaders(ServerHttpRequest request, String traceId) {
-        return request.mutate()
-                .headers(headers -> {
-                    headers.remove(HeaderNames.X_USER_ID);
-                    headers.remove(HeaderNames.X_USERNAME);
-                    headers.remove(HeaderNames.X_USER_ROLE);
-                    headers.remove(HeaderNames.X_TRACE_ID);
-                    headers.add(HeaderNames.X_TRACE_ID, traceId);
-                })
-                .build();
-    }
-
-    private boolean isWhitelisted(HttpMethod method, String path) {
-        if (path.startsWith("/static/uploads/")) {
-            return true;
-        }
-        if (method == HttpMethod.POST && (
-                "/api/v1/auth/register".equals(path)
-                        || "/api/v1/auth/login".equals(path)
-                        || "/api/v1/auth/forgot-password".equals(path)
-                        || "/api/v1/auth/reset-password".equals(path))) {
-            return true;
-        }
-        if (method == HttpMethod.GET && (
-                "/api/v1/home".equals(path)
-                        || PATH_MATCHER.match("/api/v1/categories/**", path)
-                        || PATH_MATCHER.match("/api/v1/search/**", path)
-                        || path.matches("/api/v1/articles/\\d+")
-                        || path.matches("/api/v1/users/[^/]+/profile")
-                        || path.matches("/api/v1/reviews/\\d+/logs"))) {
-            return true;
-        }
-        return false;
-    }
-
-    private String extractToken(ServerHttpRequest request) {
-        String header = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (header != null && header.startsWith("Bearer ")) {
-            return header.substring(7).trim();
-        }
-        return null;
-    }
-
-    private Mono<AuthContext> authenticate(ServerWebExchange baseExchange, ServerHttpRequest baseRequest) {
-        String token = extractToken(baseRequest);
-        if (token == null || token.isBlank()) {
-            return Mono.just(new AuthContext(baseExchange, AuthStatus.NO_TOKEN, null));
-        }
-
-        return redisTemplate.hasKey("jwt:blacklist:" + token)
-                .map(Boolean.TRUE::equals)
-                .defaultIfEmpty(false)
-                .map(blacklisted -> {
-                    if (blacklisted) {
-                        return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
-                    }
-
-                    JwtUser jwtUser;
-                    try {
-                        jwtUser = jwtHelper.parse(token);
-                    } catch (RuntimeException ex) {
-                        return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
-                    }
-                    if (jwtUser == null) {
-                        return new AuthContext(baseExchange, AuthStatus.INVALID_TOKEN, null);
-                    }
-
-                    ServerHttpRequest authedRequest = baseRequest.mutate()
-                            .header(HeaderNames.X_USER_ID, String.valueOf(jwtUser.getUserId()))
-                            .header(HeaderNames.X_USERNAME, jwtUser.getUsername())
-                            .header(HeaderNames.X_USER_ROLE, jwtUser.getRole())
-                            .build();
-
-                    if (jwtHelper.shouldRefresh(token)) {
-                        String newToken = jwtHelper.createToken(
-                                jwtUser.getUserId(),
-                                jwtUser.getUsername(),
-                                jwtUser.getRole(),
-                                false
-                        );
-                        baseExchange.getResponse().getHeaders().set("New-Token", newToken);
-                    }
-
-                    return new AuthContext(
-                            baseExchange.mutate().request(authedRequest).build(),
-                            AuthStatus.AUTHENTICATED,
-                            jwtUser
-                    );
-                });
-    }
-
-    private Mono<Void> writeResult(ServerWebExchange exchange, HttpStatus httpStatus, Result<?> result) {
-        exchange.getResponse().setStatusCode(httpStatus);
-        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        DataBuffer buffer = exchange.getResponse().bufferFactory()
-                .wrap(toJson(result).getBytes(StandardCharsets.UTF_8));
-        return exchange.getResponse().writeWith(Mono.just(buffer));
-    }
-
-    private String toJson(Result<?> result) {
-        try {
-            return objectMapper.writeValueAsString(result);
-        } catch (JsonProcessingException e) {
-            return "{\"code\":500,\"message\":\"serialize error\",\"data\":null}";
-        }
-    }
-
-    private enum AuthStatus {
-        NO_TOKEN,
-        INVALID_TOKEN,
-        AUTHENTICATED
-    }
-
-    private record AuthContext(ServerWebExchange exchange, AuthStatus status, JwtUser jwtUser) {
+    private Mono<Void> error(ServerWebExchange e,int code,String message,long retry){
+        if(e.getResponse().isCommitted())return Mono.error(new IllegalStateException("Response already committed"));
+        e.getResponse().setStatusCode(HttpStatusCode.valueOf(code));e.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        if(retry>0)e.getResponse().getHeaders().set("Retry-After",Long.toString(retry));
+        try{return e.getResponse().writeWith(Mono.just(e.getResponse().bufferFactory().wrap(mapper.writeValueAsBytes(Result.fail(code,message)))));}
+        catch(Exception failure){return Mono.error(failure);}
     }
 }

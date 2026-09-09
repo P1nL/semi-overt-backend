@@ -45,6 +45,11 @@ jwt:
     refresh-threshold: ${JWT_REFRESH_THRESHOLD:30}
 
 platform:
+  internal:
+    token: ${INTERNAL_TOKEN:}
+  auth-service:
+    base-url: ${AUTH_SERVICE_BASE_URL:http://auth-service}
+  trusted-proxies: ${TRUSTED_PROXIES:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
   gateway:

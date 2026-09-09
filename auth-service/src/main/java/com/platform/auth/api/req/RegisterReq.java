@@ -11,19 +11,23 @@ public class RegisterReq {
 
     @NotBlank(message = "Username is required")
     @Pattern(
-            regexp = "^(?!\\d+$)[a-zA-Z0-9_]{4,20}$",
-            message = "Username must be 4-20 characters and use letters, digits, or underscores"
+            regexp = "^(?!\\d+$)[a-zA-Z0-9_]{3,32}$",
+            message = "Username must be 3-32 characters and use letters, digits, or underscores"
     )
     private String username;
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email format is invalid")
+    @Size(max = 120, message = "Email length must not exceed 120 characters")
     private String email;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, max = 20, message = "Password length must be 8-20 characters")
+    @Size(max = 200, message = "Password is too long")
     private String password;
 
-    @NotBlank(message = "Captcha token is required")
+    @Pattern(regexp = "\\d{6}", message = "Registration code must be 6 digits")
+    private String emailCode;
+
+    /** Registration-code request verifies Turnstile; registration then consumes its email code. */
     private String cfTurnstileToken;
 }

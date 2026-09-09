@@ -28,8 +28,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<?>> handleBusinessException(BusinessException e) {
         log.warn("Business exception: code={}, message={}", e.getCode(), e.getMessage());
-        return ResponseEntity.status(resolveStatus(e.getCode()))
-                .body(Result.fail(e.getCode(), e.getMessage(), e.getDetails()));
+        var response = ResponseEntity.status(resolveStatus(e.getCode()));
+        if(Integer.valueOf(429).equals(e.getCode()) && e.getDetails() instanceof java.util.Map<?,?> details
+                && details.get("retryAfterSeconds") instanceof Number seconds) {
+            response.header("Retry-After",Long.toString(Math.max(1,seconds.longValue())));
+        }
+        return response.body(Result.fail(e.getCode(), e.getMessage(), e.getDetails()));
     }
 
     /**
