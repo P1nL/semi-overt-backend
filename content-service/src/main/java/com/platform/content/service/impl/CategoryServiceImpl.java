@@ -80,7 +80,14 @@ public class CategoryServiceImpl implements CategoryService {
     private ArticleCardResp toCard(Article article, Map<Long, UserSummaryDto> userMap) {
         UserSummaryDto author = userMap.get(article.getAuthorId());
         return ArticleCardResp.builder()
+                .id(article.getId())
                 .articleId(article.getId())
+                .author(ArticleCardResp.AuthorInfo.builder()
+                        .id(author != null ? author.getId() : article.getAuthorId())
+                        .username(author != null ? author.getUsername() : null)
+                        .nickname(author != null ? author.getNickname() : null)
+                        .avatarUrl(author != null ? author.getAvatarUrl() : null)
+                        .build())
                 .title(article.getTitle())
                 .summary(article.getSummary())
                 .previewText(ArticleUtils.extractPreviewText(article.getContent(), CARD_PREVIEW_MAX_LENGTH))
@@ -89,10 +96,12 @@ public class CategoryServiceImpl implements CategoryService {
                 .readMinutes(article.getReadMinutes())
                 .durationCategory(article.getDurationCategory())
                 .status(article.getStatus())
+                .wordCount(article.getWordCount())
+                .draftVisible(Boolean.TRUE.equals(article.getDraftVisible()))
                 .authorId(author != null ? author.getId() : null)
                 .authorName(author != null ? author.getNickname() : null)
                 .authorAvatar(author != null ? author.getAvatarUrl() : null)
-                .publishedAt(article.getPublishedAt())
+                .publishedAt(article.getPublishedAt() == null ? article.getUpdatedAt() : article.getPublishedAt())
                 .updatedAt(article.getUpdatedAt())
                 .build();
     }

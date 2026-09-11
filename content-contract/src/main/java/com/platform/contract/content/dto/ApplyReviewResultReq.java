@@ -16,4 +16,13 @@ public class ApplyReviewResultReq {
     private Long adminId;
     private ReviewAction action;
     private String reason;
+    private String decisionId;
+    private String submissionId;
+    private Long expectedVersion;
+
+    public ApplyReviewResultReq(Long adminId, ReviewAction action, String reason) {
+        this.adminId = adminId;
+        this.action = action;
+        this.reason = reason;
+    }
 }

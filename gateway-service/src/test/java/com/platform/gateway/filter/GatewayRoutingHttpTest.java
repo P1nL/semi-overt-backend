@@ -58,4 +58,17 @@ class GatewayRoutingHttpTest {
                 .responseSingle((r,b)->{assertEquals(401,r.status().code());return b.asString();}).block(Duration.ofSeconds(10));
         }
     }
+    @Test void notificationsRouteBothPrefixesAndRequireAuthoritativeSession() {
+        org.mockito.Mockito.when(authority.internalToken()).thenReturn("test-internal");
+        org.mockito.Mockito.when(authority.validate("valid-notification-session")).thenReturn(Mono.just(
+                new com.platform.gateway.session.SessionAuthorityClient.Identity(101L,"writer","USER")));
+        for(String prefix:new String[]{"/api","/api/v1"}) {
+            HttpClient.create().get().uri("http://127.0.0.1:"+port+prefix+"/notifications?limit=5")
+                .responseSingle((r,b)->{assertEquals(401,r.status().code());return b.asString();}).block(Duration.ofSeconds(10));
+            String result=HttpClient.create().headers(h->h.set("Authorization","Bearer valid-notification-session"))
+                .get().uri("http://127.0.0.1:"+port+prefix+"/notifications?limit=5")
+                .responseSingle((r,b)->{assertEquals(200,r.status().code());return b.asString();}).block(Duration.ofSeconds(10));
+            assertEquals("notification-service|/api/v1/notifications|limit=5",result);
+        }
+    }
 }

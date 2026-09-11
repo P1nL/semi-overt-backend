@@ -27,6 +27,9 @@ public class HomeResp {
     @Builder
     public static class SectionData {
         private DurationCategory category;
+        private String code;
+        private String name;
         private List<ArticleCardResp> list;
+        private List<ArticleCardResp> articles;
     }
 }

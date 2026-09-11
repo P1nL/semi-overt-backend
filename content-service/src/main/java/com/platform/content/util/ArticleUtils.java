@@ -42,8 +42,8 @@ public class ArticleUtils {
     public static DurationCategory calcDurationCategory(BigDecimal readMinutes) {
         if (readMinutes == null) return DurationCategory.QUICK;
         double minutes = readMinutes.doubleValue();
-        if (minutes < 3.0) return DurationCategory.QUICK;
-        if (minutes <= 10.0) return DurationCategory.SHORT;
+        if (minutes <= 3.0) return DurationCategory.QUICK;
+        if (minutes <= 8.0) return DurationCategory.SHORT;
         return DurationCategory.DEEP;
     }
 

@@ -2,16 +2,15 @@ package com.platform.content.service;
 
 import com.platform.content.api.resp.HomeResp;
 
-
 public interface HomeService {
 
-    HomeResp getHomeData();
+    HomeResp getHomeData(Long currentUserId);
 
-    /**
-     * 清除当天首页 Hero 缓存，触发下次请求重新选取。
-     * 文章状态变为 APPROVED 时调用，使新通过的文章有机会出现在首页。
-     */
+    /** Compatibility overload for existing service tests/callers; null means anonymous. */
+    default HomeResp getHomeData() {
+        return getHomeData(null);
+    }
+
+    /** S3 approval hook; package 1 does not use a global hero rotation cache. */
     void invalidateHeroCache();
 }
-
-

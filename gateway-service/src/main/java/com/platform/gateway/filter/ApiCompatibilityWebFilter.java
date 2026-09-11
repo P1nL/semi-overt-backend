@@ -24,6 +24,7 @@ public class ApiCompatibilityWebFilter implements WebFilter, Ordered {
     private static final String VERSIONED_API_PREFIX = "/api/v1";
     private static final Pattern REVIEW_DECISION = Pattern.compile("^/api/v1/review/([0-9]+)/decision$");
     private static final Pattern REVIEW_LOGS = Pattern.compile("^/api/v1/review/([0-9]+)/logs$");
+    private static final Pattern REVIEW_DECISION_STATUS = Pattern.compile("^/api/v1/review/([0-9]+)/decision-status$");
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -64,6 +65,10 @@ public class ApiCompatibilityWebFilter implements WebFilter, Ordered {
             }
         }
         if (method == HttpMethod.GET) {
+            Matcher decisionStatus = REVIEW_DECISION_STATUS.matcher(normalizedPath);
+            if (decisionStatus.matches()) {
+                return "/api/v1/reviews/" + decisionStatus.group(1) + "/decision-status";
+            }
             if ("/api/v1/review/pending".equals(normalizedPath)) {
                 return "/api/v1/reviews/pending";
             }

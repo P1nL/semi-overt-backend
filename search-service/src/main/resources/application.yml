@@ -51,6 +51,8 @@ platform:
     retry-delay-ms: ${EVENT_RETRY_DELAY_MS:30000}
     consumer-max-retries: ${EVENT_CONSUMER_MAX_RETRIES:3}
   search:
+    fulltext-enabled: ${SEARCH_FULLTEXT_ENABLED:false}
+    fulltext-index-name: ${SEARCH_FULLTEXT_INDEX_NAME:ft_articles_search}
     index:
       enabled: ${SEARCH_INDEX_ENABLED:false}
 

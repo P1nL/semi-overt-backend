@@ -1,124 +1,265 @@
 package com.platform.events.support;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.kernel.constant.EventConstants;
 import com.platform.events.entity.EventOutbox;
 import com.platform.events.enums.EventOutboxStatus;
+import com.platform.kernel.constant.EventConstants;
 import com.platform.kernel.event.BaseDomainEvent;
 import com.platform.kernel.exception.BusinessException;
-import com.platform.events.mapper.EventOutboxMapper;
-import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDateTime;
-import java.util.List;
+import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * Outbox 事件持久化服务。
- * 负责把领域事件先落到 event_outbox，再由独立发布器异步投递到 RabbitMQ，
- * 从而保证业务数据提交与事件发送之间的最终一致性。
- */
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+
+/** Transactional outbox persistence and short, DB-clock fenced publisher claims. */
 @Service
-@RequiredArgsConstructor
 public class EventOutboxService {
 
-    private final EventOutboxMapper eventOutboxMapper;
-    private final ObjectMapper objectMapper;
+    private static final int MAX_ERROR_LENGTH = 500;
 
-    /**
-     * 保存一条待发布事件。
-     * 调用方应在业务事务内调用该方法，使事件记录与主业务数据一同提交。
-     */
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper;
+    private final TransactionTemplate independentTransaction;
+
+    public EventOutboxService(JdbcTemplate jdbc,
+                              ObjectMapper objectMapper,
+                              PlatformTransactionManager transactionManager) {
+        this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
+        this.independentTransaction = new TransactionTemplate(transactionManager);
+        this.independentTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    /** Must join the producer's local business transaction. */
     @Transactional(rollbackFor = Exception.class)
     public void saveEvent(String aggregateType,
                           String aggregateId,
                           String eventType,
                           BaseDomainEvent event) {
-        if (event == null || event.getEventId() == null) {
+        if (event == null || isBlank(event.getEventId())) {
             throw BusinessException.badRequest("eventId is required");
         }
-        EventOutbox outbox = new EventOutbox();
-        outbox.setEventId(event.getEventId());
-        outbox.setAggregateType(aggregateType);
-        outbox.setAggregateId(aggregateId);
-        outbox.setEventType(eventType);
-        outbox.setPayload(writePayload(event));
-        outbox.setStatus(EventOutboxStatus.PENDING.name());
-        outbox.setRetryCount(0);
-        outbox.setNextRetryAt(LocalDateTime.now());
-        eventOutboxMapper.insert(outbox);
-    }
-
-    /**
-     * 查询当前可发布的事件批次。
-     * 只返回指定类型、状态为 PENDING 且已到重试时间的记录。
-     */
-    public List<EventOutbox> findPublishable(List<String> eventTypes, int batchSize) {
-        return eventOutboxMapper.selectList(new LambdaQueryWrapper<EventOutbox>()
-                .in(EventOutbox::getEventType, eventTypes)
-                .eq(EventOutbox::getStatus, EventOutboxStatus.PENDING.name())
-                .le(EventOutbox::getNextRetryAt, LocalDateTime.now())
-                .orderByAsc(EventOutbox::getCreatedAt)
-                .last("LIMIT " + batchSize));
-    }
-
-    /**
-     * 将事件标记为已发布。
-     * 发布成功后清空错误信息并记录发布时间。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void markPublished(String eventId) {
-        EventOutbox outbox = eventOutboxMapper.selectById(eventId);
-        if (outbox == null) {
-            return;
+        if (isBlank(aggregateType) || isBlank(aggregateId) || isBlank(eventType)) {
+            throw BusinessException.badRequest("aggregateType, aggregateId and eventType are required");
         }
-        outbox.setStatus(EventOutboxStatus.PUBLISHED.name());
-        outbox.setPublishedAt(LocalDateTime.now());
-        outbox.setLastError(null);
-        eventOutboxMapper.updateById(outbox);
+        jdbc.update("""
+                        INSERT INTO event_outbox(
+                            event_id, aggregate_type, aggregate_id, event_type, payload,
+                            status, retry_count, next_retry_at, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, 'PENDING', 0, CURRENT_TIMESTAMP(6),
+                                  CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        """,
+                event.getEventId(), aggregateType, aggregateId, eventType, writePayload(event));
     }
 
-    /**
-     * 记录一次发布失败，并计算下次重试时间。
-     * 超过最大重试次数后将事件置为 DEAD，后续不再自动投递。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void markRetry(String eventId, String errorMessage) {
-        EventOutbox outbox = eventOutboxMapper.selectById(eventId);
-        if (outbox == null) {
-            return;
-        }
-        int retryCount = outbox.getRetryCount() == null ? 0 : outbox.getRetryCount();
-        retryCount++;
-        outbox.setRetryCount(retryCount);
-        outbox.setLastError(errorMessage);
-        if (retryCount >= 10) {
-            outbox.setStatus(EventOutboxStatus.DEAD.name());
-            outbox.setNextRetryAt(null);
-        } else {
-            outbox.setStatus(EventOutboxStatus.PENDING.name());
-            outbox.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(300, retryCount * 15L)));
-        }
-        eventOutboxMapper.updateById(outbox);
+    /** Claims rows in a short independent transaction; no network I/O is inside this transaction. */
+    public List<EventOutbox> claimPublishable(String aggregateType,
+                                              List<String> eventTypes,
+                                              int batchSize,
+                                              String leaseOwner,
+                                              Duration leaseDuration) {
+        validateClaim(aggregateType, eventTypes, batchSize, leaseOwner, leaseDuration);
+        List<EventOutbox> result = independentTransaction.execute(status -> claimInCurrentTransaction(
+                aggregateType, eventTypes, batchSize, leaseOwner, leaseDuration));
+        return result == null ? List.of() : result;
     }
 
-    /**
-     * 根据事件类型解析出交换机、路由键等投递信息。
-     */
+    /** Convenience for the publisher's one-row-at-a-time lease discipline. */
+    public EventOutbox claimNextPublishable(String aggregateType,
+                                            List<String> eventTypes,
+                                            String leaseOwner,
+                                            Duration leaseDuration) {
+        List<EventOutbox> claimed = claimPublishable(aggregateType, eventTypes, 1, leaseOwner, leaseDuration);
+        return claimed.isEmpty() ? null : claimed.get(0);
+    }
+
+    private List<EventOutbox> claimInCurrentTransaction(String aggregateType,
+                                                        List<String> eventTypes,
+                                                        int batchSize,
+                                                        String leaseOwner,
+                                                        Duration leaseDuration) {
+        String placeholders = String.join(",", eventTypes.stream().map(ignored -> "?").toList());
+        String sql = """
+                SELECT event_id, aggregate_type, aggregate_id, event_type, payload, status,
+                       retry_count, next_retry_at, published_at, last_error,
+                       lease_owner, lease_token, lease_until, created_at, updated_at
+                  FROM event_outbox
+                 WHERE aggregate_type = ?
+                   AND event_type IN (%s)
+                   AND status = 'PENDING'
+                   AND next_retry_at <= CURRENT_TIMESTAMP(6)
+                   AND (lease_until IS NULL OR lease_until <= CURRENT_TIMESTAMP(6))
+                 ORDER BY created_at, event_id
+                 LIMIT %d
+                 FOR UPDATE SKIP LOCKED
+                """.formatted(placeholders, batchSize);
+        List<Object> args = new ArrayList<>();
+        args.add(aggregateType);
+        args.addAll(eventTypes);
+        List<EventOutbox> rows = jdbc.query(sql, this::mapOutbox, args.toArray());
+        List<EventOutbox> claimed = new ArrayList<>(rows.size());
+        long leaseMicros = Math.max(1, leaseDuration.toNanos() / 1_000L);
+        for (EventOutbox row : rows) {
+            String token = UUID.randomUUID().toString().replace("-", "");
+            int updated = jdbc.update("""
+                            UPDATE event_outbox
+                               SET lease_owner = ?, lease_token = ?,
+                                   lease_until = TIMESTAMPADD(MICROSECOND, ?, CURRENT_TIMESTAMP(6)),
+                                   updated_at = CURRENT_TIMESTAMP(6)
+                             WHERE event_id = ?
+                               AND status = 'PENDING'
+                               AND (lease_until IS NULL OR lease_until <= CURRENT_TIMESTAMP(6))
+                            """,
+                    leaseOwner, token, leaseMicros, row.getEventId());
+            if (updated == 1) {
+                row.setLeaseOwner(leaseOwner);
+                row.setLeaseToken(token);
+                row.setLeaseUntil(jdbc.queryForObject(
+                        "SELECT lease_until FROM event_outbox WHERE event_id = ?",
+                        LocalDateTime.class,
+                        row.getEventId()));
+                claimed.add(row);
+            }
+        }
+        return claimed;
+    }
+
+    /** Confirm success is accepted only for the still-live owner/token lease according to the DB clock. */
+    public boolean markPublished(EventOutbox claim) {
+        requireClaim(claim);
+        return Boolean.TRUE.equals(independentTransaction.execute(status -> jdbc.update("""
+                        UPDATE event_outbox
+                           SET status = 'PUBLISHED', published_at = CURRENT_TIMESTAMP(6), last_error = NULL,
+                               lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                               updated_at = CURRENT_TIMESTAMP(6)
+                         WHERE event_id = ? AND status = 'PENDING'
+                           AND lease_owner = ? AND lease_token = ?
+                           AND lease_until >= CURRENT_TIMESTAMP(6)
+                        """,
+                claim.getEventId(), claim.getLeaseOwner(), claim.getLeaseToken()) == 1));
+    }
+
+    /** Failure is persisted only by the still-live owner/token according to the DB clock. */
+    public boolean markRetry(EventOutbox claim, String errorMessage) {
+        requireClaim(claim);
+        return Boolean.TRUE.equals(independentTransaction.execute(status -> {
+            List<Integer> counts = jdbc.query("""
+                            SELECT retry_count FROM event_outbox
+                             WHERE event_id = ? AND status = 'PENDING'
+                               AND lease_owner = ? AND lease_token = ?
+                               AND lease_until >= CURRENT_TIMESTAMP(6)
+                             FOR UPDATE
+                            """,
+                    (rs, rowNum) -> rs.getInt(1),
+                    claim.getEventId(), claim.getLeaseOwner(), claim.getLeaseToken());
+            if (counts.isEmpty()) {
+                return false;
+            }
+            int retryCount = counts.get(0) + 1;
+            boolean dead = retryCount >= 10;
+            long delaySeconds = Math.min(300, retryCount * 15L);
+            return jdbc.update("""
+                            UPDATE event_outbox
+                               SET retry_count = ?, last_error = ?, status = ?,
+                                   next_retry_at = CASE WHEN ? THEN NULL
+                                       ELSE TIMESTAMPADD(SECOND, ?, CURRENT_TIMESTAMP(6)) END,
+                                   lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                                   updated_at = CURRENT_TIMESTAMP(6)
+                             WHERE event_id = ? AND status = 'PENDING'
+                               AND lease_owner = ? AND lease_token = ?
+                               AND lease_until >= CURRENT_TIMESTAMP(6)
+                            """,
+                    retryCount, truncate(errorMessage),
+                    dead ? EventOutboxStatus.DEAD.name() : EventOutboxStatus.PENDING.name(),
+                    dead, delaySeconds, claim.getEventId(), claim.getLeaseOwner(), claim.getLeaseToken()) == 1;
+        }));
+    }
+
     public EventConstants.EventRoute routeOf(String eventType) {
         return EventConstants.routeOf(eventType);
     }
 
-    /**
-     * 将领域事件序列化为 JSON 负载，供 outbox 持久化。
-     */
+    private EventOutbox mapOutbox(ResultSet rs, int rowNum) throws SQLException {
+        EventOutbox row = new EventOutbox();
+        row.setEventId(rs.getString("event_id"));
+        row.setAggregateType(rs.getString("aggregate_type"));
+        row.setAggregateId(rs.getString("aggregate_id"));
+        row.setEventType(rs.getString("event_type"));
+        row.setPayload(rs.getString("payload"));
+        row.setStatus(rs.getString("status"));
+        row.setRetryCount(rs.getInt("retry_count"));
+        row.setNextRetryAt(toLocalDateTime(rs.getTimestamp("next_retry_at")));
+        row.setPublishedAt(toLocalDateTime(rs.getTimestamp("published_at")));
+        row.setLastError(rs.getString("last_error"));
+        row.setLeaseOwner(rs.getString("lease_owner"));
+        row.setLeaseToken(rs.getString("lease_token"));
+        row.setLeaseUntil(toLocalDateTime(rs.getTimestamp("lease_until")));
+        row.setCreatedAt(toLocalDateTime(rs.getTimestamp("created_at")));
+        row.setUpdatedAt(toLocalDateTime(rs.getTimestamp("updated_at")));
+        return row;
+    }
+
+    private static LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
+    }
+
+    private void validateClaim(String aggregateType,
+                               List<String> eventTypes,
+                               int batchSize,
+                               String leaseOwner,
+                               Duration leaseDuration) {
+        if (isBlank(aggregateType) || eventTypes == null || eventTypes.isEmpty()
+                || eventTypes.stream().anyMatch(EventOutboxService::isBlank)) {
+            throw new IllegalArgumentException("aggregateType and eventTypes are required");
+        }
+        if (batchSize <= 0 || batchSize > 1000) {
+            throw new IllegalArgumentException("batchSize must be between 1 and 1000");
+        }
+        if (isBlank(leaseOwner) || leaseOwner.length() > 128) {
+            throw new IllegalArgumentException("leaseOwner must contain 1..128 characters");
+        }
+        if (leaseDuration == null || leaseDuration.isZero() || leaseDuration.isNegative()
+                || leaseDuration.toDays() > 1) {
+            throw new IllegalArgumentException("leaseDuration must be positive and at most one day");
+        }
+    }
+
+    private static void requireClaim(EventOutbox claim) {
+        Objects.requireNonNull(claim, "claim");
+        if (isBlank(claim.getEventId()) || isBlank(claim.getLeaseOwner()) || isBlank(claim.getLeaseToken())) {
+            throw new IllegalArgumentException("a fenced outbox claim is required");
+        }
+    }
+
     private String writePayload(BaseDomainEvent event) {
         try {
             return objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException ex) {
             throw BusinessException.serverError("Failed to serialize event payload");
         }
+    }
+
+    private static String truncate(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= MAX_ERROR_LENGTH ? value : value.substring(0, MAX_ERROR_LENGTH);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -11,21 +11,23 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Current frontend contract is singular /upload. The old plural paths remain
+ * aliases so historical clients do not need a coordinated deploy.
+ */
 @RestController
-@RequestMapping("/api/v1/uploads")
+@RequestMapping({"/api/v1/upload", "/api/v1/uploads"})
 @RequiredArgsConstructor
 public class UploadController {
 
     private final UploadService uploadService;
 
-        @PostMapping("/images")
+    @PostMapping({"", "/images"})
     public Result<UploadResp> uploadImage(
             @RequestPart("file") MultipartFile file,
             @RequestParam String bizType,
             @RequestParam(required = false) Long articleId,
             @RequestParam(required = false) String oldUrl) {
-
         return Result.ok(uploadService.upload(file, bizType, articleId, oldUrl));
     }
 }
-

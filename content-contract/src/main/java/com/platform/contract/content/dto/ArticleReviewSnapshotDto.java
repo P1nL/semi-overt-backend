@@ -26,4 +26,8 @@ public class ArticleReviewSnapshotDto {
     private Integer submitCount;
     private ArticleStatus status;
     private LocalDateTime lastSubmittedAt;
+    private String submissionId;
+    private Long version;
+    private Boolean deleted;
+    private LocalDateTime updatedAt;
 }

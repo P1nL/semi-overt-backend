@@ -17,6 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 public class UserProfileArticlesResp {
     private UserProfileArticleStatsDto stats;
+    private List<WritingCalendarDayDto> writingCalendar;
     private List<UserProfileArticleItemDto> list;
     private long total;
     private int page;

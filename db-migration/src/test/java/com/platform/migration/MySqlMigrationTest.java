@@ -26,7 +26,45 @@ class MySqlMigrationTest {
     @Test void emptyAndRerun() throws Exception {
         var ds=fresh(); MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO);
         assertEquals(0,MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO).migrationsExecuted);
-        assertEquals(3,count(ds,"SELECT COUNT(*) FROM flyway_schema_history"));
+        assertEquals(4,count(ds,"SELECT COUNT(*) FROM flyway_schema_history"));
+    }
+    @Test void v3UpgradeBackfillsSubmissionAndAssignmentWithoutChangingArticleVersion() throws Exception {
+        var ds=fresh();
+        org.flywaydb.core.Flyway.configure().dataSource(ds).locations("classpath:db/migration").target("3").load().migrate();
+        sql(ds,"INSERT INTO users(id,username,email,password,role) VALUES(1,'author','author@example.invalid','hash','ADMIN'),(2,'reviewer','reviewer@example.invalid','hash','ADMIN');"
+                +"INSERT INTO articles(id,author_id,title,status,version,submit_count) VALUES(11,1,'pending','PENDING',8,2);"
+                +"INSERT INTO review_tasks(article_id,author_id,title,status) VALUES(11,1,'pending','PENDING')");
+        assertEquals(1,MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO).migrationsExecuted);
+        assertEquals(1,count(ds,"SELECT COUNT(*) FROM articles WHERE id=11 AND version=8 AND submission_id='legacy-11-2'"));
+        assertEquals(1,count(ds,"SELECT COUNT(*) FROM review_tasks WHERE article_id=11 AND assigned_admin_id=2 AND last_applied_version=8 AND submission_id='legacy-11-2'"));
+        // A committed cancellation can temporarily precede its review projection.
+        sql(ds,"UPDATE articles SET status='DRAFT',version=9 WHERE id=11");
+        assertEquals(0,MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO).migrationsExecuted);
+        sql(ds,"UPDATE review_tasks SET status='DRAFT',last_applied_version=9,command_state='CLOSED' WHERE article_id=11");
+        assertEquals(0,MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO).migrationsExecuted);
+    }
+    @Test void partialS3DdlAndMissingDecisionUniquenessFailClosed() throws Exception {
+        var partial=fresh();
+        org.flywaydb.core.Flyway.configure().dataSource(partial).locations("classpath:db/migration").target("3").load().migrate();
+        sql(partial,"ALTER TABLE event_outbox ADD COLUMN lease_owner VARCHAR(128) NULL");
+        assertThrows(IllegalStateException.class,()->MigrationRunner.migrate(partial,MigrationRunner.Mode.AUTO));
+        assertEquals(0,count(partial,"SELECT COUNT(*) FROM flyway_schema_history WHERE version='4'"));
+        var drift=fresh();MigrationRunner.migrate(drift,MigrationRunner.Mode.AUTO);
+        sql(drift,"ALTER TABLE review_logs DROP INDEX uk_review_log_decision");
+        assertThrows(IllegalStateException.class,()->MigrationRunner.migrate(drift,MigrationRunner.Mode.AUTO));
+    }
+    @Test void referenceParserDoesNotSwallowInterveningAlterStatements() {
+        var parsed=SchemaContract.parse(SchemaContract.resource("/db/migration/V4__s3_state_consistency.sql"));
+        assertEquals(java.util.Set.of("content_author_locks","content_review_decisions","review_commands"),parsed.keySet());
+        assertEquals(1,parsed.get("content_author_locks").columns().size());
+    }
+    @Test void legacyInFlightProtocolRefusesBeforeS3Ddl() throws Exception {
+        var ds=fresh();
+        org.flywaydb.core.Flyway.configure().dataSource(ds).locations("classpath:db/migration").target("3").load().migrate();
+        sql(ds,"INSERT INTO event_outbox(event_id,aggregate_type,aggregate_id,event_type,payload,status) VALUES('old-review','review','1','ReviewDecidedEvent','{}','PENDING')");
+        assertThrows(IllegalStateException.class,()->MigrationRunner.migrate(ds,MigrationRunner.Mode.AUTO));
+        assertEquals(0,count(ds,"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='articles' AND column_name='submission_id'"));
+        assertEquals(0,count(ds,"SELECT COUNT(*) FROM flyway_schema_history WHERE version='4'"));
     }
     @Test void legacyV1AndV2OnboardingPreserveData() throws Exception {
         for(var mode:new MigrationRunner.Mode[]{MigrationRunner.Mode.LEGACY_V1,MigrationRunner.Mode.LEGACY_V2}) {

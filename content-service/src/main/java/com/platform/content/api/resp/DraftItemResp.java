@@ -17,6 +17,7 @@ public class DraftItemResp {
     private String title;
     private ArticleStatus status;
     private Integer wordCount;
+    private Long version;
     private LocalDateTime updatedAt;
     private String latestReason;
 }

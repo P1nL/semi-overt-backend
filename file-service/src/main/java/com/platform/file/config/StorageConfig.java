@@ -6,47 +6,22 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-/**
- * 文件存储配置，统一承载本地存储与 OSS 存储的运行参数。
- */
+/** File storage configuration; local storage remains the default. */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "storage")
 public class StorageConfig {
-
-    /**
-     * 当前启用的存储类型，例如 `local` 或 `oss`。
-     */
     private String type = "local";
-
-    /**
-     * 本地存储根目录。
-     */
     private String uploadPath;
-
-    /**
-     * 对外访问前缀。
-     */
     private String accessPrefix;
-
-    /**
-     * 允许上传的文件类型白名单。
-     */
     private List<String> allowedTypes;
-
-    /**
-     * 单个文件允许的最大大小。
-     */
     private long maxFileSize;
-
-    /**
-     * OSS 相关配置。
-     */
+    private int maxImageDimension = 8192;
+    private long maxImagePixels = 24_000_000L;
+    private int maxConcurrentImageDecodes = 2;
     private final Oss oss = new Oss();
+    private final Cloudinary cloudinary = new Cloudinary();
 
-    /**
-     * OSS 存储配置。
-     */
     @Data
     public static class Oss {
         private String endpoint;
@@ -54,5 +29,24 @@ public class StorageConfig {
         private String accessKeyId;
         private String accessKeySecret;
         private String publicBaseUrl;
+
+        @Override
+        public String toString() {
+            return "Oss[bucket=" + bucket + ", credentials=REDACTED]";
+        }
+    }
+
+    @Data
+    public static class Cloudinary {
+        private String cloudName;
+        private String apiKey;
+        private String apiSecret;
+        private String apiBaseUrl = "https://api.cloudinary.com";
+        private String deliveryBaseUrl;
+
+        @Override
+        public String toString() {
+            return "Cloudinary[cloudName=" + cloudName + ", credentials=REDACTED]";
+        }
     }
 }

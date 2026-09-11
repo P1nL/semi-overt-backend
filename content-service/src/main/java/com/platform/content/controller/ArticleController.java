@@ -1,5 +1,7 @@
 package com.platform.content.controller;
 
+import jakarta.validation.Valid;
+
 import com.platform.content.api.req.SaveDraftReq;
 import com.platform.content.api.resp.ArticleDetailResp;
 import com.platform.content.api.resp.DraftItemResp;
@@ -36,7 +38,7 @@ public class ArticleController {
     @PreAuthorize("isAuthenticated()")
     public Result<SaveDraftResp> saveDraft(
             @PathVariable Long articleId,
-            @RequestBody SaveDraftReq req) {
+            @Valid @RequestBody SaveDraftReq req) {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.ok(draftService.saveDraft(articleId, userId, req));
     }

@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 @Builder
 public class ArticleCardResp {
 
+    private Long id;
     private Long articleId;
     private String title;
     private String summary;
@@ -25,9 +26,21 @@ public class ArticleCardResp {
     private DurationCategory durationCategory;
     private ArticleStatus status;
     private Long authorId;
+    private AuthorInfo author;
     private String authorName;
     private String authorAvatar;
+    private Integer wordCount;
+    private Boolean draftVisible;
     private LocalDateTime publishedAt;
     private LocalDateTime updatedAt;
     private String rejectReason;
+
+    @Data
+    @Builder
+    public static class AuthorInfo {
+        private Long id;
+        private String username;
+        private String nickname;
+        private String avatarUrl;
+    }
 }

@@ -27,6 +27,16 @@ public class InternalUserController {
 
     private final UserMapper userMapper;
 
+    /** Only this auth-owned endpoint selects reviewer candidates; no cross-domain user writes. */
+    @GetMapping("/review-admins")
+    public Result<List<UserSummaryDto>> reviewAdmins() {
+        return Result.ok(userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .eq(User::getRole, com.platform.kernel.enums.UserRole.ADMIN)
+                        .orderByAsc(User::getId)).stream()
+                .map(user -> UserSummaryDto.builder().id(user.getId()).username(user.getUsername())
+                        .nickname(user.getNickname()).avatarUrl(user.getAvatarUrl()).build()).toList());
+    }
+
     /**
      * POST /batch — 按 ID 批量查询用户摘要
      */

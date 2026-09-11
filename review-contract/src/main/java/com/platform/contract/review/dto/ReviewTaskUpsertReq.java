@@ -25,4 +25,6 @@ public class ReviewTaskUpsertReq {
     private Integer submitCount;
     private LocalDateTime submittedAt;
     private String lastEventId;
+    private String submissionId;
+    private Long articleVersion;
 }

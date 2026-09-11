@@ -26,4 +26,7 @@ public class ReviewDecisionPayload {
     private ArticleStatus fromStatus;
     private ArticleStatus toStatus;
     private String traceId;
+    private String decisionId;
+    private String submissionId;
+    private Long expectedVersion;
 }

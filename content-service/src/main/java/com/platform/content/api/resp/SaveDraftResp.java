@@ -8,23 +8,20 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 保存草稿响应。
- */
 @Data
 @Builder
 public class SaveDraftResp {
-
     private LocalDateTime savedAt;
+    private LocalDateTime updatedAt;
+    private Long version;
     private Integer wordCount;
     private BigDecimal readMinutes;
     private DurationCategory durationCategory;
     private ArticleStatus status;
-    /** Compatibility alias: the current frontend reads updatedAt from the wire. */
-    public LocalDateTime getUpdatedAt() {
-        return savedAt;
-    }
+    private boolean draftVisible;
 
-    public boolean isDraftVisible() {
-        return false;
-    }}
+    /** Compatibility for callers that only initialize savedAt. */
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt != null ? updatedAt : savedAt;
+    }
+}

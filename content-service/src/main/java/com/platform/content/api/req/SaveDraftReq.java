@@ -1,28 +1,29 @@
 package com.platform.content.api.req;
 
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * 保存草稿请求。
- */
+/** Database-backed draft patch. Null leaves a field unchanged; an empty string clears it. */
 @Data
 public class SaveDraftReq {
 
-    /** 标题。 */
+    @Size(max = 120)
     private String title;
 
-    /** Markdown 正文。 */
     private String content;
 
-    /** 摘要，建议控制在 120 字以内。 */
+    @Size(max = 255)
     private String summary;
 
-    /** 封面图 URL。 */
+    @Size(max = 512)
     private String coverUrl;
 
-    /** 封面主色，通常用于无图或占位展示。 */
+    @Size(max = 32)
     private String coverColor;
 
-    /** 客户端统计的字数，服务端可用于兜底或校验。 */
+    /** Compatibility hint only; server-derived metrics remain authoritative. */
     private Integer clientWordCount;
+
+    /** Optional optimistic baseline; null uses the version read by this request. */
+    private Long version;
 }

@@ -1,108 +1,123 @@
 package com.platform.events.support;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.platform.events.entity.EventConsumeLog;
 import com.platform.events.enums.EventConsumeStatus;
 import com.platform.kernel.exception.BusinessException;
-import com.platform.events.mapper.EventConsumeLogMapper;
-import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
-/**
- * 事件消费记录服务。
- * 负责维护 `event_consume_log` 中的消费状态，用于消费端幂等控制和失败追踪。
- */
+/** Runs inbox idempotency and the business side effect in one local REQUIRED transaction. */
 @Service
-@RequiredArgsConstructor
 public class EventConsumeService {
 
-    private final EventConsumeLogMapper eventConsumeLogMapper;
+    private final JdbcTemplate jdbc;
+    private final TransactionTemplate requiredTransaction;
 
-    /**
-     * 尝试开始一次事件消费。
-     * 若该 consumer 对同一 eventId 已成功消费，则返回 false；否则返回 true 允许继续处理。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public boolean tryStart(String eventId, String consumer) {
-        EventConsumeLog existing = find(eventId, consumer);
-        if (existing != null) {
-            return existing.getStatus() != EventConsumeStatus.SUCCESS.name();
-        }
+    public EventConsumeService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+        this.jdbc = jdbc;
+        this.requiredTransaction = new TransactionTemplate(transactionManager);
+        this.requiredTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+    }
 
-        EventConsumeLog log = new EventConsumeLog();
-        log.setEventId(eventId);
-        log.setConsumer(consumer);
-        log.setStatus(EventConsumeStatus.PROCESSING.name());
+    public ConsumptionResult executeInTransaction(String eventId,
+                                                   String consumer,
+                                                   ThrowingRunnable handler) throws Exception {
+        requireIdentity(eventId, consumer);
         try {
-            eventConsumeLogMapper.insert(log);
-            return true;
-        } catch (DuplicateKeyException ex) {
-            EventConsumeLog reloaded = find(eventId, consumer);
-            return reloaded == null || reloaded.getStatus() != EventConsumeStatus.SUCCESS.name();
+            ConsumptionResult result = requiredTransaction.execute(status -> {
+                if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+                    throw new IllegalStateException("inbox execution requires an active local transaction");
+                }
+                // ON DUPLICATE KEY UPDATE id=id atomically acquires the unique row's exclusive lock.
+                // INSERT IGNORE followed by SELECT FOR UPDATE can leave competing sessions upgrading locks.
+                jdbc.update("""
+                        INSERT INTO event_consume_log(
+                            event_id, consumer, status, consumed_at, error_message, created_at, updated_at
+                        ) VALUES (?, ?, 'PROCESSING', NULL, NULL, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        ON DUPLICATE KEY UPDATE id = id
+                        """, eventId, consumer);
+
+                List<String> states = jdbc.query("""
+                                SELECT status FROM event_consume_log
+                                 WHERE event_id = ? AND consumer = ?
+                                 FOR UPDATE
+                                """,
+                        (rs, rowNum) -> rs.getString(1), eventId, consumer);
+                if (states.size() != 1) {
+                    throw new IllegalStateException("inbox uniqueness invariant violated");
+                }
+                if (EventConsumeStatus.SUCCESS.name().equals(states.get(0))) {
+                    return ConsumptionResult.ALREADY_PROCESSED;
+                }
+
+                jdbc.update("""
+                        UPDATE event_consume_log
+                           SET status = 'PROCESSING', consumed_at = NULL, error_message = NULL,
+                               updated_at = CURRENT_TIMESTAMP(6)
+                         WHERE event_id = ? AND consumer = ? AND status <> 'SUCCESS'
+                        """, eventId, consumer);
+                try {
+                    handler.run();
+                } catch (Exception ex) {
+                    throw new HandlerExecutionException(ex);
+                }
+                int updated = jdbc.update("""
+                        UPDATE event_consume_log
+                           SET status = 'SUCCESS', consumed_at = CURRENT_TIMESTAMP(6), error_message = NULL,
+                               updated_at = CURRENT_TIMESTAMP(6)
+                         WHERE event_id = ? AND consumer = ? AND status = 'PROCESSING'
+                        """, eventId, consumer);
+                if (updated != 1) {
+                    throw new IllegalStateException("inbox success transition lost");
+                }
+                return ConsumptionResult.HANDLED;
+            });
+            if (result == null) {
+                throw new IllegalStateException("inbox transaction returned no result");
+            }
+            return result;
+        } catch (HandlerExecutionException ex) {
+            throw ex.original;
         }
     }
 
-    /**
-     * 将消费记录标记为成功。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void markSuccess(String eventId, String consumer) {
-        updateStatus(eventId, consumer, EventConsumeStatus.SUCCESS, null);
-    }
-
-    /**
-     * 将消费记录标记为失败，并记录错误信息。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void markFailed(String eventId, String consumer, String errorMessage) {
-        updateStatus(eventId, consumer, EventConsumeStatus.FAILED, errorMessage);
-    }
-
-    /**
-     * 判断某个 consumer 是否已经成功消费过该事件。
-     */
     public boolean isSuccess(String eventId, String consumer) {
-        EventConsumeLog log = find(eventId, consumer);
-        return log != null && EventConsumeStatus.SUCCESS.name().equals(log.getStatus());
+        requireIdentity(eventId, consumer);
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM event_consume_log
+                 WHERE event_id = ? AND consumer = ? AND status = 'SUCCESS'
+                """, Integer.class, eventId, consumer);
+        return count != null && count == 1;
     }
 
-    /**
-     * 查询事件消费记录。
-     * eventId 和 consumer 缺失时直接视为调用方错误。
-     */
-    private EventConsumeLog find(String eventId, String consumer) {
-        if (eventId == null || consumer == null) {
-            throw BusinessException.badRequest("eventId and consumer are required");
+    private static void requireIdentity(String eventId, String consumer) {
+        if (eventId == null || eventId.isBlank() || eventId.length() > 64
+                || consumer == null || consumer.isBlank() || consumer.length() > 128) {
+            throw BusinessException.badRequest("eventId must contain 1..64 characters and consumer 1..128 characters");
         }
-        return eventConsumeLogMapper.selectOne(new LambdaQueryWrapper<EventConsumeLog>()
-                .eq(EventConsumeLog::getEventId, eventId)
-                .eq(EventConsumeLog::getConsumer, consumer)
-                .last("LIMIT 1"));
     }
 
-    /**
-     * 更新消费状态。
-     * 若记录不存在则补建一条，以兼容“先标记结果、后补日志”的异常路径。
-     */
-    private void updateStatus(String eventId,
-                              String consumer,
-                              EventConsumeStatus status,
-                              String errorMessage) {
-        EventConsumeLog existing = find(eventId, consumer);
-        if (existing == null) {
-            existing = new EventConsumeLog();
-            existing.setEventId(eventId);
-            existing.setConsumer(consumer);
-            existing.setCreatedAt(LocalDateTime.now());
-            eventConsumeLogMapper.insert(existing);
+    public enum ConsumptionResult {
+        HANDLED,
+        ALREADY_PROCESSED
+    }
+
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private static final class HandlerExecutionException extends RuntimeException {
+        private final Exception original;
+
+        private HandlerExecutionException(Exception original) {
+            super(original);
+            this.original = original;
         }
-        existing.setStatus(status.name());
-        existing.setErrorMessage(errorMessage);
-        existing.setConsumedAt(status == EventConsumeStatus.SUCCESS ? LocalDateTime.now() : null);
-        eventConsumeLogMapper.updateById(existing);
     }
 }

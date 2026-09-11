@@ -54,6 +54,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/uploads/**", "/static/uploads/**")
                         .filters(f -> applyRateLimit(f, defaultRedisRateLimiter, clientRateLimiterKeyResolver))
                         .uri("lb://file-service"))
+                .route("notification-service", r -> r
+                        .path("/api/v1/notifications", "/api/v1/notifications/**")
+                        .filters(f -> applyRateLimit(f, defaultRedisRateLimiter, clientRateLimiterKeyResolver))
+                        .uri("lb://notification-service"))
                 .build();
     }
 

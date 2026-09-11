@@ -10,5 +10,9 @@ public interface UserService {
 
     UserInfoResp updateProfile(Long userId, UpdateProfileReq req);
 
-    UserProfileResp getUserProfile(String username, Long currentUserId, String tab, int page, int pageSize);
+    UserProfileResp getUserProfile(String identifier, Long currentUserId, String tab, int limit, int page, int pageSize);
+
+    default UserProfileResp getUserProfile(String identifier, Long currentUserId, String tab, int page, int pageSize) {
+        return getUserProfile(identifier, currentUserId, tab, 20, page, pageSize);
+    }
 }

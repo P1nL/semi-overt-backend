@@ -6,14 +6,13 @@ import com.platform.kernel.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 
 @Slf4j
 @Service
@@ -27,19 +26,25 @@ public class LocalObjectStorageService implements ObjectStorageService {
     }
 
     @Override
-    public String store(String objectKey, MultipartFile file) throws IOException {
-        Path uploadRoot = Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
-        Path physicalPath = uploadRoot.resolve(objectKey).normalize();
-        if (!physicalPath.startsWith(uploadRoot)) {
+    public String store(String objectKey, byte[] bytes, String contentType) throws IOException {
+        if (bytes == null || bytes.length == 0) {
+            throw new IOException("Uploaded file is empty");
+        }
+        Path uploadRoot = uploadRoot();
+        Path physicalPath = safePath(uploadRoot, objectKey);
+        if (physicalPath == null || containsSymbolicLink(uploadRoot, physicalPath)) {
             throw BusinessException.serverError("Invalid storage path");
         }
 
         Files.createDirectories(physicalPath.getParent());
-        try (InputStream inputStream = file.getInputStream()) {
-            Files.copy(inputStream, physicalPath, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            // Generated UUID keys are unique. Refuse a collision instead of
+            // replacing an object that may already be referenced elsewhere.
+            Files.write(physicalPath, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        } catch (FileAlreadyExistsException ex) {
+            throw BusinessException.serverError("Generated storage key already exists");
         }
-
-        return normalizeBaseUrl(storageConfig.getAccessPrefix()) + "/" + objectKey;
+        return normalizeAccessPrefix() + "/" + objectKey;
     }
 
     @Override
@@ -48,36 +53,67 @@ public class LocalObjectStorageService implements ObjectStorageService {
             return;
         }
         try {
-            Path uploadRoot = Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
-            Path physicalPath = uploadRoot.resolve(objectKey).normalize();
-            if (!physicalPath.startsWith(uploadRoot)) {
-                log.warn("Skipping delete — resolved path escapes upload root: {}", objectKey);
+            Path root = uploadRoot();
+            Path physicalPath = safePath(root, objectKey);
+            if (physicalPath == null || containsSymbolicLink(root, physicalPath)) {
+                log.warn("Skipping delete for unsafe local object key");
                 return;
             }
             Files.deleteIfExists(physicalPath);
-            log.info("Deleted local object: {}", objectKey);
-        } catch (IOException e) {
-            log.warn("Failed to delete local object: {}, reason: {}", objectKey, e.getMessage());
+        } catch (IOException ex) {
+            log.warn("Failed to delete local object: {}", ex.getMessage());
         }
     }
 
     @Override
     public void validateReadiness() {
-        Path uploadRoot = Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
+        Path root = uploadRoot();
         try {
-            Files.createDirectories(uploadRoot);
+            Files.createDirectories(root);
         } catch (IOException ex) {
-            throw BusinessException.serverError("Local upload path is not writable: " + uploadRoot);
+            throw BusinessException.serverError("Local upload path is not writable: " + root);
         }
-        if (!Files.isWritable(uploadRoot)) {
-            throw BusinessException.serverError("Local upload path is not writable: " + uploadRoot);
+        if (!Files.isDirectory(root) || !Files.isWritable(root)) {
+            throw BusinessException.serverError("Local upload path is not writable: " + root);
         }
+        normalizeAccessPrefix();
     }
 
-    private String normalizeBaseUrl(String baseUrl) {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw BusinessException.serverError("storage.access-prefix must not be blank");
+    Path uploadRoot() {
+        if (storageConfig.getUploadPath() == null || storageConfig.getUploadPath().isBlank()) {
+            throw BusinessException.serverError("storage.upload-path must not be blank");
         }
-        return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        return Paths.get(storageConfig.getUploadPath()).toAbsolutePath().normalize();
+    }
+
+    private String normalizeAccessPrefix() {
+        String prefix = storageConfig.getAccessPrefix();
+        if (prefix == null || prefix.isBlank() || !prefix.startsWith("/")
+                || prefix.contains("..") || prefix.contains("\\") || prefix.contains("?")
+                || prefix.contains("#")) {
+            throw BusinessException.serverError("storage.access-prefix must be a safe path");
+        }
+        return prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix;
+    }
+
+    private Path safePath(Path root, String objectKey) {
+        if (objectKey == null || objectKey.isBlank()
+                || objectKey.startsWith("/") || objectKey.startsWith("\\")
+                || objectKey.contains("\\") || objectKey.indexOf('\0') >= 0) {
+            return null;
+        }
+        Path candidate = root.resolve(objectKey).normalize();
+        return candidate.startsWith(root) ? candidate : null;
+    }
+
+    private boolean containsSymbolicLink(Path root, Path candidate) {
+        Path current = candidate;
+        while (current != null && current.startsWith(root) && !current.equals(root)) {
+            if (Files.isSymbolicLink(current)) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
     }
 }

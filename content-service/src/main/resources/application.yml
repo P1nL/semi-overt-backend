@@ -52,9 +52,6 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 platform:
-  submit-review-cooldown-minutes: ${SUBMIT_REVIEW_COOLDOWN_MINUTES:30}
-  draft-cache-ttl-days: ${DRAFT_CACHE_TTL_DAYS:7}
-  draft-flush-interval-minutes: ${DRAFT_FLUSH_INTERVAL_MINUTES:5}
   feign:
     connect-timeout-ms: ${FEIGN_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${FEIGN_READ_TIMEOUT_MS:5000}

@@ -16,4 +16,11 @@ import lombok.NoArgsConstructor;
 public class ReviewTaskRemoveReq {
     private Long articleId;
     private String lastEventId;
+    private String submissionId;
+    private Long articleVersion;
+
+    public ReviewTaskRemoveReq(Long articleId, String lastEventId) {
+        this.articleId = articleId;
+        this.lastEventId = lastEventId;
+    }
 }

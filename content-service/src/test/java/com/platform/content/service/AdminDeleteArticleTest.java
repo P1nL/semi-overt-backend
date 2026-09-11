@@ -3,112 +3,53 @@ package com.platform.content.service;
 import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
 import com.platform.contract.review.client.ReviewTaskClient;
-import com.platform.events.support.EventOutboxService;
 import com.platform.content.entity.Article;
-import com.platform.kernel.enums.ArticleStatus;
-import com.platform.kernel.exception.BusinessException;
 import com.platform.content.mapper.ArticleMapper;
-import com.platform.content.service.HomeService;
 import com.platform.content.service.impl.ArticleServiceImpl;
-import com.platform.kernel.util.SecurityUtils;
+import com.platform.events.support.EventOutboxService;
+import com.platform.kernel.enums.ArticleStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-
 @ExtendWith(MockitoExtension.class)
 class AdminDeleteArticleTest {
-
-    @Mock
-    private ArticleMapper articleMapper;
-
-    @Mock
-    private AuthUserQueryClient authInternalClient;
-
-    @Mock
-    private ReviewReasonClient reviewInternalClient;
-
-    @Mock
-    private ReviewTaskClient reviewTaskInternalClient;
-
-    @Mock
-    private StringRedisTemplate redisTemplate;
-
-    @Mock
-    private EventOutboxService eventOutboxService;
-
-    @Mock
-    private HomeService homeService;
+    @Mock ArticleMapper articleMapper;
+    @Mock AuthUserQueryClient authInternalClient;
+    @Mock ReviewReasonClient reviewInternalClient;
+    @Mock ReviewTaskClient reviewTaskInternalClient;
+    @Mock EventOutboxService eventOutboxService;
+    @Mock ReviewDecisionService reviewDecisionService;
 
     @Test
-    void adminCanDeletePendingArticle() {
-        ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
-        Article article = buildArticle(12L, 3L, ArticleStatus.PENDING);
-        when(articleMapper.selectById(12L)).thenReturn(article);
+    void authorCanDeleteApprovedArticleWithVersionedEvent() {
+        Article before = article(13L, 4L, ArticleStatus.APPROVED, 6L, 0);
+        Article after = article(13L, 4L, ArticleStatus.APPROVED, 7L, 1);
+        when(articleMapper.selectByIdForUpdate(13L)).thenReturn(before);
+        when(articleMapper.deleteByAuthorCas(13L, 4L, 6L)).thenReturn(1);
+        when(articleMapper.selectByIdIncludingDeleted(13L)).thenReturn(after);
 
-        try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
-            securityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+        service().deleteArticle(13L, 4L);
 
-            Map<String, Object> result = service.adminDeleteArticle(12L, 99L);
-
-            assertThat(result).containsEntry("ok", true);
-            verify(articleMapper).deleteById(12L);
-            verify(redisTemplate).delete("draft:3:12");
-        }
+        verify(articleMapper).deleteByAuthorCas(13L, 4L, 6L);
+        verify(eventOutboxService).saveEvent(any(), any(), any(), any());
     }
 
-    @Test
-    void adminCanDeleteApprovedArticle() {
-        ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
-        Article article = buildArticle(13L, 4L, ArticleStatus.APPROVED);
-        when(articleMapper.selectById(13L)).thenReturn(article);
-
-        try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
-            securityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            Map<String, Object> result = service.adminDeleteArticle(13L, 100L);
-
-            assertThat(result).containsEntry("ok", true);
-            verify(articleMapper).deleteById(13L);
-            verify(redisTemplate).delete("draft:4:13");
-        }
+    private ArticleServiceImpl service() {
+        return new ArticleServiceImpl(articleMapper, authInternalClient, reviewInternalClient,
+                reviewTaskInternalClient, eventOutboxService, reviewDecisionService);
     }
 
-    @Test
-    void nonAdminCannotDeleteThroughAdminCapability() {
-        ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
-
-        try (MockedStatic<SecurityUtils> securityUtils = org.mockito.Mockito.mockStatic(SecurityUtils.class)) {
-            securityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
-
-            assertThatThrownBy(() -> service.adminDeleteArticle(20L, 2L))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("code")
-                    .isEqualTo(403);
-        }
-    }
-
-        private Article buildArticle(Long articleId, Long authorId, ArticleStatus status) {
-        Article article = new Article();
-        article.setId(articleId);
-        article.setAuthorId(authorId);
-        article.setStatus(status);
-        return article;
+    private Article article(Long id, Long author, ArticleStatus status, Long version, int deleted) {
+        Article value = new Article();
+        value.setId(id); value.setAuthorId(author); value.setStatus(status);
+        value.setVersion(version); value.setDeleted(deleted);
+        value.setUpdatedAt(java.time.LocalDateTime.now());
+        return value;
     }
 }
-
-
-

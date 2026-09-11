@@ -29,6 +29,9 @@ public class EventOutbox {
     private LocalDateTime nextRetryAt;
     private LocalDateTime publishedAt;
     private String lastError;
+    private String leaseOwner;
+    private String leaseToken;
+    private LocalDateTime leaseUntil;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

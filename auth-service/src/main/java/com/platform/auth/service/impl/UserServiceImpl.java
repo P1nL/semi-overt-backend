@@ -39,26 +39,23 @@ public class UserServiceImpl implements UserService {
     public UserInfoResp updateProfile(Long userId, UpdateProfileReq req) {
         User user = getUserById(userId);
 
-        if (req.getNickname() != null) {
-            user.setNickname(req.getNickname());
-        }
-        if (req.getAvatarUrl() != null) {
-            user.setAvatarUrl(req.getAvatarUrl());
-        }
-        if (req.getCoverUrl() != null) {
-            user.setCoverUrl(req.getCoverUrl());
-        }
-        if (req.getSignature() != null) {
-            user.setSignature(req.getSignature());
-        }
+        user.setNickname(preserveBlank(req.getNickname(), user.getNickname()));
+        user.setAvatarUrl(preserveBlank(req.getAvatarUrl(), user.getAvatarUrl()));
+        user.setCoverUrl(preserveBlank(req.getCoverUrl(), user.getCoverUrl()));
+        user.setSignature(preserveBlank(req.getSignature(), user.getSignature()));
 
-        userMapper.updateById(user);
-        return toUserInfoResp(user);
+        userMapper.updateProfileFields(
+                userId,
+                user.getNickname(),
+                user.getAvatarUrl(),
+                user.getCoverUrl(),
+                user.getSignature());
+        return toUserInfoResp(getUserById(userId));
     }
 
     @Override
-    public UserProfileResp getUserProfile(String username, Long currentUserId, String tab, int page, int pageSize) {
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+    public UserProfileResp getUserProfile(String identifier, Long currentUserId, String tab, int limit, int page, int pageSize) {
+        User user = findUserByIdentifier(identifier);
         if (user == null) {
             throw BusinessException.notFound("User not found");
         }
@@ -67,6 +64,7 @@ public class UserServiceImpl implements UserService {
                 UserProfileArticlesQueryReq.builder()
                         .authorId(user.getId())
                         .tab(tab)
+                        .limit(limit)
                         .page(page)
                         .pageSize(pageSize)
                         .build()
@@ -75,20 +73,30 @@ public class UserServiceImpl implements UserService {
         return UserProfileResp.builder()
                 .profile(UserProfileResp.ProfileInfo.builder()
                         .id(user.getId())
+                        .userId(user.getId())
                         .username(user.getUsername())
                         .nickname(user.getNickname())
                         .role(user.getRole())
                         .avatarUrl(user.getAvatarUrl())
                         .coverUrl(user.getCoverUrl())
                         .signature(user.getSignature())
+                        .createdAt(user.getCreatedAt())
                         .build())
                 .stats(toArticleStats(articlesResp))
+                .writingCalendar(articlesResp == null || articlesResp.getWritingCalendar() == null
+                        ? List.of()
+                        : articlesResp.getWritingCalendar())
                 .list(toArticleCards(articlesResp))
                 .total(articlesResp != null ? articlesResp.getTotal() : 0)
                 .page(articlesResp != null ? articlesResp.getPage() : page)
                 .pageSize(articlesResp != null ? articlesResp.getPageSize() : pageSize)
                 .pages(resolvePages(articlesResp, pageSize))
                 .build();
+    }
+
+    /** Backward-compatible overload for callers using the original page/pageSize contract. */
+    public UserProfileResp getUserProfile(String identifier, Long currentUserId, String tab, int page, int pageSize) {
+        return getUserProfile(identifier, currentUserId, tab, 20, page, pageSize);
     }
 
     private long resolvePages(UserProfileArticlesResp articlesResp, int fallbackPageSize) {
@@ -132,6 +140,7 @@ public class UserServiceImpl implements UserService {
 
     private ArticleCardResp toArticleCardResp(UserProfileArticleItemDto article) {
         return ArticleCardResp.builder()
+                .id(article.getArticleId())
                 .articleId(article.getArticleId())
                 .title(article.getTitle())
                 .summary(article.getSummary())
@@ -142,12 +151,42 @@ public class UserServiceImpl implements UserService {
                 .durationCategory(article.getDurationCategory())
                 .status(article.getStatus())
                 .authorId(article.getAuthorId())
+                .author(ArticleCardResp.AuthorInfo.builder()
+                        .id(article.getAuthorId())
+                        .username(article.getAuthorUsername() == null ? article.getAuthorName() : article.getAuthorUsername())
+                        .nickname(article.getAuthorName())
+                        .avatarUrl(article.getAuthorAvatar())
+                        .build())
                 .authorName(article.getAuthorName())
                 .authorAvatar(article.getAuthorAvatar())
+                .wordCount(article.getWordCount())
+                .draftVisible(false)
                 .publishedAt(article.getPublishedAt())
                 .updatedAt(article.getUpdatedAt())
                 .rejectReason(article.getRejectReason())
                 .build();
+    }
+
+    private String preserveBlank(String value, String current) {
+        if (value == null || value.trim().isEmpty()) {
+            return current;
+        }
+        return value.trim();
+    }
+
+    private User findUserByIdentifier(String identifier) {
+        String normalized = identifier == null ? "" : identifier.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.chars().allMatch(Character::isDigit)) {
+            try {
+                return userMapper.selectById(Long.parseLong(normalized));
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, normalized));
     }
 
     private User getUserById(Long userId) {

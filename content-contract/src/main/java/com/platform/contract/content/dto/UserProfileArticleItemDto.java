@@ -29,7 +29,10 @@ public class UserProfileArticleItemDto {
     private DurationCategory durationCategory;
     private ArticleStatus status;
     private Long authorId;
+    private String authorUsername;
     private String authorName;
+    private Integer wordCount;
+    private Boolean draftVisible;
     private String authorAvatar;
     private LocalDateTime publishedAt;
     private LocalDateTime updatedAt;

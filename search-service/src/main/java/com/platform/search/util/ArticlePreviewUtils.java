@@ -11,7 +11,8 @@ public final class ArticlePreviewUtils {
     public static String extractPreviewText(String content, int maxLength) {
         if (content == null || content.isBlank()) return "";
 
-        String normalized = content.replace("\r\n", "\n").replace('\r', '\n').trim();
+        String normalized = content.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " ")
+                .replace("\r\n", "\n").replace('\r', '\n').trim();
         if (normalized.isEmpty()) return "";
 
         String[] blocks = normalized.split("\\n\\s*\\n");

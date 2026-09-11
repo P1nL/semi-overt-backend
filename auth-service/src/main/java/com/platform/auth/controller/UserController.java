@@ -7,8 +7,6 @@ import com.platform.auth.service.UserService;
 import com.platform.kernel.util.Result;
 import com.platform.kernel.util.SecurityUtils;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -35,24 +33,22 @@ public class UserController {
         return Result.ok(userService.getCurrentUserInfo(userId));
     }
 
-    @PutMapping("/me/profile")
+    @PutMapping({"/me", "/me/profile"})
     @PreAuthorize("isAuthenticated()")
     public Result<UserInfoResp> updateProfile(@Valid @RequestBody UpdateProfileReq req) {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.ok(userService.updateProfile(userId, req));
     }
 
-    @GetMapping("/{username}/profile")
+    @GetMapping("/{identifier}/profile")
     public Result<UserProfileResp> getUserProfile(
-            @PathVariable String username,
-            @RequestParam(required = false, defaultValue = "all") String tab,
-            @RequestParam(defaultValue = "1")
-            @Min(value = 1, message = "Page must be at least 1") int page,
-            @RequestParam(defaultValue = "10")
-            @Min(value = 1, message = "Page size must be at least 1")
-            @Max(value = 50, message = "Page size must be at most 50") int pageSize
+            @PathVariable String identifier,
+            @RequestParam(required = false, defaultValue = "") String tab,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize
     ) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        return Result.ok(userService.getUserProfile(username, currentUserId, tab, page, pageSize));
+        return Result.ok(userService.getUserProfile(identifier, currentUserId, tab, limit, page, pageSize));
     }
 }

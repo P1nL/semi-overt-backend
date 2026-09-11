@@ -25,6 +25,10 @@ public class ArticleDetailResp {
     private BigDecimal readMinutes;
     private DurationCategory durationCategory;
     private ArticleStatus status;
+    private Long version;
+    private boolean draftVisible;
+    private String submissionId;
+    private Long assignedAdminId;
     private AuthorInfo author;
     private String latestReviewReason;
     private Integer submitCount;

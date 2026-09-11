@@ -17,13 +17,15 @@ public class ReviewLog {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-
     private Long articleId;
     private Long operatorId;
     private ReviewAction action;
     private ArticleStatus fromStatus;
     private ArticleStatus toStatus;
     private String reason;
+    private String decisionId;
+    private String submissionId;
+    private Long articleVersion;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

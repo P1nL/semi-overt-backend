@@ -1,11 +1,10 @@
 package com.platform.search.controller;
 
+import com.platform.kernel.util.Result;
 import com.platform.search.api.resp.SearchResp;
 import com.platform.search.api.resp.UserSearchResp;
-import com.platform.kernel.util.Result;
 import com.platform.search.service.SearchService;
 import com.platform.search.service.UserSearchService;
-import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,17 +21,19 @@ public class SearchController {
     private final SearchService searchService;
     private final UserSearchService userSearchService;
 
-    @GetMapping("/articles")
+    /** Root path is the current frontend contract; /articles remains a compatibility alias. */
+    @GetMapping({"", "/articles"})
     public Result<SearchResp> searchArticles(
-            @RequestParam @NotBlank(message = "Keyword is required") String keyword,
+            @RequestParam(defaultValue = "") String keyword,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        return Result.ok(searchService.search(keyword, page, pageSize));
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "10") int limit) {
+        return Result.ok(searchService.search(keyword, page, pageSize > 0 ? pageSize : limit));
     }
 
     @GetMapping("/users")
     public Result<UserSearchResp> searchUsers(
-            @RequestParam @NotBlank(message = "Keyword is required") String keyword,
+            @RequestParam(defaultValue = "") String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         return Result.ok(userSearchService.searchUsers(keyword, page, pageSize));

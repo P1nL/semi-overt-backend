@@ -24,8 +24,11 @@
         <result column="status"              property="status"/>
         <result column="submit_count"        property="submitCount"/>
         <result column="last_submitted_at"   property="lastSubmittedAt"/>
+        <result column="submission_id"       property="submissionId"/>
         <result column="published_at"        property="publishedAt"/>
         <result column="last_featured_at"    property="lastFeaturedAt"/>
+        <result column="draft_visible"       property="draftVisible"/>
+        <result column="version"             property="version"/>
         <result column="deleted"             property="deleted"/>
         <result column="created_at"          property="createdAt"/>
         <result column="updated_at"          property="updatedAt"/>

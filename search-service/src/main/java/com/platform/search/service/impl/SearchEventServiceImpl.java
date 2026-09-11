@@ -13,7 +13,7 @@ public class SearchEventServiceImpl implements SearchEventService {
 
         @Override
     public void handleArticleStatusChanged(ArticleStatusChangedEvent event) {
-        log.info("Search index chain enabled but no-op: articleId={}, toStatus={}",
+        log.debug("Shared-table search observed content change; no secondary index exists: articleId={}, toStatus={}",
                 event.getArticleId(), event.getToStatus());
     }
 }

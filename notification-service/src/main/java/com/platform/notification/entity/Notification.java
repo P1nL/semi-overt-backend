@@ -23,6 +23,7 @@ public class Notification {
     private String content;
     private Long bizId;
     private Boolean readStatus;
+    private String decisionId;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

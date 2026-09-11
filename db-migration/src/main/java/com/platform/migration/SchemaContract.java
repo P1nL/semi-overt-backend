@@ -18,10 +18,10 @@ final class SchemaContract {
     }
     static Map<String, Table> parse(String sql) {
         Map<String, Table> tables = new LinkedHashMap<>();
-        var matcher = Pattern.compile("CREATE TABLE IF NOT EXISTS (\\w+) \\((.*?)\\);|CREATE TABLE IF NOT EXISTS (\\w+) \\((.*?)\\) ENGINE[^;]*;", Pattern.DOTALL).matcher(sql);
+        var matcher = Pattern.compile("CREATE TABLE IF NOT EXISTS (\\w+) \\((.*?)\\)\\s*(?:ENGINE[^;]*)?;", Pattern.DOTALL).matcher(sql);
         while (matcher.find()) {
-            String name = matcher.group(1) != null ? matcher.group(1) : matcher.group(3);
-            String body = matcher.group(2) != null ? matcher.group(2) : matcher.group(4);
+            String name = matcher.group(1);
+            String body = matcher.group(2);
             Map<String, Column> columns = new LinkedHashMap<>();
             Set<List<String>> unique = new HashSet<>();
             Map<String,List<String>> indexes = new HashMap<>();
@@ -108,11 +108,19 @@ final class SchemaContract {
         }
     }
     static void requireRows(Connection c, boolean monolith) throws SQLException {
+        requireRows(c,monolith,false);
+    }
+    static void requireRows(Connection c, boolean monolith, boolean s3) throws SQLException {
         zero(c,"SELECT COUNT(*) FROM users WHERE role NOT IN ('USER','ADMIN')", "unknown role");
         zero(c,"SELECT COUNT(*) FROM articles WHERE status NOT IN ('DRAFT','PENDING','APPROVED','RETURNED','REJECTED') OR duration_category NOT IN ('QUICK','SHORT','DEEP')", "unknown article enum");
         zero(c,"SELECT COUNT(*) FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE u.id IS NULL", "orphan article author");
-        zero(c,"SELECT COUNT(*) FROM review_tasks t LEFT JOIN articles a ON a.id=t.article_id WHERE a.id IS NULL OR a.deleted<>0 OR a.status<>'PENDING' OR t.status<>'PENDING' OR t.author_id<>a.author_id", "review task inconsistent with article");
-        zero(c,"SELECT COUNT(*) FROM articles a LEFT JOIN review_tasks t ON t.article_id=a.id WHERE a.status='PENDING' AND a.deleted=0 AND t.article_id IS NULL", "pending article missing review task");
+        if(s3) {
+            // Projections may lag, and terminal rows are version tombstones, not live tasks.
+            zero(c,"SELECT COUNT(*) FROM review_tasks t LEFT JOIN articles a ON a.id=t.article_id WHERE a.id IS NULL OR t.author_id<>a.author_id OR t.last_applied_version>a.version", "invalid review projection authority/version");
+        } else {
+            zero(c,"SELECT COUNT(*) FROM review_tasks t LEFT JOIN articles a ON a.id=t.article_id WHERE a.id IS NULL OR a.deleted<>0 OR a.status<>'PENDING' OR t.status<>'PENDING' OR t.author_id<>a.author_id", "review task inconsistent with article");
+            zero(c,"SELECT COUNT(*) FROM articles a LEFT JOIN review_tasks t ON t.article_id=a.id WHERE a.status='PENDING' AND a.deleted=0 AND t.article_id IS NULL", "pending article missing review task");
+        }
         zero(c,"SELECT COUNT(*) FROM review_logs l LEFT JOIN articles a ON a.id=l.article_id LEFT JOIN users u ON u.id=l.operator_id WHERE a.id IS NULL OR u.id IS NULL OR l.action NOT IN ('APPROVE','REJECT','RETURN','CANCEL')", "invalid review history");
         zero(c,"SELECT COUNT(*) FROM notifications n LEFT JOIN users u ON u.id=n.user_id WHERE u.id IS NULL", "orphan notification");
         zero(c,"SELECT COUNT(*) FROM articles WHERE word_count<0 OR read_minutes<0 OR submit_count<0", "negative article counters");

@@ -15,5 +15,8 @@ public class SubmitResp {
 
     private ArticleStatus status;
     private Integer submitCount;
+    private String submissionId;
+    private Long version;
     private LocalDateTime lastSubmittedAt;
+    private LocalDateTime updatedAt;
 }

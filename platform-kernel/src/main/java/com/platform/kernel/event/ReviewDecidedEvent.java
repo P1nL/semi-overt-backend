@@ -26,6 +26,9 @@ public class ReviewDecidedEvent implements BaseDomainEvent {
     private java.time.LocalDateTime reviewedAt;
     private ArticleStatus fromStatus;
     private ArticleStatus toStatus;
+    private String decisionId;
+    private String submissionId;
+    private Long expectedVersion;
 
     public static ReviewDecidedEvent fromPayload(String eventId, ReviewDecisionPayload payload) {
         return ReviewDecidedEvent.builder()
@@ -38,6 +41,9 @@ public class ReviewDecidedEvent implements BaseDomainEvent {
                 .reviewedAt(payload.getReviewedAt())
                 .fromStatus(payload.getFromStatus())
                 .toStatus(payload.getToStatus())
+                .decisionId(payload.getDecisionId())
+                .submissionId(payload.getSubmissionId())
+                .expectedVersion(payload.getExpectedVersion())
                 .build();
     }
 }

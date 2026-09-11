@@ -16,6 +16,9 @@ import java.util.List;
 @FeignClient(name = "auth-service", configuration = FeignCommonConfig.class)
 public interface AuthUserQueryClient {
 
+    @GetMapping("/internal/users/review-admins")
+    Result<List<UserSummaryDto>> listReviewAdmins();
+
     @PostMapping("/internal/users/batch")
     Result<List<UserSummaryDto>> batchUsers(@RequestBody BatchUserQueryReq req);
 

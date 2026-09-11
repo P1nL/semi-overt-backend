@@ -56,6 +56,8 @@ class ApiCompatibilityWebFilterTest {
 
     @Test
     void normalizesTheSupportedAliases() {
+        assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.GET, "/api/review/42/decision-status"))
+                .isEqualTo("/api/v1/reviews/42/decision-status");
         assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.GET, "/api/review/pending"))
                 .isEqualTo("/api/v1/reviews/pending");
         assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.GET, "/api/v1/review/7/logs"))
@@ -70,6 +72,8 @@ class ApiCompatibilityWebFilterTest {
 
     @Test
     void respectsMethodAndExactPathBoundariesWithoutDecoding() {
+        assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.POST, "/api/review/42/decision-status"))
+                .isEqualTo("/api/v1/review/42/decision-status");
         assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.POST, "/api/search"))
                 .isEqualTo("/api/v1/search");
         assertThat(ApiCompatibilityWebFilter.normalizePath(HttpMethod.POST, "/api/users/me"))

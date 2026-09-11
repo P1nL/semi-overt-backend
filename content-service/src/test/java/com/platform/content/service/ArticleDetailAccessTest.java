@@ -1,25 +1,26 @@
 package com.platform.content.service;
 
 import com.platform.contract.auth.client.AuthUserQueryClient;
+import com.platform.contract.auth.dto.UserSummaryDto;
 import com.platform.contract.review.client.ReviewReasonClient;
 import com.platform.contract.review.client.ReviewTaskClient;
-import com.platform.events.support.EventOutboxService;
-import com.platform.contract.auth.dto.UserSummaryDto;
+import com.platform.contract.review.dto.ReviewAssignmentDto;
 import com.platform.content.api.resp.ArticleDetailResp;
 import com.platform.content.entity.Article;
+import com.platform.content.mapper.ArticleMapper;
+import com.platform.content.service.impl.ArticleServiceImpl;
+import com.platform.events.support.EventOutboxService;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.exception.BusinessException;
-import com.platform.content.mapper.ArticleMapper;
-import com.platform.content.service.HomeService;
-import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.kernel.util.Result;
+import com.platform.kernel.util.SecurityUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,96 +30,88 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-
 @ExtendWith(MockitoExtension.class)
 class ArticleDetailAccessTest {
+    @Mock ArticleMapper articleMapper;
+    @Mock AuthUserQueryClient authInternalClient;
+    @Mock ReviewReasonClient reviewInternalClient;
+    @Mock ReviewTaskClient reviewTaskInternalClient;
+    @Mock EventOutboxService eventOutboxService;
+    @Mock ReviewDecisionService reviewDecisionService;
 
-    @Mock
-    private ArticleMapper articleMapper;
-
-    @Mock
-    private StringRedisTemplate redisTemplate;
-
-    @Mock
-    private ValueOperations<String, String> valueOperations;
-
-    @Mock
-    private AuthUserQueryClient authInternalClient;
-
-    @Mock
-    private ReviewReasonClient reviewInternalClient;
-
-    @Mock
-    private ReviewTaskClient reviewTaskInternalClient;
-
-    @Mock
-    private EventOutboxService eventOutboxService;
-
-    @Mock
-    private HomeService homeService;
-
-    @Test
-    void authorCanReadOwnDraftWithout404AndGetsRedisContent() {
-        ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
-
-        Article article = new Article();
-        article.setId(15L);
-        article.setAuthorId(7L);
-        article.setStatus(ArticleStatus.DRAFT);
-        article.setContent("mysql-content");
-
-        when(articleMapper.selectById(15L)).thenReturn(article);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("draft:7:15")).thenReturn("redis-content");
-        when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(java.util.List.of(
-                UserSummaryDto.builder().id(7L).username("alice").avatarUrl("/avatar.png").build()
-        )));
-
-        ArticleDetailResp resp = service.getArticleDetail(15L, 7L);
-
-        assertThat(resp.getStatus()).isEqualTo(ArticleStatus.DRAFT);
-        assertThat(resp.getContent()).isEqualTo("redis-content");
-        assertThat(resp.getAuthor().getUsername()).isEqualTo("alice");
-        verify(reviewInternalClient, never()).latestReason(15L);
+    private ArticleServiceImpl service() {
+        return new ArticleServiceImpl(articleMapper, authInternalClient, reviewInternalClient,
+                reviewTaskInternalClient, eventOutboxService, reviewDecisionService);
     }
 
     @Test
-    void anonymousCanReadApprovedButNotReturnedArticle() {
-        ArticleServiceImpl service = new ArticleServiceImpl(
-                articleMapper, redisTemplate, authInternalClient, reviewInternalClient, reviewTaskInternalClient, eventOutboxService, homeService);
+    void authorReadsDatabaseDraftWithoutRedisOverlay() {
+        Article article = article(15L, 7L, ArticleStatus.DRAFT);
+        article.setContent("database-content");
+        when(articleMapper.selectById(15L)).thenReturn(article);
+        author(7L);
 
-        Article approved = new Article();
-        approved.setId(16L);
-        approved.setAuthorId(8L);
-        approved.setStatus(ArticleStatus.APPROVED);
-        approved.setContent("public-content");
+        ArticleDetailResp response = service().getArticleDetail(15L, 7L);
 
-        Article returned = new Article();
-        returned.setId(17L);
-        returned.setAuthorId(8L);
-        returned.setStatus(ArticleStatus.RETURNED);
-        returned.setContent("private-content");
+        assertThat(response.getContent()).isEqualTo("database-content");
+        assertThat(response.getVersion()).isEqualTo(3L);
+        verify(reviewTaskInternalClient, never()).assignment(any(), any());
+    }
 
-        when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(java.util.List.of(
-                UserSummaryDto.builder().id(8L).username("writer").avatarUrl("/avatar.png").build()
-        )));
-        when(articleMapper.selectById(16L)).thenReturn(approved);
-        when(articleMapper.selectById(17L)).thenReturn(returned);
+    @Test
+    void pendingAuthorCanReadWhenProjectionIsNotYetAvailable() {
+        Article article = article(16L, 7L, ArticleStatus.PENDING);
+        article.setSubmissionId("submission-1");
+        when(articleMapper.selectById(16L)).thenReturn(article);
+        when(reviewTaskInternalClient.assignment(16L, "submission-1"))
+                .thenThrow(new RuntimeException("projection not created yet"));
+        author(7L);
 
-        try (MockedStatic<com.platform.kernel.util.SecurityUtils> securityUtils = mockStatic(com.platform.kernel.util.SecurityUtils.class)) {
-            securityUtils.when(com.platform.kernel.util.SecurityUtils::isAdmin).thenReturn(false);
+        ArticleDetailResp response = service().getArticleDetail(16L, 7L);
 
-            ArticleDetailResp resp = service.getArticleDetail(16L, null);
-            assertThat(resp.getContent()).isEqualTo("public-content");
+        assertThat(response.getAssignedAdminId()).isNull();
+        verify(reviewTaskInternalClient).assignment(16L, "submission-1");
+    }
 
-            assertThatThrownBy(() -> service.getArticleDetail(17L, null))
+    @Test
+    void nonAdminNonAuthorIsRejectedWithoutAssignmentRpc() {
+        Article article = article(17L, 7L, ArticleStatus.PENDING);
+        article.setSubmissionId("submission-2");
+        when(articleMapper.selectById(17L)).thenReturn(article);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::isAdmin).thenReturn(false);
+            assertThatThrownBy(() -> service().getArticleDetail(17L, 8L))
                     .isInstanceOf(BusinessException.class)
-                    .extracting("code")
-                    .isEqualTo(404);
+                    .extracting("code").isEqualTo(404);
+        }
+        verify(reviewTaskInternalClient, never()).assignment(any(), any());
+    }
+
+    @Test
+    void onlyAssignedAdminCanReadPendingDetail() {
+        Article article = article(18L, 7L, ArticleStatus.PENDING);
+        article.setSubmissionId("submission-3");
+        when(articleMapper.selectById(18L)).thenReturn(article);
+        when(reviewTaskInternalClient.assignment(18L, "submission-3"))
+                .thenReturn(Result.ok(ReviewAssignmentDto.builder()
+                        .articleId(18L).submissionId("submission-3").assignedAdminId(9L).build()));
+        author(7L);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::isAdmin).thenReturn(true);
+            ArticleDetailResp response = service().getArticleDetail(18L, 9L);
+            assertThat(response.getAssignedAdminId()).isEqualTo(9L);
         }
     }
+
+    private void author(Long id) {
+        when(authInternalClient.batchUsers(any())).thenReturn(Result.ok(List.of(
+                UserSummaryDto.builder().id(id).username("writer").build())));
+    }
+
+    private Article article(Long id, Long authorId, ArticleStatus status) {
+        Article article = new Article();
+        article.setId(id); article.setAuthorId(authorId); article.setStatus(status);
+        article.setVersion(3L); article.setDeleted(0); article.setDraftVisible(false);
+        return article;
+    }
 }
-
-
-

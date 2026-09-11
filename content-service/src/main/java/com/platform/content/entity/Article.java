@@ -33,12 +33,14 @@ public class Article {
     private ArticleStatus status;
     private Integer submitCount;
     private LocalDateTime lastSubmittedAt;
+    private String submissionId;
     private LocalDateTime publishedAt;
     private LocalDateTime lastFeaturedAt;
+    private Boolean draftVisible;
 
-    // 依赖数据库 articles 表存在 version 列（INT DEFAULT 0）以启用乐观锁
+    // S3 uses explicit SQL CAS predicates; the annotation still protects legacy updateById callers.
     @Version
-    private Integer version;
+    private Long version;
 
     @TableLogic
     private Integer deleted;

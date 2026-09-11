@@ -1,53 +1,77 @@
 package com.platform.events.support;
 
 import com.platform.kernel.constant.EventConstants;
-import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/**
- * RabbitMQ 消费重试支持类。
- * 负责根据当前重试次数，把失败消息重新投递到重试交换机或死信交换机。
- */
+import java.util.UUID;
+
+/** Republishes a failed delivery to its queue-specific retry or dead-letter route with publisher confirms. */
 @Component
-@RequiredArgsConstructor
 public class RabbitRetrySupport {
 
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitPublishConfirmSupport confirmedPublisher;
+    private final int maxRetries;
 
-    @Value("${platform.events.consumer-max-retries:3}")
-    private int maxRetries;
-
-    /**
-     * 根据重试次数决定后续投递方向。
-     * 未超过阈值时进入重试队列；超过阈值后进入死信队列等待人工或离线处理。
-     */
-    public void retryOrDeadLetter(String eventType, Message message, String errorMessage) {
-        String queueName = message.getMessageProperties().getConsumerQueue();
-        int retryCount = currentRetryCount(message) + 1;
-        Message nextMessage = MessageBuilder.fromMessage(message)
-                .setHeader("x-event-retry-count", retryCount)
-                .setHeader("x-last-error", errorMessage)
-                .build();
-        if (retryCount > maxRetries) {
-            rabbitTemplate.send(EventConstants.deadLetterExchangeOf(queueName), queueName, nextMessage);
-            return;
+    public RabbitRetrySupport(
+            RabbitPublishConfirmSupport confirmedPublisher,
+            @Value("${platform.events.consumer-max-retries:3}") int maxRetries) {
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException("consumer max retries must not be negative");
         }
-        rabbitTemplate.send(EventConstants.retryExchangeOf(queueName), queueName, nextMessage);
+        this.confirmedPublisher = confirmedPublisher;
+        this.maxRetries = maxRetries;
     }
 
-    /**
-     * 从消息头中读取当前重试次数。
-     * 没有重试头时按首次失败处理。
-     */
-    private int currentRetryCount(Message message) {
+    /** Returns only after the retry/DLQ publish is confirmed and not returned. */
+    public void retryOrDeadLetter(String eventType, Message message, String errorMessage) {
+        String queueName = message.getMessageProperties().getConsumerQueue();
+        if (queueName == null || queueName.isBlank()) {
+            throw new IllegalArgumentException("consumer queue is required for retry routing");
+        }
+        int retryCount = currentRetryCount(message) + 1;
+        Message nextMessage = MessageBuilder.fromClonedMessage(message)
+                .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
+                .setHeader("x-event-type", eventType)
+                .setHeader("x-original-consumer-queue", queueName)
+                .setHeader("x-event-retry-count", retryCount)
+                .setHeader("x-last-error", truncate(errorMessage))
+                .build();
+        boolean deadLetter = retryCount > maxRetries;
+        String exchange = deadLetter
+                ? EventConstants.deadLetterExchangeOf(queueName)
+                : EventConstants.retryExchangeOf(queueName);
+        confirmedPublisher.sendConfirmed(
+                exchange,
+                queueName,
+                nextMessage,
+                "consumer:" + queueName + ":" + retryCount + ":" + UUID.randomUUID()
+        );
+    }
+
+    int currentRetryCount(Message message) {
         Object header = message.getMessageProperties().getHeaders().get("x-event-retry-count");
         if (header instanceof Number number) {
-            return number.intValue();
+            return Math.max(0, number.intValue());
+        }
+        if (header instanceof String text) {
+            try {
+                return Math.max(0, Integer.parseInt(text));
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
         }
         return 0;
+    }
+
+    private static String truncate(String value) {
+        if (value == null) {
+            return "unknown";
+        }
+        String singleLine = value.replace('\r', ' ').replace('\n', ' ');
+        return singleLine.length() <= 500 ? singleLine : singleLine.substring(0, 500);
     }
 }

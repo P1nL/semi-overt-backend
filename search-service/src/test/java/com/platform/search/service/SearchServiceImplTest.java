@@ -10,6 +10,7 @@ import com.platform.kernel.util.Result;
 import com.platform.search.mapper.SearchArticleMapper;
 import com.platform.search.model.SearchArticleRow;
 import com.platform.search.service.impl.SearchServiceImpl;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,7 +22,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -35,14 +38,21 @@ class SearchServiceImplTest {
     @Mock
     private AuthUserQueryClient authInternalClient;
 
+    private SearchIndexCapability searchIndexCapability;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setupCapability() {
+        searchIndexCapability = new SearchIndexCapability(searchArticleMapper, false, "ft_articles_search");
+    }
+
     @Test
     void searchNormalizesPageAndEscapesKeywordAndMapsResults() {
-        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
         SearchArticleRow row = buildRow(1001L, 9L, "cloud_native", "summary for search");
         row.setContent("## 搜索标题\n\n搜索正文");
 
-        when(searchArticleMapper.countByKeyword("cloud\\_")).thenReturn(11L);
-        when(searchArticleMapper.searchByKeyword("cloud\\_", 0, 50)).thenReturn(List.of(row));
+        when(searchArticleMapper.countByKeyword(any(), eq(false))).thenReturn(11L);
+        when(searchArticleMapper.searchByKeyword(any(), eq(false), eq(0L), eq(50))).thenReturn(List.of(row));
         when(authInternalClient.batchUsers(any(BatchUserQueryReq.class))).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder()
                         .id(9L)
@@ -54,8 +64,8 @@ class SearchServiceImplTest {
 
         SearchResp response = service.search(" cloud_ ", 0, 99);
 
-        verify(searchArticleMapper).countByKeyword("cloud\\_");
-        verify(searchArticleMapper).searchByKeyword("cloud\\_", 0, 50);
+        verify(searchArticleMapper).countByKeyword(any(), eq(false));
+        verify(searchArticleMapper).searchByKeyword(any(), eq(false), eq(0L), eq(50));
 
         ArgumentCaptor<BatchUserQueryReq> batchReqCaptor = ArgumentCaptor.forClass(BatchUserQueryReq.class);
         verify(authInternalClient).batchUsers(batchReqCaptor.capture());
@@ -79,12 +89,12 @@ class SearchServiceImplTest {
 
     @Test
     void searchBuildsPreviewFromContentWhenSummaryIsEmpty() {
-        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
         SearchArticleRow row = buildRow(1003L, 18L, "heading only", null);
         row.setContent("## 富文本标题\n\n正文摘要");
 
-        when(searchArticleMapper.countByKeyword("heading")).thenReturn(1L);
-        when(searchArticleMapper.searchByKeyword("heading", 0, 10)).thenReturn(List.of(row));
+        when(searchArticleMapper.countByKeyword(any(), eq(false))).thenReturn(1L);
+        when(searchArticleMapper.searchByKeyword(any(), eq(false), eq(0L), eq(10))).thenReturn(List.of(row));
         when(authInternalClient.batchUsers(any(BatchUserQueryReq.class))).thenReturn(Result.ok(List.of(
                 UserSummaryDto.builder()
                         .id(18L)
@@ -103,12 +113,12 @@ class SearchServiceImplTest {
 
     @Test
     void searchReturnsEmptyPageWithoutCallingAuthWhenNoHits() {
-        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
-        when(searchArticleMapper.countByKeyword("empty")).thenReturn(0L);
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
+        when(searchArticleMapper.countByKeyword(any(), eq(false))).thenReturn(0L);
 
         SearchResp response = service.search("empty", 2, 5);
 
-        verify(searchArticleMapper).countByKeyword("empty");
+        verify(searchArticleMapper).countByKeyword(any(), eq(false));
         assertThat(response.getKeyword()).isEqualTo("empty");
         assertThat(response.getPage()).isEqualTo(2);
         assertThat(response.getPageSize()).isEqualTo(5);
@@ -120,11 +130,11 @@ class SearchServiceImplTest {
 
     @Test
     void searchFallsBackWhenAuthorEnrichmentFails() {
-        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
         SearchArticleRow row = buildRow(1002L, 15L, "fallback search", "summary for fallback");
 
-        when(searchArticleMapper.countByKeyword("fallback")).thenReturn(1L);
-        when(searchArticleMapper.searchByKeyword("fallback", 0, 10)).thenReturn(List.of(row));
+        when(searchArticleMapper.countByKeyword(any(), eq(false))).thenReturn(1L);
+        when(searchArticleMapper.searchByKeyword(any(), eq(false), eq(0L), eq(10))).thenReturn(List.of(row));
         when(authInternalClient.batchUsers(any(BatchUserQueryReq.class))).thenThrow(new RuntimeException("auth down"));
 
         SearchResp response = service.search("fallback", 1, 10);
@@ -139,7 +149,7 @@ class SearchServiceImplTest {
 
     @Test
     void searchSkipsMapperCallsWhenKeywordIsBlankAfterTrim() {
-        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient);
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
 
         SearchResp response = service.search("   ", 1, 10);
 
@@ -147,6 +157,35 @@ class SearchServiceImplTest {
         assertThat(response.getTotal()).isZero();
         assertThat(response.getList()).isEmpty();
         verifyNoInteractions(searchArticleMapper, authInternalClient);
+    }
+
+    @Test
+    void databaseFailureIsNotReportedAsAnEmptySuccessfulPage() {
+        when(searchArticleMapper.countByKeyword(any(), eq(false)))
+                .thenThrow(new DataAccessResourceFailureException("database offline"));
+        SearchServiceImpl service = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability);
+        assertThatThrownBy(() -> service.search("nebula", 1, 10))
+                .isInstanceOf(com.platform.kernel.exception.BusinessException.class)
+                .hasMessageContaining("unavailable");
+    }
+
+    @Test
+    void optionalFulltextFailureRetriesCountAndRowsTogetherInLikeMode() {
+        searchIndexCapability = new SearchIndexCapability(searchArticleMapper, true, "ft_articles_search");
+        when(searchArticleMapper.hasFullTextIndex("ft_articles_search")).thenReturn(true);
+        when(searchArticleMapper.countByKeyword(any(), eq(true))).thenThrow(new DataAccessResourceFailureException("index dropped"));
+        when(searchArticleMapper.countByKeyword(any(), eq(false))).thenReturn(0L);
+        SearchResp response = new SearchServiceImpl(searchArticleMapper, authInternalClient, searchIndexCapability)
+                .search("nebula", 1, 10);
+        assertThat(response.getTotal()).isZero();
+        verify(searchArticleMapper).countByKeyword(any(), eq(false));
+        verifyNoInteractions(authInternalClient);
+    }
+
+    @Test
+    void previewNeverIncludesScriptAndStyleContents() {
+        assertThat(com.platform.search.util.ArticlePreviewUtils.extractPreviewText(
+                "<script>secret</script><style>hidden</style><p>Visible</p>",120)).isEqualTo("Visible");
     }
 
     private static SearchArticleRow buildRow(long articleId, long authorId, String title, String summary) {

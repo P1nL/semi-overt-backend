@@ -8,7 +8,6 @@ import com.platform.file.service.OssClientFactory;
 import com.platform.kernel.exception.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
@@ -25,23 +24,25 @@ public class OssObjectStorageService implements ObjectStorageService {
     }
 
     @Override
-    public String store(String objectKey, MultipartFile file) throws IOException {
+    public String store(String objectKey, byte[] bytes, String contentType) throws IOException {
+        if (bytes == null || bytes.length == 0) {
+            throw new IOException("Uploaded file is empty");
+        }
         StorageConfig.Oss ossConfig = storageConfig.getOss();
         validateConfig(ossConfig);
-
         ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentLength(file.getSize());
-        if (file.getContentType() != null && !file.getContentType().isBlank()) {
-            metadata.setContentType(file.getContentType());
+        metadata.setContentLength(bytes.length);
+        if (contentType != null && !contentType.isBlank()) {
+            metadata.setContentType(contentType);
         }
 
-        OSS ossClient = buildClient();
+        OSS client = buildClient();
         try {
-            ossClient.putObject(ossConfig.getBucket(), objectKey, file.getInputStream(), metadata);
+            client.putObject(ossConfig.getBucket(), objectKey,
+                    new java.io.ByteArrayInputStream(bytes), metadata);
         } finally {
-            ossClient.shutdown();
+            client.shutdown();
         }
-
         return normalizeBaseUrl(ossConfig.getPublicBaseUrl()) + "/" + objectKey;
     }
 
@@ -51,17 +52,16 @@ public class OssObjectStorageService implements ObjectStorageService {
             return;
         }
         StorageConfig.Oss ossConfig = storageConfig.getOss();
-        OSS ossClient = buildClient();
+        validateConfig(ossConfig);
+        OSS client = buildClient();
         try {
-            ossClient.deleteObject(ossConfig.getBucket(), objectKey);
-        } catch (Exception e) {
-            // 对象不存在时静默忽略；其余异常仅记录不抛出，不影响上传主流程
-            if (e.getMessage() != null && e.getMessage().contains("NoSuchKey")) {
-                return;
+            client.deleteObject(ossConfig.getBucket(), objectKey);
+        } catch (Exception ex) {
+            if (ex.getMessage() == null || !ex.getMessage().contains("NoSuchKey")) {
+                throw ex;
             }
-            throw e;
         } finally {
-            ossClient.shutdown();
+            client.shutdown();
         }
     }
 
@@ -69,27 +69,24 @@ public class OssObjectStorageService implements ObjectStorageService {
     public void validateReadiness() {
         StorageConfig.Oss ossConfig = storageConfig.getOss();
         validateConfig(ossConfig);
-        OSS ossClient = buildClient();
+        OSS client = buildClient();
         try {
-            if (!ossClient.doesBucketExist(ossConfig.getBucket())) {
+            if (!client.doesBucketExist(ossConfig.getBucket())) {
                 throw BusinessException.serverError("OSS bucket does not exist: " + ossConfig.getBucket());
             }
         } finally {
-            ossClient.shutdown();
+            client.shutdown();
         }
     }
 
     private OSS buildClient() {
-        StorageConfig.Oss ossConfig = storageConfig.getOss();
-        return ossClientFactory.createClient(ossConfig);
+        return ossClientFactory.createClient(storageConfig.getOss());
     }
 
-    private void validateConfig(StorageConfig.Oss ossConfig) {
-        if (isBlank(ossConfig.getEndpoint())
-                || isBlank(ossConfig.getBucket())
-                || isBlank(ossConfig.getAccessKeyId())
-                || isBlank(ossConfig.getAccessKeySecret())
-                || isBlank(ossConfig.getPublicBaseUrl())) {
+    private void validateConfig(StorageConfig.Oss config) {
+        if (isBlank(config.getEndpoint()) || isBlank(config.getBucket())
+                || isBlank(config.getAccessKeyId()) || isBlank(config.getAccessKeySecret())
+                || isBlank(config.getPublicBaseUrl())) {
             throw BusinessException.serverError("OSS storage config is incomplete");
         }
     }

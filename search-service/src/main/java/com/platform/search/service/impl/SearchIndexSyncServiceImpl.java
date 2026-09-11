@@ -21,6 +21,6 @@ public class SearchIndexSyncServiceImpl implements SearchIndexSyncService, Appli
 
     @Override
     public void syncApprovedArticles() {
-        log.info("Search index sync is disabled for MySQL search mode");
+        log.warn("Legacy sync request has no rebuild effect: search reads content-owned MySQL tables; no secondary index exists");
     }
 }

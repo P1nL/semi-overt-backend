@@ -23,4 +23,8 @@ public class ArticleSubmittedEvent implements BaseDomainEvent {
     private Long authorId;
     private Integer submitCount;
     private LocalDateTime submittedAt;
+    private String submissionId;
+    private Long articleVersion;
+    private String title;
+    private Integer wordCount;
 }

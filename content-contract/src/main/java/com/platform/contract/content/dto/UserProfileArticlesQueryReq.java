@@ -16,6 +16,7 @@ import lombok.NoArgsConstructor;
 public class UserProfileArticlesQueryReq {
     private Long authorId;
     private String tab;
+    private int limit;
     private int page;
     private int pageSize;
 }

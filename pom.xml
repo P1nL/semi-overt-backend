@@ -128,4 +128,14 @@
             </plugins>
         </pluginManagement>
     </build>
+    <profiles>
+        <profile>
+            <id>s3-isolated-build</id>
+            <activation><property><name>s3.buildRoot</name></property></activation>
+            <build>
+                <!-- Prevent IDE/JDT incremental output from racing acceptance Maven builds. -->
+                <directory>${s3.buildRoot}/${project.artifactId}</directory>
+            </build>
+        </profile>
+    </profiles>
 </project>

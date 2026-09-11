@@ -1,57 +1,113 @@
 package com.platform.events.support;
 
-import com.platform.kernel.constant.EventConstants;
 import com.platform.events.entity.EventOutbox;
-import lombok.RequiredArgsConstructor;
+import com.platform.kernel.constant.EventConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageDeliveryMode;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Outbox 发布器公共支持类。
- * 负责批量读取可发布事件、发送到 RabbitMQ，并根据结果回写 outbox 状态。
- */
+/** Claims rows, publishes outside the DB transaction, then performs fenced state updates. */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class OutboxPublisherSupport {
 
     private final EventOutboxService eventOutboxService;
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitPublishConfirmSupport confirmedPublisher;
+    private final String publisherOwner;
+    private final Duration leaseDuration;
+    private final AtomicBoolean publishing = new AtomicBoolean();
 
-    /**
-     * 发布指定类型的待发送事件批次。
-     * 每条事件独立处理，单条失败不会阻塞同批次内其他事件继续发送。
-     */
+    public OutboxPublisherSupport(
+            EventOutboxService eventOutboxService,
+            RabbitPublishConfirmSupport confirmedPublisher,
+            @Value("${platform.events.publisher-owner:}") String configuredOwner,
+            @Value("${platform.events.outbox-lease-ms:30000}") long leaseMs) {
+        if (leaseMs <= 0) {
+            throw new IllegalArgumentException("outbox lease must be positive");
+        }
+        this.eventOutboxService = eventOutboxService;
+        this.confirmedPublisher = confirmedPublisher;
+        this.publisherOwner = configuredOwner == null || configuredOwner.isBlank()
+                ? defaultOwner()
+                : configuredOwner;
+        if (publisherOwner.length() > 128) {
+            throw new IllegalArgumentException("publisher owner exceeds 128 characters");
+        }
+        this.leaseDuration = Duration.ofMillis(leaseMs);
+    }
+
+    /** Source-compatible entry point for current article/review publishers. */
     public void publishPending(List<String> eventTypes) {
-        List<EventOutbox> batch = eventOutboxService.findPublishable(
-                eventTypes,
-                EventConstants.DEFAULT_OUTBOX_BATCH_SIZE
-        );
-        for (EventOutbox eventOutbox : batch) {
-            EventConstants.EventRoute route = eventOutboxService.routeOf(eventOutbox.getEventType());
-            try {
-                rabbitTemplate.send(route.getExchange(), "", buildMessage(eventOutbox));
-                eventOutboxService.markPublished(eventOutbox.getEventId());
-            } catch (Exception ex) {
-                // 失败后不抛出到外层调度器，而是记录重试信息，交给下次批处理继续投递。
-                log.warn("Publish outbox event failed: eventId={}, eventType={}, error={}",
-                        eventOutbox.getEventId(), eventOutbox.getEventType(), ex.getMessage());
-                eventOutboxService.markRetry(eventOutbox.getEventId(), ex.getMessage());
+        publishPending(inferAggregateType(eventTypes), eventTypes);
+    }
+
+    /** Explicit producer namespace prevents a service from claiming another domain's rows. */
+    public void publishPending(String aggregateType, List<String> eventTypes) {
+        if (!publishing.compareAndSet(false, true)) {
+            log.debug("Skip overlapping outbox publish invocation: owner={}", publisherOwner);
+            return;
+        }
+        try {
+            for (int sent = 0; sent < EventConstants.DEFAULT_OUTBOX_BATCH_SIZE; sent++) {
+                EventOutbox eventOutbox = eventOutboxService.claimNextPublishable(
+                        aggregateType,
+                        eventTypes,
+                        publisherOwner,
+                        leaseDuration
+                );
+                if (eventOutbox == null) {
+                    break;
+                }
+                if (!publishClaim(eventOutbox)) {
+                    break;
+                }
             }
+        } finally {
+            publishing.set(false);
         }
     }
 
-    /**
-     * 把 outbox 记录组装为 RabbitMQ 消息。
-     * 消息头中附带事件 ID 和事件类型，便于消费端追踪。
-     */
+    boolean publishClaim(EventOutbox eventOutbox) {
+        EventConstants.EventRoute route = eventOutboxService.routeOf(eventOutbox.getEventType());
+        return publishClaim(eventOutbox, route.getExchange(), route.getRoutingKey());
+    }
+
+    boolean publishClaim(EventOutbox eventOutbox, String exchange, String routingKey) {
+        try {
+            confirmedPublisher.sendConfirmed(
+                    exchange,
+                    routingKey,
+                    buildMessage(eventOutbox),
+                    "outbox:" + eventOutbox.getEventId() + ":" + eventOutbox.getLeaseToken()
+            );
+            if (!eventOutboxService.markPublished(eventOutbox)) {
+                log.info("Ignore stale outbox confirm after lease loss: eventId={}, owner={}",
+                        eventOutbox.getEventId(), eventOutbox.getLeaseOwner());
+                return false;
+            }
+            return true;
+        } catch (Exception ex) {
+            log.warn("Publish outbox event failed: eventId={}, eventType={}, error={}",
+                    eventOutbox.getEventId(), eventOutbox.getEventType(), ex.getMessage());
+            if (!eventOutboxService.markRetry(eventOutbox, ex.getMessage())) {
+                log.info("Ignore stale outbox failure after lease loss: eventId={}, owner={}",
+                        eventOutbox.getEventId(), eventOutbox.getLeaseOwner());
+                return false;
+            }
+            return true;
+        }
+    }
+
     private Message buildMessage(EventOutbox eventOutbox) {
         return MessageBuilder.withBody(eventOutbox.getPayload().getBytes(StandardCharsets.UTF_8))
                 .setContentType("application/json")
@@ -59,5 +115,29 @@ public class OutboxPublisherSupport {
                 .setHeader("x-event-id", eventOutbox.getEventId())
                 .setHeader("x-event-type", eventOutbox.getEventType())
                 .build();
+    }
+
+    private static String inferAggregateType(List<String> eventTypes) {
+        if (eventTypes != null && !eventTypes.isEmpty()
+                && eventTypes.stream().allMatch(EventConstants.REVIEW_DECIDED::equals)) {
+            return "review";
+        }
+        if (eventTypes != null && !eventTypes.isEmpty()
+                && eventTypes.stream().allMatch(type -> EventConstants.ARTICLE_SUBMITTED.equals(type)
+                || EventConstants.ARTICLE_STATUS_CHANGED.equals(type))) {
+            return "article";
+        }
+        throw new IllegalArgumentException("publisher must provide an explicit aggregateType for these eventTypes");
+    }
+
+    private static String defaultOwner() {
+        String host;
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (Exception ignored) {
+            host = "unknown-host";
+        }
+        String owner = host + ":" + UUID.randomUUID();
+        return owner.length() <= 128 ? owner : owner.substring(0, 128);
     }
 }

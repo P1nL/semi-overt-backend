@@ -3,90 +3,78 @@ package com.platform.review.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.platform.contract.auth.client.AuthUserQueryClient;
+import com.platform.contract.auth.dto.BatchUserQueryReq;
+import com.platform.contract.auth.dto.UserSummaryDto;
 import com.platform.contract.content.client.ContentReviewClient;
 import com.platform.contract.content.dto.ApplyReviewResultReq;
 import com.platform.contract.content.dto.ArticleReviewSnapshotDto;
-import com.platform.contract.auth.dto.BatchUserQueryReq;
-import com.platform.contract.auth.dto.UserSummaryDto;
+import com.platform.contract.content.dto.ReviewDecisionResultDto;
 import com.platform.kernel.api.PageResponse;
-import com.platform.kernel.api.ResultUtils;
-import com.platform.kernel.constant.EventConstants;
-import com.platform.kernel.context.TraceContextHolder;
-import com.platform.kernel.event.ReviewDecisionPayload;
-import com.platform.kernel.event.ReviewDecidedEvent;
-import com.platform.events.support.EventOutboxService;
-import com.platform.kernel.util.Result;
-import com.platform.review.api.req.ReviewActionReq;
-import com.platform.review.api.resp.ReviewActionResp;
-import com.platform.review.api.resp.ReviewListItemResp;
-import com.platform.review.api.resp.ReviewLogResp;
-import com.platform.review.entity.ReviewLog;
-import com.platform.review.entity.ReviewTask;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.enums.ReviewAction;
 import com.platform.kernel.exception.BusinessException;
+import com.platform.kernel.util.Result;
+import com.platform.kernel.util.SecurityUtils;
+import com.platform.review.api.req.ReviewActionReq;
+import com.platform.review.api.resp.ReviewActionResp;
+import com.platform.review.api.resp.ReviewDecisionStatusResp;
+import com.platform.review.api.resp.ReviewListItemResp;
+import com.platform.review.api.resp.ReviewLogResp;
+import com.platform.review.entity.ReviewCommand;
+import com.platform.review.entity.ReviewLog;
+import com.platform.review.entity.ReviewTask;
 import com.platform.review.mapper.ReviewLogMapper;
 import com.platform.review.mapper.ReviewTaskMapper;
+import com.platform.review.service.ReviewDecisionCoordinator;
 import com.platform.review.service.ReviewService;
-import com.platform.kernel.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewLogMapper reviewLogMapper;
-    private final AuthUserQueryClient authInternalClient;
-    private final ContentReviewClient contentInternalClient;
-    private final EventOutboxService eventOutboxService;
+    private final AuthUserQueryClient authUserQueryClient;
+    private final ContentReviewClient contentReviewClient;
+    private final ReviewDecisionCoordinator decisionCoordinator;
 
-        @Override
+    @Override
     public PageResponse<ReviewListItemResp> getPendingList(Long currentAdminId, int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, Math.min(100, pageSize));
         Page<ReviewTask> pageResult = reviewTaskMapper.selectPage(
-                new Page<>(page, pageSize),
+                new Page<>(safePage, safeSize),
                 new LambdaQueryWrapper<ReviewTask>()
                         .eq(ReviewTask::getStatus, ArticleStatus.PENDING)
-                        .ne(currentAdminId != null, ReviewTask::getAuthorId, currentAdminId)
-                        .orderByDesc(ReviewTask::getSubmittedAt, ReviewTask::getArticleId)
-        );
-
-        List<ReviewTask> tasks = sanitizePendingTasks(pageResult.getRecords());
-        Map<Long, UserSummaryDto> userMap = batchFetchUsers(tasks.stream()
+                        .eq(ReviewTask::getAssignedAdminId, currentAdminId)
+                        .orderByAsc(ReviewTask::getSubmittedAt, ReviewTask::getArticleId));
+        Map<Long, UserSummaryDto> users = batchFetchUsers(pageResult.getRecords().stream()
                 .map(ReviewTask::getAuthorId)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
-
-        List<ReviewListItemResp> list = tasks.stream()
-                .map(task -> {
-                    UserSummaryDto author = userMap.get(task.getAuthorId());
-                    return ReviewListItemResp.builder()
-                            .id(task.getArticleId())
-                            .title(task.getTitle())
-                            .submitCount(task.getSubmitCount())
-                            .submittedAt(task.getSubmittedAt())
-                            .wordCount(task.getWordCount())
-                            .author(author == null ? null : ReviewListItemResp.AuthorInfo.builder()
-                                    .id(author.getId())
-                                    .username(author.getUsername())
-                                    .build())
-                            .build();
-                })
-                .toList();
-
+        List<ReviewListItemResp> items = pageResult.getRecords().stream().map(task -> {
+            UserSummaryDto author = users.get(task.getAuthorId());
+            return ReviewListItemResp.builder()
+                    .id(task.getArticleId())
+                    .title(task.getTitle())
+                    .submitCount(task.getSubmitCount())
+                    .submittedAt(task.getSubmittedAt())
+                    .wordCount(task.getWordCount())
+                    .author(author == null ? null : ReviewListItemResp.AuthorInfo.builder()
+                            .id(author.getId()).username(author.getUsername()).build())
+                    .build();
+        }).toList();
         return PageResponse.<ReviewListItemResp>builder()
-                .list(list)
+                .list(items)
                 .total(pageResult.getTotal())
                 .page(pageResult.getCurrent())
                 .pageSize(pageResult.getSize())
@@ -94,207 +82,143 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
     }
 
-    private List<ReviewTask> sanitizePendingTasks(List<ReviewTask> tasks) {
-        if (tasks == null || tasks.isEmpty()) {
-            return Collections.emptyList();
+    @Override
+    public ReviewActionResp doReview(Long articleId, Long currentAdminId,
+                                     String idempotencyKey, ReviewActionReq req) {
+        if (req == null) throw BusinessException.badRequest("Review request is required");
+        String key = selectDecisionId(idempotencyKey, req.getDecisionId());
+        ReviewCommand command = decisionCoordinator.claim(
+                articleId, currentAdminId, key, req.getAction(), req.getReason(),
+                req.getSubmissionId(), req.getExpectedVersion());
+        if (ReviewDecisionCoordinatorImpl.FINAL.equals(command.getState())) {
+            return actionResponse(command);
+        }
+        if (ReviewDecisionCoordinatorImpl.CONFLICT.equals(command.getState())) {
+            throw decisionConflict(command);
         }
 
-        return tasks.stream()
-                .filter(this::isStillPendingTask)
-                .toList();
+        Result<ReviewDecisionResultDto> remote;
+        try {
+            remote = contentReviewClient.applyReviewResult(articleId, new ApplyReviewResultReq(
+                    command.getAdminId(), command.getAction(), command.getReason(),
+                    command.getDecisionId(), command.getSubmissionId(), command.getExpectedVersion()));
+        } catch (Exception unavailableOrUnknown) {
+            throw processingUnavailable(command.getDecisionId());
+        }
+        if (remote == null || remote.getCode() == null || remote.getData() == null
+                || (remote.getCode() != 200 && remote.getCode() != 409)) {
+            throw processingUnavailable(command.getDecisionId());
+        }
+        ReviewCommand finalized = decisionCoordinator.finalizeAuthoritativeResult(remote.getData());
+        if (ReviewDecisionCoordinatorImpl.CONFLICT.equals(finalized.getState())) {
+            throw decisionConflict(finalized);
+        }
+        return actionResponse(finalized);
     }
 
-    private boolean isStillPendingTask(ReviewTask task) {
-        Result<ArticleReviewSnapshotDto> result = contentInternalClient.reviewSnapshot(task.getArticleId());
-        if (result == null) {
-            log.warn("Skip review task validation because snapshot result is null: articleId={}", task.getArticleId());
-            return true;
+    @Override
+    public ReviewDecisionStatusResp getDecisionStatus(Long articleId, Long currentAdminId, String decisionId) {
+        ReviewCommand command = decisionCoordinator.find(decisionId);
+        if (command == null || !Objects.equals(command.getArticleId(), articleId)) {
+            throw BusinessException.notFound("Review decision not found; retry POST with the same decisionId");
         }
-
-        if (result.getCode() == null) {
-            log.warn("Skip review task validation because snapshot result code is null: articleId={}", task.getArticleId());
-            return true;
+        if (!Objects.equals(command.getAdminId(), currentAdminId)) {
+            throw BusinessException.forbidden("Only the assigned administrator may query this decision");
         }
-
-        if (result.getCode() != 200) {
-            if (result.getCode() == 404) {
-                removeStaleTask(task.getArticleId());
-                return false;
-            }
-            log.warn("Skip review task validation because snapshot query failed: articleId={}, code={}, message={}",
-                    task.getArticleId(), result.getCode(), result.getMessage());
-            return true;
-        }
-
-        ArticleReviewSnapshotDto snapshot = result.getData();
-        if (snapshot == null || snapshot.getStatus() != ArticleStatus.PENDING) {
-            removeStaleTask(task.getArticleId());
-            return false;
-        }
-        return true;
-    }
-
-    private void removeStaleTask(Long articleId) {
-        reviewTaskMapper.delete(new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getArticleId, articleId));
-        log.info("Remove stale review task from pending list: articleId={}", articleId);
-    }
-
-        @Override
-    @Transactional(rollbackFor = Exception.class)
-    public ReviewActionResp doReview(Long articleId, Long currentAdminId, ReviewActionReq req) {
-        ReviewAction action = parseAction(req.getAction());
-        validateActionRequest(action, req.getReason());
-
-        ArticleReviewSnapshotDto snapshot = ResultUtils.requireOk(contentInternalClient.reviewSnapshot(articleId));
-        if (snapshot == null) {
-            throw BusinessException.notFound("Article not found");
-        }
-        if (snapshot.getStatus() != ArticleStatus.PENDING) {
-            throw BusinessException.conflict(
-                    "Article is no longer pending review: " + snapshot.getStatus());
-        }
-        if (currentAdminId != null && currentAdminId.equals(snapshot.getAuthorId())) {
-            throw BusinessException.forbidden("Administrators cannot review their own article");
-        }
-
-        ArticleStatus toStatus = toDecisionStatus(action);
-        LocalDateTime reviewedAt = LocalDateTime.now();
-        ReviewDecisionPayload decision = ReviewDecisionPayload.builder()
-                .articleId(articleId)
-                .adminId(currentAdminId)
-                .action(action)
-                .reason(normalizeReason(req.getReason()))
-                .reviewedAt(reviewedAt)
-                .fromStatus(snapshot.getStatus())
-                .toStatus(toStatus)
-                .traceId(TraceContextHolder.get())
-                .build();
-
-        reviewLogMapper.insert(toReviewLog(decision));
-        reviewTaskMapper.delete(new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getArticleId, articleId));
-        eventOutboxService.saveEvent(
-                "review",
-                String.valueOf(articleId),
-                EventConstants.REVIEW_DECIDED,
-                ReviewDecidedEvent.fromPayload(newEventId(articleId), decision)
-        );
-
-        log.info("Review decided: articleId={}, adminId={}, action={}, toStatus={}, traceId={}",
-                articleId, currentAdminId, action, toStatus, decision.getTraceId());
-
-        return ReviewActionResp.builder()
-                .status(toStatus)
-                .reviewedAt(reviewedAt)
+        return ReviewDecisionStatusResp.builder()
+                .decisionId(command.getDecisionId())
+                .state(command.getState())
+                .status(command.getStatus())
+                .updatedAt(command.getUpdatedAt())
                 .build();
     }
 
-        @Override
+    @Override
     public List<ReviewLogResp> getReviewLogs(Long articleId, Long currentUserId) {
-        ArticleReviewSnapshotDto snapshot = ResultUtils.requireOk(contentInternalClient.reviewSnapshot(articleId));
-        if (snapshot == null) {
-            throw BusinessException.notFound("Article not found");
+        ArticleReviewSnapshotDto snapshot;
+        try {
+            Result<ArticleReviewSnapshotDto> result = contentReviewClient.reviewSnapshot(articleId);
+            if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
+                throw BusinessException.notFound("Article not found");
+            }
+            snapshot = result.getData();
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BusinessException(503, "Content authority is temporarily unavailable");
         }
-
-        boolean isAdmin = SecurityUtils.isAdmin();
-        boolean isAuthor = currentUserId != null && currentUserId.equals(snapshot.getAuthorId());
-        if (!isAdmin && !isAuthor) {
+        boolean isAuthor = Objects.equals(currentUserId, snapshot.getAuthorId());
+        if (!SecurityUtils.isAdmin() && !isAuthor) {
             throw BusinessException.forbidden("Access denied");
         }
-
         List<ReviewLog> logs = reviewLogMapper.selectList(new LambdaQueryWrapper<ReviewLog>()
                 .eq(ReviewLog::getArticleId, articleId)
-                .orderByAsc(ReviewLog::getCreatedAt));
-        if (logs.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        Map<Long, UserSummaryDto> userMap = batchFetchUsers(logs.stream()
-                .map(ReviewLog::getOperatorId)
-                .collect(Collectors.toSet()));
-
-        return logs.stream()
-                .map(log -> {
-                    UserSummaryDto operator = userMap.get(log.getOperatorId());
-                    return ReviewLogResp.builder()
-                            .action(log.getAction())
-                            .fromStatus(log.getFromStatus())
-                            .toStatus(log.getToStatus())
-                            .reason(log.getReason())
-                            .operator(operator == null ? null : ReviewLogResp.OperatorInfo.builder()
-                                    .id(operator.getId())
-                                    .username(operator.getUsername())
-                                    .build())
-                            .createdAt(log.getCreatedAt())
-                            .build();
-                })
-                .toList();
+                .orderByAsc(ReviewLog::getCreatedAt, ReviewLog::getId));
+        if (logs.isEmpty()) return Collections.emptyList();
+        Map<Long, UserSummaryDto> users = batchFetchUsers(logs.stream()
+                .map(ReviewLog::getOperatorId).filter(Objects::nonNull).collect(Collectors.toSet()));
+        return logs.stream().map(log -> {
+            UserSummaryDto operator = users.get(log.getOperatorId());
+            return ReviewLogResp.builder()
+                    .action(log.getAction())
+                    .fromStatus(log.getFromStatus())
+                    .toStatus(log.getToStatus())
+                    .reason(log.getReason())
+                    .operator(operator == null ? null : ReviewLogResp.OperatorInfo.builder()
+                            .id(operator.getId()).username(operator.getUsername()).build())
+                    .createdAt(log.getCreatedAt())
+                    .build();
+        }).toList();
     }
 
-    private void validateActionRequest(ReviewAction action, String reason) {
-        if (action == ReviewAction.CANCEL) {
-            throw BusinessException.badRequest("CANCEL is owned by the article cancel-review flow");
+    private String selectDecisionId(String headerKey, String bodyKey) {
+        String header = normalizeKey(headerKey);
+        String body = normalizeKey(bodyKey);
+        if (header != null && body != null && !header.equals(body)) {
+            throw BusinessException.conflict("Idempotency-Key and request decisionId must match");
         }
-        if ((action == ReviewAction.RETURN || action == ReviewAction.REJECT)
-                && (reason == null || reason.isBlank())) {
-            throw BusinessException.badRequest("Reason is required for RETURN and REJECT");
-        }
+        return header != null ? header : body;
     }
 
-    private ReviewAction parseAction(String actionValue) {
-        if (actionValue == null || actionValue.isBlank()) {
-            throw BusinessException.badRequest("Review action is required");
+    private String normalizeKey(String key) {
+        if (key == null || key.isBlank()) return null;
+        String normalized = key.trim();
+        if (normalized.length() > 64) {
+            throw BusinessException.badRequest("decisionId must not exceed 64 characters");
         }
-        try {
-            return ReviewAction.valueOf(actionValue.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw BusinessException.badRequest("Unsupported review action: " + actionValue);
-        }
+        return normalized;
     }
 
-        private ArticleStatus toDecisionStatus(ReviewAction action) {
-        return switch (action) {
-            case APPROVE -> ArticleStatus.APPROVED;
-            case RETURN -> ArticleStatus.RETURNED;
-            case REJECT -> ArticleStatus.REJECTED;
-            default -> throw BusinessException.badRequest("Unsupported review action");
-        };
+    private ReviewActionResp actionResponse(ReviewCommand command) {
+        return ReviewActionResp.builder()
+                .decisionId(command.getDecisionId())
+                .state(command.getState())
+                .status(command.getStatus())
+                .reviewedAt(command.getUpdatedAt())
+                .build();
     }
 
-    private String normalizeReason(String reason) {
-        if (reason == null) {
-            return null;
-        }
-        String trimmed = reason.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private BusinessException processingUnavailable(String decisionId) {
+        return new BusinessException(503,
+                "Review result is unknown; query status or retry with the same decisionId",
+                Map.of("decisionId", decisionId, "state", ReviewDecisionCoordinatorImpl.PROCESSING));
     }
 
-    private ReviewLog toReviewLog(ReviewDecisionPayload decision) {
-        ReviewLog reviewLog = new ReviewLog();
-        reviewLog.setArticleId(decision.getArticleId());
-        reviewLog.setOperatorId(decision.getAdminId());
-        reviewLog.setAction(decision.getAction());
-        reviewLog.setFromStatus(decision.getFromStatus());
-        reviewLog.setToStatus(decision.getToStatus());
-        reviewLog.setReason(decision.getReason());
-        return reviewLog;
+    private BusinessException decisionConflict(ReviewCommand command) {
+        return new BusinessException(409,
+                "Content authority rejected the review decision",
+                Map.of("decisionId", command.getDecisionId(), "state", ReviewDecisionCoordinatorImpl.CONFLICT));
     }
 
-        private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> ids) {
-        if (ids.isEmpty()) {
+    private Map<Long, UserSummaryDto> batchFetchUsers(Set<Long> ids) {
+        if (ids.isEmpty()) return Collections.emptyMap();
+        Result<List<UserSummaryDto>> result = authUserQueryClient.batchUsers(
+                new BatchUserQueryReq(ids.stream().sorted().toList()));
+        if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
             return Collections.emptyMap();
         }
-        return ResultUtils.requireOk(authInternalClient.batchUsers(new BatchUserQueryReq(ids.stream().toList())))
-                .stream()
-                .collect(Collectors.toMap(UserSummaryDto::getId, user -> user));
-    }
-
-        private String newEventId(Long articleId) {
-        return "review-decided:" + articleId + ":" + UUID.randomUUID();
+        return result.getData().stream().filter(user -> user.getId() != null)
+                .collect(Collectors.toMap(UserSummaryDto::getId, user -> user, (left, right) -> left));
     }
 }
-
-
-
 

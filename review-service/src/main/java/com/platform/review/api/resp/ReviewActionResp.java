@@ -6,15 +6,15 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-
 @Data
 @Builder
 public class ReviewActionResp {
+    private String decisionId;
+    private String state;
+    private ArticleStatus status;
+    private LocalDateTime reviewedAt;
 
-        private ArticleStatus status;
-
-        private LocalDateTime reviewedAt;
-    /** Wire alias only; does not claim that asynchronous article application is complete. */
     public LocalDateTime getUpdatedAt() {
         return reviewedAt;
-    }}
+    }
+}

@@ -34,4 +34,11 @@ public class ArticleStatusChangedEvent implements BaseDomainEvent {
     private DurationCategory durationCategory;
     private LocalDateTime publishedAt;
     private LocalDateTime updatedAt;
+    private String submissionId;
+    private Long articleVersion;
+    private Boolean deleted;
+    private String decisionId;
+    private Long adminId;
+    private com.platform.kernel.enums.ReviewAction action;
+    private String reason;
 }

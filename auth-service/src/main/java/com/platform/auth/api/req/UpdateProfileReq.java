@@ -8,10 +8,10 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UpdateProfileReq {
 
-    @Size(min = 1, max = 30, message = "Nickname length must be 1-30 characters")
+    @Size(max = 60, message = "Nickname length must not exceed 60 characters")
     private String nickname;
 
-    @Size(max = 512, message = "Avatar URL is too long")
+    @Size(max = 255, message = "Avatar URL is too long")
     private String avatarUrl;
 
     @Size(max = 512, message = "Cover URL is too long")
