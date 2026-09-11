@@ -13,14 +13,20 @@ public class TurnstileService {
     private static final String VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
     private final RestTemplate restTemplate;
     private final String secretKey;
+    private final boolean enabled;
 
     public TurnstileService(RestTemplate restTemplate,
-                            @Value("${platform.turnstile.secret-key:}") String secretKey) {
+                            @Value("${platform.turnstile.secret-key:}") String secretKey,
+                            @Value("${platform.turnstile.enabled:true}") boolean enabled) {
         this.restTemplate = restTemplate;
         this.secretKey = secretKey == null ? "" : secretKey;
+        this.enabled = enabled;
     }
 
     public void verify(String token) {
+        if (!enabled) {
+            return;
+        }
         if (secretKey.isBlank() || token == null || token.isBlank()) {
             throw BusinessException.badRequest("Captcha verification failed, please try again");
         }

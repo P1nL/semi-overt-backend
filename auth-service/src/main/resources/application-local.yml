@@ -10,3 +10,7 @@ logging:
   level:
     com.alibaba.nacos: WARN
     org.apache.catalina: WARN
+
+platform:
+  turnstile:
+    enabled: false

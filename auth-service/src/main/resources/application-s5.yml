@@ -1,0 +1,4 @@
+# Isolated local S5 profile. Never use this profile in production.
+platform:
+  turnstile:
+    enabled: false

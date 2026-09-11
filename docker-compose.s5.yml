@@ -1,0 +1,89 @@
+# Isolated local integration environment. Never use this file for production.
+# Start via scripts/s5-env.ps1; no shared databases or bootstrap seed SQL.
+services:
+  mysql:
+    image: mysql:8.0.46
+    ports: ["127.0.0.1:13306:3306"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${S5_MYSQL_ROOT_PASSWORD:?Run scripts/s5-env.ps1 first}
+      MYSQL_DATABASE: content_platform
+      MYSQL_USER: semi_s5
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Run scripts/s5-env.ps1 first}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes: ["mysql-data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+  redis:
+    image: redis:7.2.7
+    ports: ["127.0.0.1:16379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  adminer:
+    image: adminer:5.4.2
+    ports: ["127.0.0.1:18026:8080"]
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+  redisinsight:
+    image: redis/redisinsight:2.70.1
+    ports: ["127.0.0.1:18027:5540"]
+    volumes: ["redisinsight-data:/data"]
+    depends_on:
+      redis:
+        condition: service_healthy
+  rabbitmq:
+    image: rabbitmq:3.13.7-management
+    ports: ["127.0.0.1:15673:5672", "127.0.0.1:15683:15672"]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?Run scripts/s5-env.ps1 first}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run scripts/s5-env.ps1 first}
+    volumes: ["rabbitmq-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    ports: ["127.0.0.1:11025:1025", "127.0.0.1:18025:8025"]
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 500
+    volumes: ["mailpit-data:/data"]
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    ports: ["127.0.0.1:18848:8848", "127.0.0.1:19848:9848"]
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 384m
+      JVM_XMN: 128m
+    volumes: ["nacos-data:/home/nacos/data", "nacos-logs:/home/nacos/logs"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+volumes:
+  mysql-data:
+  redis-data:
+  redisinsight-data:
+  rabbitmq-data:
+  nacos-data:
+  mailpit-data:
+  nacos-logs:

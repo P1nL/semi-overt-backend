@@ -75,6 +75,7 @@ platform:
   cors:
     allowed-origins: ${AUTH_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://semi-overt.com,https://www.semi-overt.com}
   turnstile:
+    enabled: ${TURNSTILE_ENABLED:true}
     secret-key: ${TURNSTILE_SECRET_KEY:}
     connect-timeout-ms: ${TURNSTILE_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${TURNSTILE_READ_TIMEOUT_MS:5000}
