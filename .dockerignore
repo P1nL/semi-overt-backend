@@ -1,0 +1,15 @@
+.git
+.github
+.codex-runtime
+.runtime
+.cache
+.vscode
+.idea
+**/target
+**/*.log
+**/*.jar
+**/*.war
+output
+outputs
+artifacts
+node_modules

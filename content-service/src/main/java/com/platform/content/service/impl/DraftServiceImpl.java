@@ -36,6 +36,8 @@ public class DraftServiceImpl implements DraftService {
     private static final int MAX_REASONABLE_CLIENT_WORD_COUNT = 100_000;
     private static final Set<ArticleStatus> EDITABLE_STATUSES =
             Set.of(ArticleStatus.DRAFT, ArticleStatus.RETURNED);
+    private static final Set<ArticleStatus> DRAFT_BOX_STATUSES =
+            Set.of(ArticleStatus.DRAFT, ArticleStatus.PENDING, ArticleStatus.RETURNED);
 
     private final ArticleMapper articleMapper;
     private final ReviewReasonClient reviewInternalClient;
@@ -113,9 +115,12 @@ public class DraftServiceImpl implements DraftService {
         List<Article> articles = articleMapper.selectList(
                 new LambdaQueryWrapper<Article>()
                         .eq(Article::getAuthorId, userId)
-                        .in(Article::getStatus, ArticleStatus.DRAFT, ArticleStatus.RETURNED)
+                        .in(Article::getStatus, DRAFT_BOX_STATUSES)
                         .orderByDesc(Article::getUpdatedAt)
         );
+        articles = articles.stream()
+                .filter(article -> DRAFT_BOX_STATUSES.contains(article.getStatus()))
+                .toList();
         if (articles.isEmpty()) {
             return new ArrayList<>();
         }

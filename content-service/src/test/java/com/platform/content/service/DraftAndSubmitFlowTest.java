@@ -4,6 +4,7 @@ import com.platform.contract.auth.client.AuthUserQueryClient;
 import com.platform.contract.review.client.ReviewReasonClient;
 import com.platform.contract.review.client.ReviewTaskClient;
 import com.platform.content.api.req.SaveDraftReq;
+import com.platform.content.api.resp.DraftItemResp;
 import com.platform.content.api.resp.SaveDraftResp;
 import com.platform.content.api.resp.SubmitResp;
 import com.platform.content.entity.Article;
@@ -11,6 +12,7 @@ import com.platform.content.mapper.ArticleMapper;
 import com.platform.content.service.impl.ArticleServiceImpl;
 import com.platform.content.service.impl.DraftServiceImpl;
 import com.platform.events.support.EventOutboxService;
+import com.platform.kernel.util.Result;
 import com.platform.kernel.enums.ArticleStatus;
 import com.platform.kernel.enums.DurationCategory;
 import com.platform.kernel.event.ArticleStatusChangedEvent;
@@ -24,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -75,6 +78,25 @@ class DraftAndSubmitFlowTest {
         verify(articleMapper, never()).updateDraftFields(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         assertThat(before.getVersion()).isEqualTo(7L);
         assertThat(before.getStatus()).isEqualTo(ArticleStatus.DRAFT);
+    }
+
+    @Test
+    void draftBoxContainsDraftPendingAndReturnedButNotRejectedOrApproved() {
+        when(articleMapper.selectList(any())).thenReturn(List.of(
+                article(21L, 1L, ArticleStatus.DRAFT, 0L),
+                article(22L, 1L, ArticleStatus.PENDING, 1L),
+                article(23L, 1L, ArticleStatus.RETURNED, 2L),
+                article(24L, 1L, ArticleStatus.REJECTED, 3L),
+                article(25L, 1L, ArticleStatus.APPROVED, 4L)
+        ));
+        when(reviewInternalClient.batchLatestReasons(any())).thenReturn(Result.ok(List.of()));
+
+        List<DraftItemResp> drafts = new DraftServiceImpl(articleMapper, reviewInternalClient)
+                .getDraftList(1L);
+
+        assertThat(drafts)
+                .extracting(DraftItemResp::getStatus)
+                .containsExactly(ArticleStatus.DRAFT, ArticleStatus.PENDING, ArticleStatus.RETURNED);
     }
 
     @Test

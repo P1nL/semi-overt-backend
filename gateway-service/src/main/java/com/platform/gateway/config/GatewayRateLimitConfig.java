@@ -25,7 +25,7 @@ public class GatewayRateLimitConfig {
             @Value("${platform.gateway.rate-limit.replenish-rate:30}") int replenishRate,
             @Value("${platform.gateway.rate-limit.burst-capacity:60}") int burstCapacity,
             @Value("${platform.gateway.rate-limit.requested-tokens:1}") int requestedTokens) {
-        return new RedisRateLimiter(replenishRate, burstCapacity, requestedTokens);
+        return new FailClosedRedisRateLimiter(replenishRate, burstCapacity, requestedTokens);
     }
 
     /**

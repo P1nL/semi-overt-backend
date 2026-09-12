@@ -81,7 +81,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
             SELECT COUNT(*) FROM articles
              WHERE author_id = #{authorId}
                AND deleted = 0
-               AND status IN ('DRAFT','PENDING','RETURNED','REJECTED')
+               AND status IN ('DRAFT','PENDING','RETURNED')
             """)
     long countDraftBoxByAuthor(@Param("authorId") Long authorId);
 

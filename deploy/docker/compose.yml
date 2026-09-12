@@ -1,0 +1,290 @@
+name: semi-overt-demo
+
+x-backend-image: &backend-image
+  image: ${BACKEND_IMAGE:-ghcr.io/p1nl/semi-overt-backend:demo}
+  restart: unless-stopped
+
+x-backend-environment: &backend-environment
+  SPRING_PROFILES_ACTIVE: local
+  NACOS_SERVER_ADDR: nacos:8848
+  NACOS_NAMESPACE: ""
+  DB_URL: jdbc:mysql://mysql:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+  DB_USERNAME: semi_overt
+  DB_PASSWORD: ${DB_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-semi_overt}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+  JWT_SIGN_KEY: ${JWT_SIGN_KEY:?Run scripts/docker-demo.ps1 init first}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Run scripts/docker-demo.ps1 init first}
+  PLATFORM_INTERNAL_TOKEN: ${INTERNAL_TOKEN:?Run scripts/docker-demo.ps1 init first}
+  RESET_CODE_PEPPER: ${RESET_CODE_PEPPER:?Run scripts/docker-demo.ps1 init first}
+  CORS_ALLOWED_ORIGINS: http://localhost:${APP_PORT:-18000},http://127.0.0.1:${APP_PORT:-18000}
+  AUTH_ALLOWED_ORIGINS: http://localhost:${APP_PORT:-18000},http://127.0.0.1:${APP_PORT:-18000}
+  FRONTEND_BASE_URL: http://localhost:${APP_PORT:-18000}
+  AUTH_REFRESH_COOKIE_SECURE: "false"
+  REGISTRATION_CODE_REQUIRED: "false"
+  TURNSTILE_ENABLED: "false"
+  MAIL_HOST: mailpit
+  MAIL_PORT: "1025"
+  MAIL_SMTP_AUTH: "false"
+  MAIL_SMTP_STARTTLS_ENABLE: "false"
+
+x-service-depends: &service-depends
+  db-migration:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+  nacos:
+    condition: service_healthy
+
+services:
+  mysql:
+    image: mysql:8.0.46
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+      MYSQL_DATABASE: content_platform
+      MYSQL_USER: semi_overt
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+  redis:
+    image: redis:7.2.7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-semi_overt}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 384m
+      JVM_XMN: 128m
+    volumes:
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8848/nacos/actuator/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 40s
+
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-18025}:8025"
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "500"
+    volumes:
+      - mailpit-data:/data
+
+  db-migration:
+    <<: *backend-image
+    restart: "no"
+    environment:
+      SERVICE_NAME: db-migration
+      DB_URL: jdbc:mysql://mysql:3306/content_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: semi_overt
+      DB_PASSWORD: ${DB_PASSWORD:?Run scripts/docker-demo.ps1 init first}
+      MIGRATION_MODE: AUTO
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  auth-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: auth-service
+      SERVER_PORT: "8081"
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  content-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: content-service
+      SERVER_PORT: "8082"
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8082/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  review-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: review-service
+      SERVER_PORT: "8083"
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  search-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: search-service
+      SERVER_PORT: "8084"
+      SEARCH_INDEX_ENABLED: "false"
+      SEARCH_FULLTEXT_ENABLED: "false"
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  file-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: file-service
+      SERVER_PORT: "8085"
+      STORAGE_TYPE: local
+      STORAGE_UPLOAD_PATH: /data/uploads
+      STORAGE_ACCESS_PREFIX: /static/uploads
+    volumes:
+      - uploads:/data/uploads
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8085/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  notification-service:
+    <<: *backend-image
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: notification-service
+      SERVER_PORT: "8086"
+    depends_on: *service-depends
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8086/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 35s
+
+  gateway:
+    <<: *backend-image
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-18080}:8080"
+    environment:
+      <<: *backend-environment
+      SERVICE_NAME: gateway-service
+      SERVER_PORT: "8080"
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      content-service:
+        condition: service_healthy
+      review-service:
+        condition: service_healthy
+      search-service:
+        condition: service_healthy
+      file-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/p1nl/semi-overt-frontend:demo}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-18000}:8080"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  adminer:
+    image: adminer:5.4.2
+    profiles: ["tools"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-18026}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  nacos-data:
+  nacos-logs:
+  mailpit-data:
+  uploads:
