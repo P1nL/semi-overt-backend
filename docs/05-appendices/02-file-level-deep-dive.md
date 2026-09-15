@@ -1,5 +1,7 @@
 # 关键文件深度导读
 
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
+
 适合谁看：需要快速定位关键代码文件的人。  
 读完能解决什么问题：知道各条主线的核心文件在哪，而不是在整个仓库里全量扫一遍。
 
@@ -7,7 +9,7 @@
 
 - [gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java)
 - [gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java](../../gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java)
-- [gateway-service/src/main/java/com/platform/gateway/controller/GatewayAuthController.java](../../gateway-service/src/main/java/com/platform/gateway/controller/GatewayAuthController.java)
+- [SessionAuthorityClient.java](../../gateway-service/src/main/java/com/platform/gateway/session/SessionAuthorityClient.java)：Auth 权威校验；旧 GatewayAuthController 仅剩说明，不是退出处理器
 - [platform-kernel/src/main/java/com/platform/kernel/constant/HeaderNames.java](../../platform-kernel/src/main/java/com/platform/kernel/constant/HeaderNames.java)
 
 ## 认证与用户
@@ -16,6 +18,9 @@
 - [auth-service/src/main/java/com/platform/auth/controller/UserController.java](../../auth-service/src/main/java/com/platform/auth/controller/UserController.java)
 - [auth-service/src/main/java/com/platform/auth/controller/internal/InternalUserController.java](../../auth-service/src/main/java/com/platform/auth/controller/internal/InternalUserController.java)
 - [auth-service/src/main/java/com/platform/auth/config/SecurityConfig.java](../../auth-service/src/main/java/com/platform/auth/config/SecurityConfig.java)
+
+- [DeviceSessionService.java](../../auth-service/src/main/java/com/platform/auth/session/DeviceSessionService.java)
+- [JdbcDeviceSessionRepository.java](../../auth-service/src/main/java/com/platform/auth/repository/JdbcDeviceSessionRepository.java)
 
 ## 内容与文章生命周期
 
@@ -38,7 +43,14 @@
 - [platform-kernel/src/main/java/com/platform/kernel/constant/EventConstants.java](../../platform-kernel/src/main/java/com/platform/kernel/constant/EventConstants.java)
 - [platform-events/src/main/java/com/platform/events/config/RabbitEventConfig.java](../../platform-events/src/main/java/com/platform/events/config/RabbitEventConfig.java)
 
+- [NotificationController.java](../../notification-service/src/main/java/com/platform/notification/controller/NotificationController.java)
+
 ## 运行与交付
+
+- [s5-env.ps1](../../scripts/s5-env.ps1)
+- [docker-demo.ps1](../../scripts/docker-demo.ps1)
+- [Docker 交付手册](../../deploy/docker/README.md)
+- [db-migration](../../db-migration)
 
 - [scripts/dev-up.ps1](../../scripts/dev-up.ps1)
 - [scripts/smoke-test.ps1](../../scripts/smoke-test.ps1)

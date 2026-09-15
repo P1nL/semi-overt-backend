@@ -1,145 +1,44 @@
 # API 与权限矩阵
 
-适合谁看：联调、排鉴权问题、梳理网关行为或准备改接口的人。  
-读完能解决什么问题：知道外部 API 走向、哪些接口能匿名访问、哪些必须登录或管理员权限，以及无效 token 的处理规则。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
 
-## 外部入口总览
+## 路由与认证
 
-当前公网路由由 [GatewayRouteConfig.java](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java) 注册：
+公网请求进入 GatewayRouteConfig；ApiCompatibilityWebFilter 把旧 /api 前缀及 review/upload/search 等别名归一化，再进入鉴权和路由。下表使用 /api/v1 规范路径；不是移除旧别名的声明。
 
-- `/api/v1/auth/**` -> `auth-service`
-- `/api/v1/users/**` -> `auth-service`
-- `/api/v1/home` -> `content-service`
-- `/api/v1/categories/**` -> `content-service`
-- `/api/v1/articles/**` -> `content-service`
-- `/api/v1/reviews/**` -> `review-service`
-- `/api/v1/search/**` -> `search-service`
-- `/api/v1/uploads/**` -> `file-service`
-- `/static/uploads/**` -> `file-service`
+GatewayAuthFilter 清理外来内部身份头，通过 SessionAuthorityClient 请求 Auth 校验设备会话，随后注入可信身份。不是网关独立验 JWT/Redis 黑名单模型。登录、刷新、退出等认证入口由 AuthController 承担；GatewayAuthController 不是当前退出入口。
 
-额外说明：
+## 外部业务接口
 
-- `/api/v1/auth/logout` 由 `gateway-service` 自身提供
-- `/internal/**` 在网关层直接返回 `404`，不会对外暴露
+| 服务 | 方法与路径 | 访问约束 |
+| --- | --- | --- |
+| Auth | POST /auth/register-code、/auth/register、/auth/login、/auth/forgot-password、/auth/reset-password | 无需已有登录；仍有校验与预算 |
+| Auth | POST /auth/refresh、/auth/logout | refresh Cookie 与来源校验，不要求旧 access token 仍有效 |
+| Auth | GET /users/me；PUT /users/me/profile（兼容 /users/me） | 登录 |
+| Auth | GET /users/{identifier}/profile | 公开；私有字段不得泄露 |
+| Content | GET /home、/categories/**、/articles/{数字ID} | 公开路由；资源可见性由服务校验 |
+| Content | POST /articles；PUT /articles/{id}/draft；GET /articles/drafts | 登录，草稿有作者/版本约束 |
+| Content | POST /articles/{id}/submit、/articles/{id}/cancel-review；DELETE /articles/{id} | 作者及状态校验 |
+| Content | DELETE /admin/articles/{id} | ADMIN |
+| Content | POST /articles/ai-polish | 登录；独立模型配置、限流与正文限制 |
+| Review | GET /reviews/pending | ADMIN |
+| Review | POST /reviews/{id}/decision（兼容 /action）；GET /reviews/{id}/decision-status | ADMIN，分配与决定基线约束 |
+| Review | GET /reviews/{数字ID}/logs | 网关允许匿名；下游控制记录可见性，不等于所有日志公开 |
+| Search | GET /search/articles、/search/users | 公开，有请求预算 |
+| File | POST /uploads/images | 登录，上传预算与图片校验 |
+| File | GET /static/uploads/** | 静态路径无 /api/v1 前缀 |
+| Notification | GET /notifications | 登录，仅当前用户 |
 
-## 权限分层
+除静态路径外，表中业务路径统一加 /api/v1 前缀。请求体字段以各 Controller 的 req DTO 为准，审核须特别核对 decisionId、submissionId、expectedVersion。
 
-### 公开接口
+## 错误与边界
 
-匿名可访问，但如果请求带了非法 token，网关仍返回 `401`。
+- 401：受保护接口缺少有效会话。不要把所有匿名公开请求都当作 401。
+- 403：身份存在但权限不足；业务服务还会校验作者、审核分配等。
+- 409：版本或决定冲突；不能盲目覆盖。
+- 429：预算耗尽，关注 Retry-After。
+- 503：认证/预算依赖不可用，或业务暂时无法确认；不是伪装成功或自动退出的依据。
+- /internal/** 不对公网开放；内部校验同时需要服务端令牌与可信来源。
+- 非法 Bearer 的实际返回还取决于 Auth 校验失败路径；不要沿用旧手册“所有公开接口携带无效 token 必然 401”的绝对断言。
 
-当前公开接口包括：
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/forgot-password`
-- `POST /api/v1/auth/reset-password`
-- `GET /api/v1/home`
-- `GET /api/v1/categories/**`
-- `GET /api/v1/articles/{id}`
-- `GET /api/v1/users/{username}/profile`
-- `GET /api/v1/search/**`
-- `GET /api/v1/reviews/{articleId}/logs`
-- `GET /static/uploads/**`
-
-### 登录接口
-
-需要合法用户身份：
-
-- `GET /api/v1/users/me`
-- `PUT /api/v1/users/me/profile`
-- `POST /api/v1/articles`
-- `PUT /api/v1/articles/{articleId}/draft`
-- `GET /api/v1/articles/drafts`
-- `POST /api/v1/articles/{articleId}/submit`
-- `POST /api/v1/articles/{articleId}/cancel-review`
-- `DELETE /api/v1/articles/{articleId}`
-- `POST /api/v1/uploads/images`
-- `POST /api/v1/auth/logout`
-
-### 管理员接口
-
-当前管理员路径是 `review-service` 的审核能力：
-
-- `GET /api/v1/reviews/pending`
-- `POST /api/v1/reviews/{articleId}/action`
-
-注意：
-
-- `GET /api/v1/reviews/{articleId}/logs` 只要求已登录，不要求管理员
-- 网关层已对 `/api/v1/reviews/**` 做管理员限制，但日志查询被显式放行
-
-## Controller 级外部接口清单
-
-### `auth-service`
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/forgot-password`
-- `POST /api/v1/auth/reset-password`
-- `GET /api/v1/users/me`
-- `PUT /api/v1/users/me/profile`
-- `GET /api/v1/users/{username}/profile`
-
-### `content-service`
-
-- `GET /api/v1/home`
-- `GET /api/v1/categories/{category}/articles`
-- `POST /api/v1/articles`
-- `PUT /api/v1/articles/{articleId}/draft`
-- `GET /api/v1/articles/drafts`
-- `GET /api/v1/articles/{articleId}`
-- `POST /api/v1/articles/{articleId}/submit`
-- `POST /api/v1/articles/{articleId}/cancel-review`
-- `DELETE /api/v1/articles/{articleId}`
-
-### `review-service`
-
-- `GET /api/v1/reviews/pending`
-- `POST /api/v1/reviews/{articleId}/action`
-- `GET /api/v1/reviews/{articleId}/logs`
-
-### `search-service`
-
-- `GET /api/v1/search/articles`
-
-### `file-service`
-
-- `POST /api/v1/uploads/images`
-- `GET /static/uploads/**`
-
-### `gateway-service`
-
-- `POST /api/v1/auth/logout`
-
-## 网关鉴权语义
-
-[GatewayAuthFilter.java](../../gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java) 会：
-
-- 生成或透传 `X-Trace-Id`
-- 清理客户端自带的内部身份头
-- 解析 `Authorization: Bearer <token>`
-- 检查 Redis 黑名单 `jwt:blacklist:<token>`
-- 给下游注入 `X-User-Id`、`X-Username`、`X-User-Role`
-- 在 token 接近过期时回写 `New-Token`
-
-## `401` 与 `403`
-
-网关侧语义：
-
-- 缺 token 访问受保护接口：`401`
-- token 非法或黑名单命中：`401`
-- 已登录但角色不足：`403`
-
-下游服务也有自己的 Spring Security 配置，但外部联调时应优先看网关返回。
-
-## 内部头协议
-
-定义在 [HeaderNames.java](../../platform-kernel/src/main/java/com/platform/kernel/constant/HeaderNames.java)：
-
-- `X-User-Id`
-- `X-Username`
-- `X-User-Role`
-- `X-Trace-Id`
-
-客户端不应自行伪造这些头，因为网关会先清掉同名头再重新注入。
+源码：[路由](../../gateway-service/src/main/java/com/platform/gateway/config/GatewayRouteConfig.java)、[兼容映射](../../gateway-service/src/main/java/com/platform/gateway/filter/ApiCompatibilityWebFilter.java)、[鉴权](../../gateway-service/src/main/java/com/platform/gateway/filter/GatewayAuthFilter.java)。

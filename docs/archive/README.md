@@ -1,20 +1,13 @@
-# archive 兼容入口
+# semi-overt 归档索引
 
-这个目录不再是当前知识库主入口，只保留旧路径兼容和迁移说明。
+> semi-overt · 文档整理 2026-09-15 · 归档资料：仅供历史追溯；原技术名称、代码与路径不作为现行用法。 [文档中心](../README.md)
 
-## 新入口
+归档材料只用于设计追溯、旧链接兼容，不作为当前运行指南。旧路径、技术标识、计划进度和代码片段描述的是原记录时期；不能据此判断当前上线或验收状态。
 
-请优先从下面这些目录开始：
+| 目录 | 状态 / 替代入口 |
+| --- | --- |
+| [backend-understanding](backend-understanding/README.md) | 旧逐文件导读；当前看参考手册和附录 |
+| [distributed-refactor](distributed-refactor/README.md) | 旧拆分设计；当前看架构与阶段索引 |
+| [fullstack-before-2026-09-15](fullstack-before-2026-09-15/README.md) | 本次归档的旧全栈教程；旧会话模型和工作区路径已过期 |
 
-- [起步](../01-start-here/README.md)
-- [架构](../02-architecture/README.md)
-- [开发与运维](../03-development-and-operations/README.md)
-- [参考手册](../04-reference/README.md)
-- [附录](../05-appendices/README.md)
-
-## 旧路径现在代表什么
-
-- [backend-understanding](./backend-understanding/README.md)：旧“逐文件导读”路径，现已迁移到附录和参考手册
-- [distributed-refactor](./distributed-refactor/README.md)：旧历史改造资料路径，现已迁移到附录中的历史演进背景
-
-如果你是从旧链接进入本目录，建议直接跳转到 [附录](../05-appendices/README.md)。
+S0–S5 材料留在原路径，统一由[阶段索引](../sync/README.md)标注日期与范围，避免断开既有引用。现行资料从[文档中心](../README.md)或[全栈指南](../06-fullstack-guide/README.md)进入。

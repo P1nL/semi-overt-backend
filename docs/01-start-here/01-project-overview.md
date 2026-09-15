@@ -1,11 +1,13 @@
 # 项目概览
 
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
+
 适合谁看：所有首次接手仓库的人。  
 读完能解决什么问题：建立系统全局心智模型，知道当前真实实现、主要能力、模块构成和运行基线。
 
 ## 一句话说明
 
-`now-demo` 是一个围绕内容创作、审核、通知和搜索链路构建的后端示例仓库。
+`semi-overt` 是一个围绕内容创作、审核、通知和搜索链路构建的后端示例仓库。
 
 它不是单纯展示某个 CRUD 服务，而是用一条完整业务链路把这些工程问题串起来：
 
@@ -37,6 +39,7 @@
 - [auth-contract](../../auth-contract)
 - [content-contract](../../content-contract)
 - [review-contract](../../review-contract)
+- [db-migration](../../db-migration)：Flyway 数据库迁移
 - [architecture-tests](../../architecture-tests)
 
 需要特别记住：
@@ -47,7 +50,7 @@
 
 ## 系统为什么拆成这样
 
-- `gateway-service`：统一公网入口，做 JWT 校验、TraceId 透传、内部头注入、限流、路由
+- `gateway-service`：统一公网入口，通过 Auth 校验设备会话，处理 TraceId、可信身份头、预算/限流和路由
 - `auth-service`：用户与认证真源
 - `content-service`：文章主状态真源
 - `review-service`：审核任务和审核动作真源
@@ -72,17 +75,10 @@
 
 ## 当前运行基线
 
-本地开发：
-
-- 中间件：`docker compose up -d`
-- 服务启动：[scripts/dev-up.ps1](../../scripts/dev-up.ps1)
-- 冒烟验证：[scripts/smoke-test.ps1](../../scripts/smoke-test.ps1)
-
-Linux 服务器：
-
-- 环境变量样例：[scripts/env/server.env.example](../../scripts/env/server.env.example)
-- 单服务启动：[scripts/run-service.sh](../../scripts/run-service.sh)
-- 可选外部入口：[deploy/nginx/README.md](../../deploy/nginx/README.md)
+- S5 本机联调：scripts/s5-env.ps1，网关 18080。
+- 全 Docker 演示/离线交付：scripts/docker-demo.ps1，应用 18000。
+- 传统 8080 开发入口与 Linux/SAE 示例继续保留，但不代表生产部署状态。
+- 详细步骤见[首次运行](04-ten-minute-run.md)和[发布说明](../03-development-and-operations/03-release-and-deployment.md)。
 
 ## 读完后应该记住什么
 

@@ -1,5 +1,7 @@
 # S2-A device session persistence — 2026-09-09
 
+> semi-overt · 文档整理 2026-09-15 · 阶段资料：保留原日期、契约与验收范围；不代表当前版本、整站或生产验收。 [文档中心](../README.md)
+
 Implemented the source monolith DeviceSession/RefreshTokenRotation model and JDBC repository inside auth-service. Repository operations have Spring transaction boundaries; callers composing operations must join an explicit transaction. This repository is not yet used by login or gateway authentication.
 
 Real isolated MySQL tests cover:

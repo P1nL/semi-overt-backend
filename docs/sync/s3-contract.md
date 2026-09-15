@@ -1,5 +1,7 @@
 # S3 implementation contract — 2026-09-10
 
+> semi-overt · 文档整理 2026-09-15 · 阶段资料：保留原日期、契约与验收范围；不代表当前版本、整站或生产验收。 [文档中心](../README.md)
+
 This is the implementation decision for ADR-003/004/005, not an acceptance claim.
 
 ## Ownership and transactions

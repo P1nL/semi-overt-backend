@@ -1,5 +1,7 @@
 # S0 execution receipts — 2026-09-09
 
+> semi-overt · 文档整理 2026-09-15 · 阶段资料：保留原日期、契约与验收范围；不代表当前版本、整站或生产验收。 [文档中心](../README.md)
+
 Status: in progress. No production access, schema execution, commit or push.
 
 ## Environment

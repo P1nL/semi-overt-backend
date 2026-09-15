@@ -1,75 +1,33 @@
 # 排障手册
 
-适合谁看：本地启动失败、联调异常、冒烟不过或部署后服务异常时。  
-读完能解决什么问题：快速缩小问题范围，知道先查哪一层。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
 
-## 服务起不来
+## 先确定操作对象
 
-先看：
+先记录模式、端口、PID/容器、源码/镜像版本。传统开发看 .codex-runtime；S5 看 .runtime/s5；Docker 用 scripts/docker-demo.ps1 status/logs。不要把 Docker 持有的端口误判为某个 Java 服务，也不要停止不属于本轮的进程。
 
-1. `.codex-runtime/logs`
-2. `.codex-runtime/pids`
-3. `dev-up.ps1` 终端输出
+| 症状 | 检查顺序 |
+| --- | --- |
+| PowerShell 脚本失败 | 确认 pwsh / Core 7+，不使用 Windows PowerShell 5.1 |
+| 服务未启动 | S5 up 只起中间件；确认是否执行 start，检查构建、迁移、端口与日志 |
+| Auth 启动失败 | RESET_CODE_PEPPER、JWT/内部令牌、数据库和 Nacos；Docker 修改环境后重新创建 Auth |
+| 登录/刷新异常 | refresh Cookie、来源白名单、Secure、会话数据库与 Auth 权威接口；不要回退旧 New-Token 协议 |
+| 503 | 定位 Auth、预算、Redis、Content 或模型依赖；服务不可用不等于会话永久失效 |
+| 409 | 读取新版本或决定状态，不强制覆盖，不换 decisionId 掩盖冲突 |
+| 审核超时 | 保留同 decisionId，查 PROCESSING/FINAL/CONFLICT 和 Content 决定记录，再查消息 |
+| 搜索/通知不更新 | Content 真源 → Outbox 确认 → Rabbit → Inbox/业务事务 → API/前端 |
+| 图片 404 或返回 HTML | 文件存在及挂载、File 路由、/static/uploads/ 代理是否误落 SPA fallback、状态/MIME |
+| 润色 503/超时 | 密钥是否注入 Content、实际模型地址/名称、代理和 TLS；见 AI 文档 |
+| 修改配置无效 | 检查 profile/Nacos/环境变量与实际容器或 JAR，不仅看源码默认值 |
 
-重点排查：
+## 安全恢复
 
-- 端口是否被占用
-- Maven 是否可用
-- `NACOS_NAMESPACE` 是否正确
-- `PLATFORM_INTERNAL_TOKEN` 是否已通过环境变量或 Nacos 提供
-- 中间件是否健康
+- 中间件数据版本不兼容时先备份和确认恢复方案，不默认删卷重建。
+- 不执行 docker compose down -v，不删除 .runtime 私有配置，不打印令牌/Cookie/密码。
+- 不用关闭鉴权、trust-all TLS、模拟模型文本或无限重试掩盖故障。
+- Linux JAR 启动失败检查 Java、构建产物和环境；不要选择来源不明的 target JAR。
+- 静态资源和 AI 请求要验证各自代理超时/路径，不因为首页能打开就宣布全站正常。
 
-## Docker 中间件异常
+## 恢复后验证
 
-优先检查：
-
-- `docker compose ps`
-- `docker compose logs <service>`
-
-已知本地问题之一：
-
-- Redis 卷如果包含更新版本生成的数据，`dev-up.ps1` 会提示删除本地 Redis 容器与卷后重试
-
-## `actuator/health` 不为 `UP`
-
-通常先看：
-
-- 目标服务日志
-- 对应数据库 / Redis / RabbitMQ / Nacos 是否可连
-- 环境变量和 Nacos 配置是否齐全
-
-## 网关鉴权异常
-
-现象与切入点：
-
-- 需要登录的接口没有带 token 却能访问：先查 `gateway-service`
-- 无效 token 不是 `401`：先查 `GatewayAuthFilter`
-- 审核接口普通用户能访问：先查网关管理员限制和 `review-service` 权限配置
-
-## 冒烟脚本失败
-
-[scripts/smoke-test.ps1](../../scripts/smoke-test.ps1) 失败时，按顺序看：
-
-1. Docker 依赖健康
-2. 7 个业务服务端口和 `actuator`
-3. 注册 / 登录是否成功
-4. MySQL 中通知表与投递表是否入库
-5. RabbitMQ 队列是否存在
-6. 搜索结果是否最终可见
-
-## Linux 启动脚本报错
-
-常见原因：
-
-- `java` 不在 `PATH`
-- 没有先执行打包，导致 `target` 下没有可运行 jar
-- `target` 下有多个可运行 jar
-- `NACOS_SERVER_ADDR` 或 `NACOS_NAMESPACE` 缺失
-
-## Nginx 看起来正常，但外部请求失败
-
-先区分是哪一层失败：
-
-- Nginx 自己生成 `500/502/503/504`：先看 Nginx 日志和 `gateway-service` 是否存活
-- 业务返回 JSON 错误：再看网关和具体服务
-- 图片打不开：先看 `/static/uploads/` 是否能通过网关访问，再看文件服务与存储目录
+分别记录迁移退出码、readiness、注册/登录、版本化草稿、同 key 审核恢复、唯一通知、搜索和图片读取。历史专项脚本可参考 [S5 回执](../sync/s5-recovery-acceptance.md)，但回执数字不能作为本次恢复结果。

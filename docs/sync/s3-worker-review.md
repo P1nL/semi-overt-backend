@@ -1,5 +1,7 @@
 # S3 worker direction review
 
+> semi-overt · 文档整理 2026-09-15 · 阶段资料：保留原日期、契约与验收范围；不代表当前版本、整站或生产验收。 [文档中心](../README.md)
+
 Workers used the user-requested `gpt-5.6-sol` / `xhigh`; main agent owns integration and actual evidence. This ledger records actual findings and corrections, not blind acceptance of worker reports.
 
 ## Frozen checks

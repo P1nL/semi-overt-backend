@@ -1,5 +1,7 @@
 # S2-B service and short access token — 2026-09-09
 
+> semi-overt · 文档整理 2026-09-15 · 阶段资料：保留原日期、契约与验收范围；不代表当前版本、整站或生产验收。 [文档中心](../README.md)
+
 Adds DeviceSessionService and SessionAccessTokenIssuer. Not connected to legacy AuthController or gateway yet.
 
 - Cryptographic 32-byte base64url refresh credentials; only SHA-256 hashes persist.

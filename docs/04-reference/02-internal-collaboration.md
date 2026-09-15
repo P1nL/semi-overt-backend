@@ -1,72 +1,30 @@
 # 内部协作接口
 
-适合谁看：需要看跨服务 HTTP 调用、内部接口用途和契约边界的人。  
-读完能解决什么问题：知道哪些内部接口存在、为什么存在，以及该把跨服务调用放在哪一层。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
 
-## 先看结论
+内部接口不是第二套公网 API。网关不开放 /internal/**；业务服务也需验证内部令牌与身份。不能以“路径叫 internal”代替访问控制。
 
-- 内部接口不是对外 API 的复制品，而是服务间协作契约
-- 网关不暴露 `/internal/**`
-- Feign client 应放在 `*-contract` 模块，而不是实现模块
+| 权威服务 | 契约 / 入口 | 用途 |
+| --- | --- | --- |
+| Auth | AuthUserQueryClient、InternalUserController | 批量用户摘要、可参与审核的管理员 |
+| Auth | POST /internal/auth/session/validate | 持久化设备会话校验 |
+| Auth | POST /internal/auth/budget/consume | 跨实例共享请求预算 |
+| Content | ContentReviewClient、InternalArticleController | 审核快照、应用决定、读取决定结果、扫描待审真源 |
+| Content | ContentProfileClient | 用户主页文章聚合 |
+| Review | ReviewTaskClient | 任务投影维护、按 submissionId 获取分配 |
+| Review | ReviewReasonClient | 最近审核信息 |
 
-## 当前内部接口
+## 一致性约束
 
-### `auth-service`
+- Feign 声明放在对应 *-contract 模块；实现服务不能互相依赖实现模块或直接查写其他服务业务表。
+- 会话和预算调用由 Gateway 的 SessionAuthorityClient 负责；依赖故障应明确失败，不静默放行。
+- Content 决定查询 GET /internal/articles/{id}/review-decisions/{decisionId}：不存在不能猜成功。
+- Review 请求 Content 前先持久化自己的命令；同步请求和消息重放使用同一个 decisionId。
+- Review 扫描 GET /internal/articles/review-pending 发现缺失投影，不通过 Review 直接 JDBC 查询 articles。
+- 任务 upsert/remove 必须保留 submissionId 与 articleVersion，避免旧事件覆盖新轮次。
 
-`/internal/users`
+通知和搜索异步派生优先走事件；需要同步权威事实才使用内部 HTTP。具体参数见 [S3 契约](../sync/s3-contract.md) 和源码目录：
 
-- `POST /internal/users/batch`
-
-用途：
-
-- 给其他服务批量查询用户摘要信息
-
-### `content-service`
-
-`/internal/articles`
-
-- `GET /internal/articles/{id}/review-snapshot`
-- `POST /internal/articles/{id}/apply-review-result`
-- `POST /internal/articles/profile-page`
-
-用途：
-
-- 审核服务获取审核所需文章快照
-- 内容服务应用审核结果
-- 聚合用户主页文章数据
-
-### `review-service`
-
-`/internal/reviews`
-
-- `GET /internal/reviews/articles/{id}/latest`
-- `POST /internal/reviews/tasks/upsert`
-- `POST /internal/reviews/tasks/remove`
-
-用途：
-
-- 获取文章最近审核信息
-- 维护审核任务投影
-
-## 为什么内部接口存在
-
-它们主要解决三个问题：
-
-- 服务之间交换标准事实，而不是互查数据库
-- 把跨服务协作固定成稳定契约
-- 减少派生视图服务对真源实现细节的耦合
-
-## 使用内部接口时的原则
-
-- 先判断是否已有契约模块可以复用
-- 新增 Feign client 时放进对应 `*-contract`
-- 不要让网关直接透出内部路径
-- 不要把内部接口做成“对外接口的另一套重复包装”
-
-## 什么时候优先用事件，不优先用内部 HTTP
-
-- 目标是异步派生，而不是同步要一个事实结果
-- 允许最终一致性
-- 需要可重试或可补偿
-
-例如通知和搜索更新就更适合走事件，而不是同步 RPC。
+- [Auth clients](../../auth-contract/src/main/java/com/platform/contract/auth/client)
+- [Content clients](../../content-contract/src/main/java/com/platform/contract/content/client)
+- [Review clients](../../review-contract/src/main/java/com/platform/contract/review/client)

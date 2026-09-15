@@ -1,93 +1,24 @@
 # 脚本与入口文件说明
 
-适合谁看：需要知道仓库里哪些脚本是正式入口、哪些文件是运行基线的人。  
-读完能解决什么问题：知道启动、停止、冒烟、部署和架构校验分别该用什么。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
 
-## 本地开发脚本
+Windows 统一使用 pwsh（PowerShell 7+）。执行前阅读参数、确认运行模式、目标数据库及进程归属。
 
-### [scripts/dev-up.ps1](../../scripts/dev-up.ps1)
+| 入口 | 用途 / 边界 |
+| --- | --- |
+| [s5-env.ps1](../../scripts/s5-env.ps1) | up/start/status/stop/down/verify；up 仅中间件 |
+| [docker-demo.ps1](../../scripts/docker-demo.ps1) | init/build/pull/up/down/status/logs/export/import，全 Docker 生命周期 |
+| [Docker 手册](../../deploy/docker/README.md) | 离线导入、私有配置、迁移、就绪、升级与清理 |
+| [dev-up.ps1](../../scripts/dev-up.ps1)、[dev-down.ps1](../../scripts/dev-down.ps1)、[dev-logs.ps1](../../scripts/dev-logs.ps1) | 保留的 8080 本机开发模式 |
+| [smoke-test.ps1](../../scripts/smoke-test.ps1) | 传统环境冒烟；不覆盖全部新会话/恢复/AI 契约 |
+| [s3-acceptance.ps1](../../scripts/s3-acceptance.ps1) | S3 状态与事件专项；运行会改变测试数据 |
+| [s4-verify.ps1](../../scripts/s4-verify.ps1)、[s4-acceptance.ps1](../../scripts/s4-acceptance.ps1) | S4 构建及真实依赖验收 |
+| [s5-recovery.ps1](../../scripts/s5-recovery.ps1) | 多实例/故障恢复；先读专项计划，不对共享服务随意注入故障 |
+| [flyway-migrate.ps1](../../scripts/flyway-migrate.ps1)、[db-backup.ps1](../../scripts/db-backup.ps1) | 迁移/备份；先确认目标与凭据 |
+| [run-service.sh](../../scripts/run-service.sh) | 保留的 Linux 单服务 JAR 启动 |
+| [SQL 手册](../../deploy/sql/README.md) | 初始化、迁移与数据保护 |
+| [架构测试](../../architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java) | 模块、Feign、事件基础设施和入口边界 |
 
-用途：
+三套 Compose 分别是根 docker-compose.yml、docker-compose.s5.yml、deploy/docker/compose.yml。不要在错误目录用裸 docker compose 操作另一套环境。
 
-- 启动 Docker 中间件
-- 准备 Maven 本地仓库与运行时目录
-- 启动业务服务并等待就绪
-
-### [scripts/dev-down.ps1](../../scripts/dev-down.ps1)
-
-用途：
-
-- 停止本地开发运行的服务
-
-### [scripts/dev-up.cmd](../../scripts/dev-up.cmd) / [scripts/dev-down.cmd](../../scripts/dev-down.cmd)
-
-用途：
-
-- Windows 命令行包装入口
-
-## 验证脚本
-
-### [scripts/smoke-test.ps1](../../scripts/smoke-test.ps1)
-
-用途：
-
-- 健康检查
-- 网关语义检查
-- 端到端业务主链路冒烟
-
-额外能力：
-
-- 可带 `-SkipE2E` 只跑基础健康检查
-- 会直连 MySQL、RabbitMQ 管理台、网关接口
-
-## Linux 启动脚本
-
-### [scripts/run-service.sh](../../scripts/run-service.sh)
-
-用途：
-
-- 在 Linux 主机上用 `java -jar` 启动单个 Spring Boot 服务
-
-依赖前提：
-
-- 已打包出唯一可运行 jar
-- 已准备环境变量
-- `java` 可用
-
-## 环境变量样例
-
-### [scripts/env/server.env.example](../../scripts/env/server.env.example)
-
-用途：
-
-- 提供服务器基线环境变量样例
-- 覆盖数据库、Redis、RabbitMQ、JWT、邮件、文件存储等关键配置
-
-## 入口配置与基础设施文件
-
-### [docker-compose.yml](../../docker-compose.yml)
-
-本地中间件栈定义。
-
-### [deploy/sql/init.sql](../../deploy/sql/init.sql)
-
-本地 MySQL 初始化脚本。
-
-### [deploy/nginx/README.md](../../deploy/nginx/README.md)
-
-Nginx 外部入口基线说明。
-
-### [deploy/nginx/now-demo.conf](../../deploy/nginx/now-demo.conf)
-
-Nginx 示例配置。
-
-## 架构校验入口
-
-### [architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java](../../architecture-tests/src/test/java/com/platform/architecture/FinalArchitectureTest.java)
-
-用途：
-
-- 约束模块集
-- 约束 Feign 位置
-- 约束事件基础设施归属
-- 约束服务入口边界
+历史 .cmd 包装不作为本手册推荐入口，直接用 pwsh 调用 .ps1。现行 [Nginx 示例](../../deploy/nginx/now-demo.conf) 保留旧文件名以匹配仓库；项目名称统一 semi-overt。

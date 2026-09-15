@@ -1,84 +1,44 @@
-# 10 分钟跑通本地环境
+# semi-overt 首次运行
 
-适合谁看：需要最快完成本地启动和联调验证的人。  
-读完能解决什么问题：在 Windows 本机用最少步骤把中间件、服务和冒烟脚本跑起来。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
+
+“十分钟”不是耗时承诺；首次构建和下载取决于本机环境。先选一种运行模式，不要混用端口、凭据和数据卷。
 
 ## 前提
 
-- 已安装 Docker Desktop
-- 可用 PowerShell
-- 本机已有 Java 与 Maven，或允许脚本使用仓库内 `mvnw.cmd`
+Windows 使用 PowerShell 7（pwsh），不用 Windows PowerShell 5.1。Docker 必须运行 Linux 容器。S5 本机构建还需要 Java 17 和 Maven；全 Docker 模式不要求宿主机安装 JDK、Maven 或 Node。
 
-## 第 1 步：启动中间件
+## 方式一：全 Docker 演示
 
-在仓库根目录执行：
+在后端仓库根目录的 pwsh 中执行；构建会使用明确指定的演示前端，不使用生产 checkout：
 
-```powershell
-docker compose up -d
-```
+~~~powershell
+pwsh --version
+docker info
+pwsh -File ./scripts/docker-demo.ps1 init
+pwsh -File ./scripts/docker-demo.ps1 build -FrontendPath D:/works/semi-overt-frontend
+pwsh -File ./scripts/docker-demo.ps1 up
+pwsh -File ./scripts/docker-demo.ps1 status
+~~~
 
-你应该得到这组依赖：
+应用默认 localhost:18000，Mailpit 127.0.0.1:18025。上面是源码构建；离线目标机应使用 [Docker 手册](../../deploy/docker/README.md) 的 import 流程，而不是重新 build。
 
-- MySQL `3306`
-- Redis `6379`
-- Nacos `8848`
-- Nacos gRPC `9848`
-- RabbitMQ `5672`
-- RabbitMQ 管理台 `15672`
+## 方式二：S5 源码联调
 
-## 第 2 步：启动服务
+~~~powershell
+pwsh -File ./scripts/s5-env.ps1 start
+pwsh -File ./scripts/s5-env.ps1 status
+Invoke-RestMethod http://127.0.0.1:18080/actuator/health/readiness
+~~~
 
-```powershell
-.\scripts\dev-up.ps1
-```
+start 启动中间件、准备迁移和服务；up 只启动中间件，不等于七个 Java 服务已启动。配置在 .runtime/s5/local.env。前端单独按其仓库脚本启动并指向 18080。
 
-默认行为：
+## 停止与成功标准
 
-- 启动前会检查 Docker 依赖和关键端口
-- 会把共享模块安装到本地 Maven 仓库
-- 会按固定顺序启动 7 个业务服务
-- 会把日志写到 `.codex-runtime/logs`
-- 会把 PID 写到 `.codex-runtime/pids`
+- S5：pwsh -File scripts/s5-env.ps1 stop；需要连中间件一起停止时用 down。
+- Docker：pwsh -File scripts/docker-demo.ps1 down。
+- 不执行 down -v，不删除数据卷或私有配置来“修复”启动。
+- readiness 只证明就绪；完整演示还应检查注册邮件、登录、草稿保存、提审/审核、通知、搜索和图片读取。
+- 模型润色需要独立配置与验证，普通健康检查不能证明模型可用。
 
-常用参数：
-
-```powershell
-.\scripts\dev-up.ps1 -StartupMode fast
-.\scripts\dev-up.ps1 -RestartServices
-.\scripts\dev-up.ps1 -SkipDocker
-```
-
-## 第 3 步：执行冒烟
-
-```powershell
-.\scripts\smoke-test.ps1
-```
-
-默认会校验：
-
-- Docker 中间件健康
-- 服务 `actuator` 健康与信息接口
-- 网关公开接口
-- 无效 token 的 `401`
-- 端到端主链路：注册、登录、草稿、提审、审核通过、通知入库、搜索可见
-
-只想做轻量检查时：
-
-```powershell
-.\scripts\smoke-test.ps1 -SkipE2E
-```
-
-## 第 4 步：确认成功信号
-
-成功时通常会看到：
-
-- 所有服务的 `/actuator/health` 为 `UP`
-- `gateway-service` 在 `8080` 可访问
-- 冒烟脚本输出 `E2E smoke passed` 或轻量检查通过信息
-- `.codex-runtime/logs` 中能搜到本次 `TraceId`
-
-## 如果失败，先看哪里
-
-- 启动失败：看 [本地开发与联调](../03-development-and-operations/01-local-development.md)
-- 配置或中间件失败：看 [配置来源与运行依赖](../03-development-and-operations/02-configuration-and-dependencies.md)
-- 冒烟失败：看 [排障手册](../03-development-and-operations/04-troubleshooting.md)
+保留的 8080 开发流程见[本地开发](../03-development-and-operations/01-local-development.md)。

@@ -1,80 +1,34 @@
 # 配置来源与运行依赖
 
-适合谁看：需要确认配置优先级、环境变量、Nacos 导入关系和服务依赖的人。  
-读完能解决什么问题：知道当前运行时配置从哪里来，每个服务依赖哪些中间件，以及部署时必须准备什么。
+> semi-overt · 文档整理 2026-09-15 · 现行说明：按源码与仓库配置整理；本次未重新执行运行时验收。 [文档中心](../README.md)
 
-## 配置来源顺序
+## 先确认运行模式
 
-当前运行基线依赖两类配置源：
+| 模式 | 配置入口 |
+| --- | --- |
+| 传统本机 / 主机脚本 | application.yml、进程环境、scripts/env/server.env.example 和 Nacos |
+| S5 | scripts/s5-env.ps1 与私有 .runtime/s5/local.env |
+| 全 Docker | deploy/docker/compose.yml 与私有 .runtime/docker-demo.env |
 
-1. 环境变量
-2. Nacos 配置导入
+各服务 application.yml 提供默认值及 Nacos import；环境变量、导入文件、profile 与启动参数共同影响最终值。不能仅看到某个 YAML 默认值就断言进程正在使用它。检查注入路径时不要打印真实密钥。
 
-各服务自身的 `application.yml` 主要承载：
+## 核心配置
 
-- 服务名
-- 默认端口
-- Nacos 导入关系
-- 本地默认值
-- 管理端点暴露
+- 发现：SPRING_PROFILES_ACTIVE、NACOS_SERVER_ADDR、NACOS_NAMESPACE；共享配置包括 shared-common/db/redis/jwt.yaml 和服务配置。
+- 数据：DB_URL、DB_USERNAME、DB_PASSWORD；Redis 和 RabbitMQ 的地址/凭据必须与所选栈一致。
+- 内部认证：PLATFORM_INTERNAL_TOKEN；Docker/S5 还通过 INTERNAL_TOKEN 组装相关配置，注意两端一致。
+- 会话：JWT_SIGN_KEY、AUTH_REFRESH_COOKIE_NAME、AUTH_REFRESH_COOKIE_SECURE、AUTH_REFRESH_IDLE_DAYS、AUTH_REFRESH_ABSOLUTE_DAYS、AUTH_ALLOWED_ORIGINS。
+- 安全码：RESET_CODE_PEPPER 必须非空并妥善保管，不在文档中提供固定密钥。
+- 邮件与前端链接：MAIL_*、FRONTEND_BASE_URL；本地 Mailpit 不代表真实外发邮件可用。
+- 存储：STORAGE_UPLOAD_PATH、STORAGE_ACCESS_PREFIX、存储类型及 OSS/Cloudinary 配置；以 file-service application.yml 和所选实现为准。
+- AI：DEEPSEEK_API_KEY、DEEPSEEK_BASE_URL、DEEPSEEK_MODEL、可选代理及 AI_POLISH_*，详见 [AI 润色](../ai-polish.md)。模型名称是仓库默认配置，不是服务商持续可用承诺。
 
-## 共享配置导入
+## 迁移与配置变更
 
-常见共享配置：
+数据库迁移由 db-migration/Flyway 管理，不能把 init.sql 当成已有数据库升级脚本。运行前按 [SQL 手册](../../deploy/sql/README.md) 备份、预检并确认目标库。
 
-- `shared-common.yaml`
-- `shared-db.yaml`
-- `shared-redis.yaml`
-- `shared-jwt.yaml`
+容器环境变更需要重新创建相关容器；S5 进程需由正确配置重新启动。不要把真实令牌写进示例文件、VITE_*、截图、日志或提交。已有数据卷但环境文件缺失时恢复原凭据，不重新生成覆盖。
 
-服务专属配置通常按：
+## 可用性检查
 
-- `${spring.application.name}.yaml`
-- `${spring.application.name}-${spring.profiles.active}.yaml`
-
-从 Nacos 中导入。
-
-## 关键环境变量
-
-可直接参考 [scripts/env/server.env.example](../../scripts/env/server.env.example)。
-
-重点变量：
-
-- `SPRING_PROFILES_ACTIVE`
-- `NACOS_SERVER_ADDR`
-- `NACOS_NAMESPACE`
-- `PLATFORM_INTERNAL_TOKEN`
-- `DB_URL` / `DB_USERNAME` / `DB_PASSWORD`
-- `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB`
-- `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD`
-- `JWT_SIGN_KEY` / `JWT_EXPIRATION` / `JWT_REMEMBER_ME_EXPIRATION` / `JWT_REFRESH_THRESHOLD`
-- `MAIL_*`
-- `FRONTEND_BASE_URL`
-- `STORAGE_UPLOAD_PATH` / `STORAGE_ACCESS_PREFIX` / `STORAGE_MAX_FILE_SIZE`
-
-## 服务依赖矩阵
-
-- `gateway-service`：Redis、Nacos、JWT 配置
-- `auth-service`：MySQL、Redis、Nacos、邮件配置、JWT 配置
-- `content-service`：MySQL、Redis、RabbitMQ、Nacos
-- `review-service`：MySQL、RabbitMQ、Nacos
-- `search-service`：MySQL、RabbitMQ、Nacos
-- `file-service`：Nacos、本地文件系统路径
-- `notification-service`：MySQL、RabbitMQ、Nacos
-
-## 管理端点
-
-各服务当前都暴露：
-
-- `/actuator/health`
-- `/actuator/info`
-
-这也是 `dev-up.ps1` 和 `smoke-test.ps1` 的核心就绪判断依据。
-
-## 配置排查时先看什么
-
-1. 目标服务 `src/main/resources/application.yml`
-2. 环境变量是否正确注入
-3. Nacos 地址与命名空间是否正确
-4. 中间件端口与凭证是否匹配
-5. 是否存在只在本地默认值下才成立的假设
+先查端口/进程和配置，再查依赖，再查 /actuator/health/readiness。Auth 依赖不可用时 Gateway 不应放行；Redis 限流失败也不能静默允许。readiness、队列消费、模型调用和业务完成是不同检查项。

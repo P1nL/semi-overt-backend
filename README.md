@@ -1,6 +1,6 @@
-# now-demo
+# semi-overt
 
-`now-demo` 是一个围绕“内容创作 -> 提交审核 -> 审核决定 -> 通知投递 -> 搜索可见”设计的 Spring Boot 多模块微服务示例仓库。
+`semi-overt` 是一个围绕“内容创作 -> 提交审核 -> 审核决定 -> 通知投递 -> 搜索可见”设计的 Spring Boot 多模块微服务示例仓库。
 
 当前运行主实现是父 [pom.xml](./pom.xml) 管理的 Maven 多模块工程，公网流量统一经 `gateway-service` 进入，再分发到认证、内容、审核、搜索、文件和通知服务。
 
@@ -14,8 +14,8 @@
 
 业务服务：
 
-- `gateway-service`：公网入口、JWT 校验、内部头注入、限流、路由
-- `auth-service`：注册、登录、找回密码、用户资料、内部用户查询
+- `gateway-service`：公网入口、Auth 设备会话校验、内部头注入、预算/限流、路由
+- `auth-service`：注册验证码、登录/刷新/退出、设备会话与预算、找回密码、用户资料、内部用户查询
 - `content-service`：首页、分类、文章、草稿、提审、详情、内部内容接口
 - `review-service`：审核待办、审核动作、审核日志、审核投影
 - `search-service`：公开搜索与搜索事件消费
@@ -28,58 +28,22 @@
 - `platform-web-support`：Web / Feign / Security 公共支持
 - `platform-events`：Outbox、RabbitMQ 拓扑、事件发布与消费基础设施
 - `auth-contract` / `content-contract` / `review-contract`：内部契约与 Feign client
+- `db-migration`：Flyway 预检与数据库迁移
 - `architecture-tests`：架构边界约束测试
 
 ## 快速开始
 
-### 1. 启动中间件
+文档按 2026-09-15 源码和仓库配置整理，未在本轮重新执行运行时验收。
 
-```powershell
-docker compose up -d
-```
+- **S5 源码联调**：在 PowerShell 7 中运行 `pwsh -File scripts/s5-env.ps1 start`，网关默认 18080；`up` 只启动中间件。
+- **全 Docker 演示/离线交付**：使用 `scripts/docker-demo.ps1`，应用默认 18000。首次需 init，再 build 或 import，详见 [Docker 手册](deploy/docker/README.md)。
+- **传统本机开发**：保留 dev-up/dev-down/dev-logs 与根 Compose，对应 8080–8086，不与 S5 混用。
 
-默认启动：
-
-- MySQL `3306`
-- Redis `6379`
-- Nacos `8848`
-- Nacos gRPC `9848`
-- RabbitMQ `5672`
-- RabbitMQ 管理台 `15672`
-
-### 2. 启动本地服务
-
-```powershell
-.\scripts\dev-up.ps1
-```
-
-默认启动顺序：
-
-1. `auth-service`
-2. `content-service`
-3. `review-service`
-4. `search-service`
-5. `notification-service`
-6. `file-service`
-7. `gateway-service`
-
-运行日志写入 `.codex-runtime/logs`，PID 写入 `.codex-runtime/pids`。
-排查最近错误可直接运行 `.\scripts\dev-logs.ps1`；要看原始日志尾部可运行 `.\scripts\dev-logs.ps1 -All`。
-
-### 3. 跑通冒烟
-
-```powershell
-.\scripts\smoke-test.ps1
-```
-
-脚本会校验：
-
-- Docker 中间件健康状态
-- 所有服务的 `/actuator/health` 与 `/actuator/info`
-- 网关公开路由与无效 token 的 `401`
-- 注册 -> 草稿 -> 提审 -> 审核通过 -> 通知入库 -> 搜索可见 的主链路
+请先读[首次运行](docs/01-start-here/04-ten-minute-run.md)。禁止通过删卷、覆盖私有配置来解决启动问题；S5 和全 Docker 默认端口有冲突。
 
 ## 文档导航
+
+总入口：[semi-overt 文档中心](docs/README.md)；历史契约：[S0–S5 阶段索引](docs/sync/README.md)；功能说明：[AI 润色](docs/ai-polish.md)。
 
 ### 起步
 
@@ -151,3 +115,5 @@ docker compose up -d
 - 当前对外 API 统一经网关暴露
 - 搜索与通知是派生视图，不是内容真源
 - 运行时配置来自环境变量和 Nacos；服务自身 `application.yml` 只提供默认值和导入关系
+
+项目名称已统一为 semi-overt；构建坐标、历史配置文件名等未在本轮文档更新中迁移，详见[命名与事实边界](docs/README.md)。
