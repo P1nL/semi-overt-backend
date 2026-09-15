@@ -1,0 +1,37 @@
+{
+  "Document": "D:\\works\\semi-overt-backend\\deploy\\docker\\README.md",
+  "Lines": 721,
+  "PowerShellBlocks": 30,
+  "CodeFencesBalanced": true,
+  "MarkdownTablesAligned": true,
+  "PreflightGuardCases": [
+    {
+      "Name": "fresh",
+      "Passed": true
+    },
+    {
+      "Name": "existing-volume-missing-config",
+      "Passed": true
+    },
+    {
+      "Name": "existing-volume-existing-config",
+      "Passed": true
+    },
+    {
+      "Name": "prepared-config-new-volume",
+      "Passed": true
+    },
+    {
+      "Name": "docker-inspection-failed",
+      "Passed": true
+    }
+  ],
+  "ComposeValidation": "passed-with-fake-config-no-containers-started",
+  "JavaServiceContracts": 7,
+  "CoreImages": 7,
+  "SourceSha256": "067534C10D89A482B896DFD1FA6BBC102CD4DA67A8292CC798D63F19088D68CD",
+  "VerifiedAt": "2026-09-12T22:58:12.1333341+08:00",
+  "PackageDocument": "D:\\semi-overt-offline\\README.md",
+  "PackageSha256": "067534C10D89A482B896DFD1FA6BBC102CD4DA67A8292CC798D63F19088D68CD",
+  "PackageAndSourceMatch": true
+}

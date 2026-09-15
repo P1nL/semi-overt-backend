@@ -1,0 +1,278 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/8f2psfyx",
+    "id": "8f2psfyx",
+    "slide": 12,
+    "layoutId": "/ppt/slideLayouts/slideLayout12.xml",
+    "layoutType": "title",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster2.xml",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Office",
+    "colors": {
+      "accent1": "#4472C4",
+      "accent2": "#ED7D31",
+      "accent3": "#A5A5A5",
+      "accent4": "#FFC000",
+      "accent5": "#5B9BD5",
+      "accent6": "#70AD47",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#44546A",
+      "lt2": "#E7E6E6",
+      "hlink": "#0563C1",
+      "folHlink": "#954F72"
+    },
+    "fontScheme": {
+      "name": "Office",
+      "majorFont": {
+        "latinTypeface": "微软雅黑"
+      },
+      "minorFont": {
+        "latinTypeface": "微软雅黑"
+      }
+    },
+    "typefaces": [
+      "Arial",
+      "微软雅黑"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout12.xml",
+      "type": "title",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster2.xml",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster2.xml",
+      "type": "master",
+      "backgroundImage": {
+        "assetId": "/ppt/media/image1.png",
+        "contentType": "image/png",
+        "byteLength": 1061236
+      },
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/fudovqlo",
+      "id": "14",
+      "name": "Picture 9",
+      "bbox": [
+        525.03,
+        100.75,
+        553.94,
+        518.5
+      ],
+      "contentType": "image/gif",
+      "imageCrop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0.07527
+      },
+      "asset": {
+        "assetId": "/ppt/media/image14.GIF",
+        "contentType": "image/gif",
+        "byteLength": 380818
+      },
+      "fillImage": {
+        "assetId": "/ppt/media/image14.GIF",
+        "contentType": "image/gif",
+        "byteLength": 380818
+      }
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/atc7epon",
+      "id": "12",
+      "name": "TextBox 10",
+      "bbox": [
+        212.1,
+        309.92,
+        349.7,
+        100.17
+      ],
+      "geometry": "rect",
+      "text": "集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。",
+      "textPreview": "集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。",
+      "resolvedFontSize": 18.67,
+      "resolvedTextStyle": {
+        "fontSize": 18.67,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "left",
+        "textTransform": "none",
+        "wrap": "square",
+        "autoFit": "resizeShapeToFitText",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 5,
+        "lines": [
+          {
+            "index": 1,
+            "text": "集成 DeepSeek"
+          },
+          {
+            "index": 2,
+            "text": "大模型：一键改写优化正文，支持重新"
+          },
+          {
+            "index": 3,
+            "text": "生成与确认应用，API Key"
+          },
+          {
+            "index": 4,
+            "text": "仅存于服务端，创作效率与质量双提升"
+          },
+          {
+            "index": 5,
+            "text": "。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "集成",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            },
+            {
+              "index": 2,
+              "text": " DeepSeek ",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            },
+            {
+              "index": 3,
+              "text": "大模型：一键改写优化正文，支持重新生成与确认应用，API",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            },
+            {
+              "index": 4,
+              "text": " Key ",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            },
+            {
+              "index": 5,
+              "text": "仅存于服务端，创作效率与质量双提升",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            },
+            {
+              "index": 6,
+              "text": "。",
+              "typeface": "微软雅黑",
+              "color": "rgba(43, 47, 54, 0.81)"
+            }
+          ],
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "fillColor": "tx2"
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bulo7u58",
+      "id": "13",
+      "name": "文本框 12",
+      "bbox": [
+        306.1,
+        169.36,
+        280.58,
+        90.47
+      ],
+      "geometry": "rect",
+      "text": "AI 智能润色\n",
+      "textPreview": "AI 智能润色 |",
+      "resolvedFontSize": 18.67,
+      "resolvedTextStyle": {
+        "fontSize": 18.67,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "left",
+        "textTransform": "none",
+        "wrap": "none",
+        "autoFit": "resizeShapeToFitText",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AI 智能润色"
+          },
+          {
+            "index": 2,
+            "text": ""
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AI 智能润色",
+          "runs": [
+            {
+              "index": 1,
+              "text": "AI ",
+              "fontSize": 48,
+              "typeface": "微软雅黑",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "智能润色",
+              "fontSize": 48,
+              "typeface": "微软雅黑",
+              "bold": true
+            }
+          ],
+          "lineSpacingPercent": 100000
+        }
+      ]
+    }
+  ],
+  "composeRuns": []
+}

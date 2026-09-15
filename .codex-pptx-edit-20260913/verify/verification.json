@@ -1,0 +1,14 @@
+{
+  "sourceSlides": 16,
+  "finalSlides": 16,
+  "differentRenderedSlides": [
+    16
+  ],
+  "diffs": [
+    {
+      "slide": 16,
+      "sourceSha256": "66744ad698b198b6abfffca67e2155a68bfc898d65cc060c61aaf55df72f804b",
+      "finalSha256": "44937f14dffd36e7c61790dfa231f7e89c5e0b21c642b2426341aaf695b6392f"
+    }
+  ]
+}

@@ -8,6 +8,9 @@ import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
+import org.springframework.util.unit.DataSize;
+import static org.springframework.cloud.gateway.support.RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR;
 
 /**
  * 网关路由配置。
@@ -35,6 +38,12 @@ public class GatewayRouteConfig {
                         .path("/api/v1/users/**")
                         .filters(f -> applyRateLimit(f, defaultRedisRateLimiter, clientRateLimiterKeyResolver))
                         .uri("lb://auth-service"))
+                .route("content-service-ai-polish", r -> r
+                        .path("/api/v1/articles/ai-polish").and().method(HttpMethod.POST)
+                        .filters(f -> applyRateLimit(f, defaultRedisRateLimiter, clientRateLimiterKeyResolver)
+                                .setRequestSize(DataSize.ofKilobytes(256)))
+                        .metadata(RESPONSE_TIMEOUT_ATTR, 95_000)
+                        .uri("lb://content-service"))
                 .route("content-service", r -> r
                         .path("/api/v1/home",
                                 "/api/v1/categories/**",

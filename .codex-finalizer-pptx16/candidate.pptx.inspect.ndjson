@@ -1,0 +1,302 @@
+{"kind":"deck","id":"pr/93i3ux","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"TITLE","type":"title","placeholders":[{"name":"title","type":"title"},{"name":"subtitle","type":"subtitle"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout2.xml","name":"OBJECT","type":"obj","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout3.xml","name":"SECTION_HEADER","type":"secHead","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout4.xml","name":"TWO_OBJECTS","type":"twoObj","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout5.xml","name":"TWO_OBJECTS_WITH_TEXT","type":"twoTxTwoObj","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"body","type":"body"},{"name":"body","type":"body"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout6.xml","name":"TITLE_ONLY","type":"titleOnly","placeholders":[{"name":"title","type":"title"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout7.xml","name":"BLANK","type":"blank","placeholders":[{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout8.xml","name":"OBJECT_WITH_CAPTION_TEXT","type":"objTx","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout9.xml","name":"PICTURE_WITH_CAPTION_TEXT","type":"picTx","placeholders":[{"name":"title","type":"title"},{"name":"picture","type":"picture"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout10.xml","name":"VERTICAL_TEXT","type":"vertTx","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout11.xml","name":"VERTICAL_TITLE_AND_VERTICAL_TEXT","type":"vertTitleAndTx","placeholders":[{"name":"title","type":"title"},{"name":"body","type":"body"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber","textPreview":"‹#›"}]}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster2.xml","name":"","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout12.xml","name":"","type":"title"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"基于 SpringBoot 与前后端分离架构的个人博客系统","textShapes":4}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"name":"AutoShape 4","text":"基于 SpringBoot 与前后端分离架构的个人博客系统\n\n","textPreview":"基于 SpringBoot 与前后端分离架构的个人博客系统 |  |","textChars":31,"textLines":3,"bbox":[60,116.03,742.54,310.6]}
+{"kind":"shape","id":"sh/65g3298r","slide":1,"name":"AutoShape 5","bbox":[60,298.67,666.67,113.33]}
+{"kind":"textbox","id":"sh/ts7md4r2","slide":1,"name":"AutoShape 6","text":"       基于现代Web技术栈构建的轻量级、高性能博客平台，融合前后端分离架构与响应式设计。深度集成Markdown编辑、用户权限管理与动态内容渲染，打造安全、可扩展且极具交互性的个人创作空间。","textPreview":"基于现代Web技术栈构建的轻量级、高性能博客平台，融合前后端分离架构与响应式设计。深度集成Markdown编辑、用户权限管理与动态内容渲染，打造安全、可扩展且极具交互性的个人创作空间。","textChars":99,"textLines":1,"bbox":[78.03,329.39,693.33,146.67]}
+{"kind":"textbox","id":"sh/fu94fe98","slide":1,"name":"文本框 7","text":"组长：江建宇  组员：陈泉材 董沈武 程坤 范文涛","textPreview":"组长：江建宇  组员：陈泉材 董沈武 程坤 范文涛","textChars":25,"textLines":1,"bbox":[83.77,517.7,426.67,32.2]}
+{"kind":"textbox","id":"sh/utg3698n","slide":1,"name":"文本框 8","text":"时间：2026.9.13","textPreview":"时间：2026.9.13","textChars":12,"textLines":1,"bbox":[0,687.8,167.53,32.2]}
+{"kind":"image","id":"im/jqxw72dk","slide":1,"name":"图片 16","geometry":"cloud","bbox":[802.54,141.96,451.23,478.98]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":"大家好，欢迎参加本次个人博客系统项目的演示。今天，我将向大家详细介绍这个项目的背景、设计理念、核心功能以及我们在技术上的创新点。这个项目不仅是一个功能完整的博客平台，更是我们对现代Web技术栈实践与探索的结晶。"}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"CONTENTS","textShapes":13}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"name":"AutoShape 2","text":"CONTENTS","textPreview":"CONTENTS","textChars":8,"textLines":1,"bbox":[117.05,285.67,333.33,102.67]}
+{"kind":"shape","id":"sh/ozy1ofad","slide":2,"name":"AutoShape 3","bbox":[74.67,189.33,333.33,90.67]}
+{"kind":"textbox","id":"sh/b29kza94","slide":2,"name":"AutoShape 4","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[472.91,135.33,88,88]}
+{"kind":"textbox","id":"sh/a10jqpsj","slide":2,"name":"AutoShape 5","text":"项目背景","textPreview":"项目背景","textChars":4,"textLines":1,"bbox":[575.57,145.23,128.87,57.33]}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"name":"AutoShape 6","text":"项目目标、意义与要解决的问题，明确系统建设的初衷与价值。","textPreview":"项目目标、意义与要解决的问题，明确系统建设的初衷与价值。","textChars":28,"textLines":1,"bbox":[728.71,141.74,440,65.73]}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"name":"AutoShape 7","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[520,258.67,88,88]}
+{"kind":"textbox","id":"sh/r65knqtk","slide":2,"name":"AutoShape 8","text":"设计理念","textPreview":"设计理念","textChars":4,"textLines":1,"bbox":[617.33,273.33,128.8,57.33]}
+{"kind":"textbox","id":"sh/q5wjelsz","slide":2,"name":"AutoShape 9","text":"阐述系统设计的核心思想，以及为用户打造的极致体验与交互目标。","textPreview":"阐述系统设计的核心思想，以及为用户打造的极致体验与交互目标。","textChars":30,"textLines":1,"bbox":[774.67,271.89,440,62.33]}
+{"kind":"textbox","id":"sh/ove9o7yd","slide":2,"name":"AutoShape 10","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[461.33,380.67,88,88]}
+{"kind":"textbox","id":"sh/9wnqhczy","slide":2,"name":"AutoShape 11","text":"核心功能全景","textPreview":"核心功能全景","textChars":6,"textLines":1,"bbox":[560.28,395.35,178.61,57.33]}
+{"kind":"textbox","id":"sh/mtwrmxg7","slide":2,"name":"AutoShape 12","text":"全面解析博客前台展示与后台管理的核心功能模块，呈现完整业务闭环。","textPreview":"全面解析博客前台展示与后台管理的核心功能模块，呈现完整业务闭环。","textChars":32,"textLines":1,"bbox":[767.01,392.45,440,63.13]}
+{"kind":"textbox","id":"sh/nu58f2hs","slide":2,"name":"AutoShape 13","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[520,502.67,88,88]}
+{"kind":"textbox","id":"sh/wjy9sry9","slide":2,"name":"AutoShape 14","text":"技术创新","textPreview":"技术创新","textChars":4,"textLines":1,"bbox":[617.33,518.67,128.73,57.33]}
+{"kind":"textbox","id":"sh/xk7qlczu","slide":2,"name":"AutoShape 15","text":"深入剖析系统的关键技术栈选型，展示架构设计与实现的核心技术亮点。","textPreview":"深入剖析系统的关键技术栈选型，展示架构设计与实现的核心技术亮点。","textChars":32,"textLines":1,"bbox":[774.67,520,440,60.27]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":"本次演示将分为四个部分。首先，我们会探讨项目的背景，了解我们为什么要做这个系统。接着，将深入介绍我们的设计理念，包括架构思想和用户体验目标。然后，我会带大家全面了解系统的核心功能。最后，将重点展示我们在技术上的创新和亮点。"}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"01","textShapes":3}
+{"kind":"textbox","id":"sh/cza94vmx","slide":3,"name":"AutoShape 2","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[242.67,257.33,157.33,157.33]}
+{"kind":"textbox","id":"sh/d0jax03i","slide":3,"name":"AutoShape 3","text":"项目背景","textPreview":"项目背景","textChars":4,"textLines":1,"bbox":[421.33,302.67,218.67,68]}
+{"kind":"textbox","id":"sh/298ryl4v","slide":3,"name":"AutoShape 4","text":"项目目标、意义与要解决的问题","textPreview":"项目目标、意义与要解决的问题","textChars":14,"textLines":1,"bbox":[647.73,308,400,62.67]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":3,"text":"首先，让我们进入第一部分：项目背景。在这一章，我们将探讨为什么要开发一个独立的个人博客系统，它的目标和意义是什么，以及我们希望通过这个项目解决哪些实际问题。"}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"自建博客系统能够让作者完全掌控内容、样式与数据，摆脱第三方平台的制约。本项目旨在开发一个功能完整、架构现代的个人博客系统，实现从内容创作、发布管理到用户阅...","textShapes":2}
+{"kind":"textbox","id":"sh/rm1k7yt4","slide":4,"name":"AutoShape 4","text":"       自建博客系统能够让作者完全掌控内容、样式与数据，摆脱第三方平台的制约。本项目旨在开发一个功能完整、架构现代的个人博客系统，实现从内容创作、发布管理到用户阅读、检索的完整闭环，为创作者打造真正属于自己的内容阵地。","textPreview":"自建博客系统能够让作者完全掌控内容、样式与数据，摆脱第三方平台的制约。本项目旨在开发一个功能完整、架构现代的个人博客系统，实现从内容创作、发布管理到用户阅读、检索的完整闭环，为创作者打造真正属于自己的内容阵地。","textChars":112,"textLines":1,"bbox":[83.52,320.99,526.67,248.6]}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":4,"name":"AutoShape 2","text":"项目\n目标与意义","textPreview":"项目 | 目标与意义","textChars":8,"textLines":2,"bbox":[69.73,221.59,360.23,74.67]}
+{"kind":"image","id":"im/b2lc3q1s","slide":4,"name":"图片 9","geometry":"bevel","bbox":[751.36,174.33,372.04,371.34]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":4,"text":"我们的核心目标是打造一个完全自主可控的个人博客平台。正如大家在右侧看到的UI设计，我们追求的是一种简洁而富有质感的视觉体验。通过自建系统，作者可以真正拥有自己的内容和数据，实现从创作到阅读的全流程掌控，这对于技术总结和观点记录至关重要。"}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"核心问题聚焦","textShapes":8}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":5,"name":"AutoShape 2","text":"核心问题聚焦","textPreview":"核心问题聚焦","textChars":6,"textLines":1,"bbox":[126.67,102.67,261.33,66.67]}
+{"kind":"textbox","id":"sh/cf2tcr61","slide":5,"name":"AutoShape 3","text":"针对当前内容发布受限、技术应用浅层化及数据异常等痛点，我们从自主掌控、技术深耕与数据保障三个维度出发，构建稳定可靠的解决方案。","textPreview":"针对当前内容发布受限、技术应用浅层化及数据异常等痛点，我们从自主掌控、技术深耕与数据保障三个维度出发，构建稳定可靠的解决方案。","textChars":63,"textLines":1,"bbox":[388,102.67,738.67,74.67]}
+{"kind":"shape","id":"sh/z2tcnm5s","slide":5,"name":"AutoShape 4","bbox":[130.67,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/l4bupwny","slide":5,"name":"AutoShape 6","text":"01 内容自主权","textPreview":"01 内容自主权","textChars":8,"textLines":1,"bbox":[108,464,308,56]}
+{"kind":"textbox","id":"sh/032tgr6d","slide":5,"name":"AutoShape 7","text":"摆脱第三方平台限制，实现对内容发布、样式设计与数据资产的完全掌控，重塑创作者的内容主导权。","textPreview":"摆脱第三方平台限制，实现对内容发布、样式设计与数据资产的完全掌控，重塑创作者的内容主导权。","textChars":45,"textLines":1,"bbox":[108,524,308,111.87]}
+{"kind":"shape","id":"sh/n6dcr65o","slide":5,"name":"AutoShape 8","bbox":[509.33,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/w32dkbuh","slide":5,"name":"AutoShape 10","text":"02 技术实践深化","textPreview":"02 技术实践深化","textChars":9,"textLines":1,"bbox":[486.67,464,308,56]}
+{"kind":"textbox","id":"sh/x4vedgvm","slide":5,"name":"AutoShape 11","text":"搭建完整的前后端分离项目，深度应用现代Web技术栈，在实战中沉淀工程化经验与技术落地能力。","textPreview":"搭建完整的前后端分离项目，深度应用现代Web技术栈，在实战中沉淀工程化经验与技术落地能力。","textChars":45,"textLines":1,"bbox":[486.67,524,308,111.8]}
+{"kind":"shape","id":"sh/ahkvi1cb","slide":5,"name":"AutoShape 12","bbox":[888,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/k7mxovud","slide":5,"name":"AutoShape 14","text":"03 数据一致性保障","textPreview":"03 数据一致性保障","textChars":10,"textLines":1,"bbox":[856.13,464,308,56]}
+{"kind":"textbox","id":"sh/58vehgvy","slide":5,"name":"AutoShape 15","text":"解决网络波动或误操作引发的重复提交问题，通过技术手段确保系统数据的准确性、完整性与一致性。","textPreview":"解决网络波动或误操作引发的重复提交问题，通过技术手段确保系统数据的准确性、完整性与一致性。","textChars":45,"textLines":1,"bbox":[864,524,308,111.87]}
+{"kind":"image","id":"im/5ove5g3m","slide":5,"name":"Picture 5","bbox":[217.33,294.67,88,88]}
+{"kind":"image","id":"im/4nmdwbm1","slide":5,"name":"Picture 9","bbox":[596,294.67,88,88]}
+{"kind":"image","id":"im/vitwz65k","slide":5,"name":"Picture 13","bbox":[974.67,294.67,88,88]}
+{"kind":"notes","id":"nt/i107q5of","slide":5,"text":"具体来说，我们希望解决三个核心问题。第一，内容自主权问题，让创作者真正拥有自己的作品。第二，这是一个绝佳的技术实践机会，让我们能深入学习和应用当前主流的前后端技术。第三，也是一个关键的工程挑战，我们要解决网络不稳定或用户误操作导致的数据一致性问题。"}
+{"kind":"slide","id":"sl/x8f69ofe","slide":6,"title":"02","textShapes":3}
+{"kind":"textbox","id":"sh/yhg7epsj","slide":6,"name":"AutoShape 2","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[242.67,257.33,157.33,157.33]}
+{"kind":"textbox","id":"sh/zi98nu94","slide":6,"name":"AutoShape 3","text":"设计理念","textPreview":"设计理念","textChars":4,"textLines":1,"bbox":[421.33,302.67,218.67,68]}
+{"kind":"textbox","id":"sh/87ipkzal","slide":6,"name":"AutoShape 4","text":"系统设计核心思想与用户体验目标","textPreview":"系统设计核心思想与用户体验目标","textChars":15,"textLines":1,"bbox":[647.73,308,429.47,62.67]}
+{"kind":"notes","id":"nt/x8f69ofe","slide":6,"text":"首先，让我们进入第一部分：项目背景。在这一章，我们将探讨为什么要开发一个独立的个人博客系统，它的目标和意义是什么，以及我们希望通过这个项目解决哪些实际问题。"}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":7,"title":"以「分离、分层、聚焦、规范」为设计主线：前后端各司其职、权责分明，聚焦内容核心闭环，打造高可用、易维护的现代化博客系统。","textShapes":4}
+{"kind":"shape","id":"sh/fi9c369c","slide":7,"name":"矩形 8","bbox":[690.89,126.13,500.43,485]}
+{"kind":"textbox","id":"sh/ydkbm5sv","slide":7,"name":"AutoShape 4","text":"以「分离、分层、聚焦、规范」为设计主线：前后端各司其职、权责分明，聚焦内容核心闭环，打造高可用、易维护的现代化博客系统。","textPreview":"以「分离、分层、聚焦、规范」为设计主线：前后端各司其职、权责分明，聚焦内容核心闭环，打造高可用、易维护的现代化博客系统。","textChars":60,"textLines":1,"bbox":[45.33,286.67,507.07,95.73]}
+{"kind":"textbox","id":"sh/zedcfa9g","slide":7,"name":"AutoShape 5","text":"系统设计原则","textPreview":"系统设计原则","textChars":6,"textLines":1,"bbox":[42.67,390.67,333.33,90.67]}
+{"kind":"textbox","id":"sh/kzmdova1","slide":7,"name":"AutoShape 6","text":"核心思想","textPreview":"核心思想","textChars":4,"textLines":1,"bbox":[37.33,430.67,469.4,186.67]}
+{"kind":"textbox","id":"sh/eh0ba1sr","slide":7,"name":"AutoShape 8","text":"01 前后端分离： 后端专注提供 RESTful 接口，前端采用 Vue 3 独立开发部署，以 JSON 报文通信，关注点分离大幅提升并行开发与迭代效率。\n02 角色清晰划分： 访客、注册用户、博主三级权限体系逐级递进，后台管理仅对博主开放，权限边界清晰可控，保障数据安全。\n03 聚焦核心闭环： 不做社交关系链，专注写作、发布、阅读与检索的完整闭环，打磨极致的内容创作与消费体验。\n 04 接口幂等保障： 基于策略模式与 Redis 幂等校验机制，杜绝弱网重复提交产生的重复数据，确保同一业务动作只落库一次。\n 05 统一工程规范： 全站接口采用统一响应结构，登录采用无状态令牌鉴权，接口文档由代码注解自动生成、与实现永远同步。\n 06 轻量资源策略： 图片等文件存放云存储、外链访问，热点数据进入 Redis 缓存，让应用服务器保持轻量高效。","textPreview":"01 前后端分离： 后端专注提供 RESTful 接口，前端采用 Vue 3 独立开发部署，以 JSON 报文通信，关注点分离大幅提升并行开发与迭代效率。 | 02 角色清晰划分： 访客、注册用户、博主三级权限体系逐级递进，后台管理仅对博主开放，权限边界清晰可控，保障数据安...","textChars":373,"textLines":6,"bbox":[676.09,217.33,526.58,306.67]}
+{"kind":"image","id":"im/wz6dk3it","slide":7,"name":"Picture 2","geometry":"roundRect","bbox":[283.07,91.87,269.33,170.67]}
+{"kind":"image","id":"im/x0fet8ze","slide":7,"name":"Picture 3","geometry":"roundRect","bbox":[42.67,29.6,269.33,170.67]}
+{"kind":"notes","id":"nt/gnmp4jqx","slide":7,"text":"我们的设计核心思想主要有四点。首先是彻底的前后端分离架构，这让前后端团队可以并行开发，极大地提升了效率。其次，我们对用户角色进行了清晰的划分，保证了系统的安全性。第三，我们坚持聚焦核心功能，确保写作和阅读体验的极致。最后，我们非常注重工程化实践，为项目的未来发展打下坚实基础。"}
+{"kind":"slide","id":"sl/fu1gfa1s","slide":8,"title":"我们致力于打造卓越的博客系统体验：前台以清晰的 Markdown 排版与响应式布局保障多端阅读舒适感，后台以集中管理面板与数据看板让创作和运营轻松高效，并...","textShapes":3}
+{"kind":"textbox","id":"sh/18byd4zy","slide":8,"name":"AutoShape 2","text":"我们致力于打造卓越的博客系统体验：前台以清晰的 Markdown 排版与响应式布局保障多端阅读舒适感，后台以集中管理面板与数据看板让创作和运营轻松高效，并以即时明确的状态反馈让用户始终掌控操作全局。","textPreview":"我们致力于打造卓越的博客系统体验：前台以清晰的 Markdown 排版与响应式布局保障多端阅读舒适感，后台以集中管理面板与数据看板让创作和运营轻松高效，并以即时明确的状态反馈让用户始终掌控操作全局。","textChars":99,"textLines":1,"bbox":[83.52,254.06,424,233.33]}
+{"kind":"textbox","id":"sh/ri9g7uhw","slide":8,"name":"AutoShape 4","text":"目标","textPreview":"目标","textChars":2,"textLines":1,"bbox":[596.48,164.02,57.18,374.64]}
+{"kind":"textbox","id":"sh/o7ydoret","slide":8,"name":"AutoShape 5","text":"四大核心体验支柱：\n1. 沉浸式阅读：正文以 Markdown 存储并由前端渲染，支持代码语法高亮与多端响应式布局。\n2. 便捷管理：草稿暂存、分类标签组织与封面配置一气呵成，后台集中管理文章与站点。\n3. 精准检索：关键词搜索叠加分类、标签多维筛选，快速命中目标内容。\n4. 即时反馈：发布、登录等关键操作均有明确状态提示，发布后前台内容实时可见。\n","textPreview":"四大核心体验支柱： | 1. 沉浸式阅读：正文以 Markdown 存储并由前端渲染，支持代码语法高亮与多端响应式布局。 | 2. 便捷管理：草稿暂存、分类标签组织与封面配置一气呵成，后台集中管理文章与站点。 | 3. 精准检索：关键词搜索叠加分类、标签多维筛选，快速命中目...","textChars":176,"textLines":6,"bbox":[753.49,135.42,424,470.6]}
+{"kind":"notes","id":"nt/fu1gfa1s","slide":8,"text":"在用户体验方面，我们设定了四个主要目标。正如大家在右侧看到的另一版UI设计，无论是深色还是浅色模式，我们都追求清晰、舒适的阅读体验。同时，后台管理要足够便捷，内容检索要足够高效，并且每一个操作都要有清晰的反馈，让用户始终掌控全局。"}
+{"kind":"slide","id":"sl/udsvah03","slide":9,"title":"03","textShapes":3}
+{"kind":"textbox","id":"sh/1cfmhgne","slide":9,"name":"AutoShape 2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[242.67,257.33,157.33,157.33]}
+{"kind":"textbox","id":"sh/0b65obm9","slide":9,"name":"AutoShape 3","text":"核心功能全景","textPreview":"核心功能全景","textChars":6,"textLines":1,"bbox":[421.33,302.67,295.6,68]}
+{"kind":"textbox","id":"sh/nex4jq5k","slide":9,"name":"AutoShape 4","text":"博客前台与后台管理功能详解","textPreview":"博客前台与后台管理功能详解","textChars":13,"textLines":1,"bbox":[716.93,302.89,379.67,62.67]}
+{"kind":"notes","id":"nt/udsvah03","slide":9,"text":"首先，让我们进入第一部分：项目背景。在这一章，我们将探讨为什么要开发一个独立的个人博客系统，它的目标和意义是什么，以及我们希望通过这个项目解决哪些实际问题。"}
+{"kind":"slide","id":"sl/m90b6t0r","slide":10,"title":"博客前台功能","textShapes":8}
+{"kind":"textbox","id":"sh/xc3mho32","slide":10,"name":"AutoShape 2","text":"博客前台功能","textPreview":"博客前台功能","textChars":6,"textLines":1,"bbox":[126.67,102.67,261.33,66.67]}
+{"kind":"textbox","id":"sh/cbu58j2h","slide":10,"name":"AutoShape 3","text":"聚焦用户端核心体验，打造集内容展示、高效导航与用户管理于一体的博客前台体系，通过清晰的功能模块设计，为读者提供流畅的浏览与互动服务。","textPreview":"聚焦用户端核心体验，打造集内容展示、高效导航与用户管理于一体的博客前台体系，通过清晰的功能模块设计，为读者提供流畅的浏览与互动服务。","textChars":66,"textLines":1,"bbox":[388,102.67,807.33,74.67]}
+{"kind":"shape","id":"sh/zelojyl8","slide":10,"name":"AutoShape 4","bbox":[130.67,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/l036l83y","slide":10,"name":"AutoShape 6","text":"文章展示模块","textPreview":"文章展示模块","textChars":6,"textLines":1,"bbox":[108,464,308,56]}
+{"kind":"textbox","id":"sh/kzu5c32t","slide":10,"name":"AutoShape 7","text":"首页呈现文章列表与详情页，支持分页加载与按时间、热度排序，优化内容浏览效率。","textPreview":"首页呈现文章列表与详情页，支持分页加载与按时间、热度排序，优化内容浏览效率。","textChars":38,"textLines":1,"bbox":[108,524,308,93.4]}
+{"kind":"shape","id":"sh/725onyl4","slide":10,"name":"AutoShape 8","bbox":[509.33,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/s7yt4b21","slide":10,"name":"AutoShape 10","text":"分类与标签导航","textPreview":"分类与标签导航","textChars":7,"textLines":1,"bbox":[486.67,464,308,56]}
+{"kind":"textbox","id":"sh/d87uxg3m","slide":10,"name":"AutoShape 11","text":"建立分类与标签双重索引，实现内容快速检索与聚合，助力用户精准定位感兴趣主题。","textPreview":"建立分类与标签双重索引，实现内容快速检索与聚合，助力用户精准定位感兴趣主题。","textChars":38,"textLines":1,"bbox":[486.67,524,308,93.4]}
+{"kind":"shape","id":"sh/q5gb21kb","slide":10,"name":"AutoShape 12","bbox":[888,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/0bit8b2d","slide":10,"name":"AutoShape 14","text":"用户全流程管理","textPreview":"用户全流程管理","textChars":7,"textLines":1,"bbox":[864,464,308,56]}
+{"kind":"textbox","id":"sh/1cru1g3y","slide":10,"name":"AutoShape 15","text":"提供注册、登录、密码找回及个人资料管理功能，为用户互动与社区运营筑牢基础。","textPreview":"提供注册、登录、密码找回及个人资料管理功能，为用户互动与社区运营筑牢基础。","textChars":37,"textLines":1,"bbox":[864,524,308,93.33]}
+{"kind":"image","id":"im/tg7ixo36","slide":10,"name":"图片 18","bbox":[471.09,207.2,337.82,218.67]}
+{"kind":"image","id":"im/sfeh4j2l","slide":10,"name":"图片 20","bbox":[55.66,216.95,315.31,207.43]}
+{"kind":"image","id":"im/ra907i14","slide":10,"name":"图片 22","bbox":[905.14,204.81,319.2,211.46]}
+{"kind":"notes","id":"nt/m90b6t0r","slide":10,"text":"博客前台主要包含三大功能模块。首先是文章展示，用户可以浏览文章列表和详情。其次是分类与标签系统，帮助用户快速找到感兴趣的内容。最后是完整的用户功能，包括注册、登录和个人中心，为后续的互动功能打下基础。"}
+{"kind":"slide","id":"sl/jetc3ut0","slide":11,"title":"后台管理功能","textShapes":8}
+{"kind":"textbox","id":"sh/xcryxg7y","slide":11,"name":"AutoShape 2","text":"后台管理功能","textPreview":"后台管理功能","textChars":6,"textLines":1,"bbox":[126.67,102.67,261.33,66.67]}
+{"kind":"textbox","id":"sh/wbih4b6d","slide":11,"name":"AutoShape 3","text":"为博主打造的高效工作台，集成内容创作、分类管理与系统监控的一站式管理平台。通过直观的操作界面，实现从内容生产到运营数据监控的全流程管理，助力博主高效运营。","textPreview":"为博主打造的高效工作台，集成内容创作、分类管理与系统监控的一站式管理平台。通过直观的操作界面，实现从内容生产到运营数据监控的全流程管理，助力博主高效运营。","textChars":77,"textLines":1,"bbox":[388,102.67,807.33,110.67]}
+{"kind":"shape","id":"sh/n69grmpw","slide":11,"name":"AutoShape 4","bbox":[130.67,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/98rytw72","slide":11,"name":"AutoShape 6","text":"文章全生命周期管理","textPreview":"文章全生命周期管理","textChars":9,"textLines":1,"bbox":[108,464,308,56]}
+{"kind":"textbox","id":"sh/o7ih0r6h","slide":11,"name":"AutoShape 7","text":"支持文章增删改查、草稿暂存、封面自定义及阅读时长智能估算，打造流畅的内容创作与发布体验。","textPreview":"支持文章增删改查、草稿暂存、封面自定义及阅读时长智能估算，打造流畅的内容创作与发布体验。","textChars":44,"textLines":1,"bbox":[108,524,308,93.4]}
+{"kind":"shape","id":"sh/72t03qp0","slide":11,"name":"AutoShape 8","bbox":[509.33,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/ofqtgnyt","slide":11,"name":"AutoShape 10","text":"分类与标签体系维护","textPreview":"分类与标签体系维护","textChars":9,"textLines":1,"bbox":[486.67,464,308,56]}
+{"kind":"textbox","id":"sh/9gza9sze","slide":11,"name":"AutoShape 11","text":"对文章分类层级与标签关键词进行全生命周期维护，构建清晰的内容索引体系，提升内容检索效率。","textPreview":"对文章分类层级与标签关键词进行全生命周期维护，构建清晰的内容索引体系，提升内容检索效率。","textChars":44,"textLines":1,"bbox":[486.67,524,308,93.4]}
+{"kind":"shape","id":"sh/mdobedg3","slide":11,"name":"AutoShape 12","bbox":[888,229.33,261.33,218.67]}
+{"kind":"textbox","id":"sh/0b6tc3yx","slide":11,"name":"AutoShape 14","text":"系统配置与数据看板","textPreview":"系统配置与数据看板","textChars":9,"textLines":1,"bbox":[864,464,308,56]}
+{"kind":"textbox","id":"sh/1cfa58zi","slide":11,"name":"AutoShape 15","text":"可视化配置站点基础信息，实时监控文件上传状态，提供多维度数据统计看板，直观掌握博客运营动态。","textPreview":"可视化配置站点基础信息，实时监控文件上传状态，提供多维度数据统计看板，直观掌握博客运营动态。","textChars":46,"textLines":1,"bbox":[864,524,308,93.33]}
+{"kind":"image","id":"im/pon6tw36","slide":11,"name":"Picture 15","bbox":[98,207.33,261.33,218.67]}
+{"kind":"image","id":"im/one5kr2l","slide":11,"name":"Picture 16","bbox":[537,194,261.33,218.67]}
+{"kind":"image","id":"im/nipo3q14","slide":11,"name":"Picture 17","bbox":[929,233.33,261.33,218.67]}
+{"kind":"notes","id":"nt/jetc3ut0","slide":11,"text":"博客前台主要包含三大功能模块。首先是文章展示，用户可以浏览文章列表和详情。其次是分类与标签系统，帮助用户快速找到感兴趣的内容。最后是完整的用户功能，包括注册、登录和个人中心，为后续的互动功能打下基础。"}
+{"kind":"slide","id":"sl/8f2psfyx","slide":12,"title":"集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。","textShapes":2}
+{"kind":"textbox","id":"sh/atc7epon","slide":12,"name":"TextBox 10","text":"集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。","textPreview":"集成 DeepSeek 大模型：一键改写优化正文，支持重新生成与确认应用，API Key 仅存于服务端，创作效率与质量双提升。","textChars":63,"textLines":1,"bbox":[212.1,309.92,349.7,100.17]}
+{"kind":"textbox","id":"sh/bulo7u58","slide":12,"name":"文本框 12","text":"AI 智能润色\n","textPreview":"AI 智能润色 |","textChars":8,"textLines":2,"bbox":[306.1,169.36,280.58,90.47]}
+{"kind":"image","id":"im/fudovqlo","slide":12,"name":"Picture 9","bbox":[525.03,100.75,553.94,518.5]}
+{"kind":"notes","id":"nt/8f2psfyx","slide":12,"text":"这一页是我们的功能演示预留区。在实际演示中，我们会在这里播放一段GIF动画，直观地展示文章从创作、发布到前台展示的完整流程，以及后台数据看板的实时效果，让大家对系统的实际操作有更直观的感受。"}
+{"kind":"slide","id":"sl/hgzapcr6","slide":13,"title":"04","textShapes":3}
+{"kind":"textbox","id":"sh/q50nydsj","slide":13,"name":"AutoShape 2","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[242.67,257.33,157.33,157.33]}
+{"kind":"textbox","id":"sh/bq9orito","slide":13,"name":"AutoShape 3","text":"技术创新","textPreview":"技术创新","textChars":4,"textLines":1,"bbox":[421.33,302.67,218.67,68]}
+{"kind":"textbox","id":"sh/o3i5w3ad","slide":13,"name":"AutoShape 4","text":"关键技术栈与核心实现亮点","textPreview":"关键技术栈与核心实现亮点","textChars":12,"textLines":1,"bbox":[647.73,308,351.13,62.67]}
+{"kind":"notes","id":"nt/hgzapcr6","slide":13,"text":"首先，让我们进入第一部分：项目背景。在这一章，我们将探讨为什么要开发一个独立的个人博客系统，它的目标和意义是什么，以及我们希望通过这个项目解决哪些实际问题。"}
+{"kind":"slide","id":"sl/6lsnupw7","slide":14,"title":"01 编辑正文","textShapes":7}
+{"kind":"shape","id":"sh/knu1k3ah","slide":14,"name":"AutoShape 2","bbox":[86.67,96,333.33,74.67]}
+{"kind":"shape","id":"sh/t4zixoj6","slide":14,"name":"AutoShape 5","bbox":[642.67,96,333.33,74.67]}
+{"kind":"textbox","id":"sh/r2h0vy10","slide":14,"name":"矩形: 圆角 61","text":"01 编辑正文","textPreview":"01 编辑正文","textChars":7,"textLines":1,"bbox":[233.33,63.72,200,85.33]}
+{"kind":"textbox","id":"sh/61ojmtkv","slide":14,"name":"矩形: 圆角 62","text":"02 一键润色","textPreview":"02 一键润色","textChars":7,"textLines":1,"bbox":[548.62,96.68,200,85.33]}
+{"kind":"textbox","id":"sh/50fitoja","slide":14,"name":"矩形: 圆角 63","text":"03 服务端调用","textPreview":"03 服务端调用","textChars":8,"textLines":1,"bbox":[395.49,268.74,200,85.33]}
+{"kind":"textbox","id":"sh/kz61kj2p","slide":14,"name":"矩形: 圆角 64","text":"04 结果预览","textPreview":"04 结果预览","textChars":7,"textLines":1,"bbox":[372.57,473.76,200,85.33]}
+{"kind":"textbox","id":"sh/jex0re14","slide":14,"name":"矩形: 圆角 65","text":"05 确认应用","textPreview":"05 确认应用","textChars":7,"textLines":1,"bbox":[698.41,541.39,200,85.33]}
+{"kind":"shape","id":"sh/idgvmx8r","slide":14,"name":"连接符: 曲线 4","bbox":[433.33,106.38,113.39,30.24]}
+{"kind":"shape","id":"sh/zi5c3y98","slide":14,"name":"连接符: 曲线 7","bbox":[528.7,148.81,86.72,153.13]}
+{"kind":"shape","id":"sh/x4ni9ofy","slide":14,"name":"连接符: 曲线 10","bbox":[424.18,402.45,119.69,22.92]}
+{"kind":"shape","id":"sh/b2507exs","slide":14,"name":"连接符: 曲线 12","bbox":[572.57,516.43,125.84,67.63]}
+{"kind":"shape","id":"sh/ls7idofu","slide":14,"name":"连接符: 曲线 14","bbox":[581.96,324.94,229.99,202.92]}
+{"kind":"textbox","id":"sh/o72pcve5","slide":14,"name":"矩形: 圆角 71","text":"重新生成","textPreview":"重新生成","textChars":4,"textLines":1,"bbox":[670.27,375.69,154.61,29.33]}
+{"kind":"textbox","id":"sh/y5wjitgj","slide":14,"name":"文本框 15","text":"润  色","textPreview":"润  色","textChars":4,"textLines":1,"bbox":[898.41,268.74,205.18,96.94]}
+{"kind":"notes","id":"nt/6lsnupw7","slide":14,"text":"本次项目的核心技术亮点，是我们基于策略模式与Redis实现的接口幂等性校验机制。简单来说，就是为每个写操作请求分配一个唯一的ID。服务端通过这个ID来判断请求是否已经处理过，从而避免了因网络抖动或用户重复点击导致的数据重复问题。这不仅保证了数据一致性，也极大地提升了用户体验和系统的健壮性。"}
+{"kind":"slide","id":"sl/vaxsvy10","slide":15,"title":"技术栈","textShapes":19}
+{"kind":"textbox","id":"sh/rmh8z6tk","slide":15,"name":"AutoShape 4","text":"技术栈","textPreview":"技术栈","textChars":3,"textLines":1,"bbox":[37.33,430.67,410.33,186.67]}
+{"kind":"textbox","id":"sh/ql8rq1sz","slide":15,"name":"AutoShape 5","text":"核心架构与选型","textPreview":"核心架构与选型","textChars":7,"textLines":1,"bbox":[42.67,390.67,333.33,90.67]}
+{"kind":"textbox","id":"sh/dojq1gbq","slide":15,"name":"AutoShape 6","text":"前后端彻底分离：后端专注 RESTful 数据服务，前端独立开发部署，以 JSON 报文通信，共同构成高可用、易扩展的系统基座。","textPreview":"前后端彻底分离：后端专注 RESTful 数据服务，前端独立开发部署，以 JSON 报文通信，共同构成高可用、易扩展的系统基座。","textChars":64,"textLines":1,"bbox":[45.33,286.67,477,97.53]}
+{"kind":"shape","id":"sh/snq9sba5","slide":15,"name":"矩形: 圆角 86","bbox":[560,86.67,157.33,233.33]}
+{"kind":"shape","id":"sh/bilsbat4","slide":15,"name":"矩形: 圆角 87","bbox":[733.33,86.67,157.33,233.33]}
+{"kind":"shape","id":"sh/ahcr25sj","slide":15,"name":"矩形: 圆角 88","bbox":[906.67,86.67,157.33,233.33]}
+{"kind":"shape","id":"sh/83m5wnq1","slide":15,"name":"矩形: 圆角 89","bbox":[1080,86.67,157.33,233.33]}
+{"kind":"shape","id":"sh/t4v65srm","slide":15,"name":"矩形: 圆角 90","bbox":[560,400,157.33,233.33]}
+{"kind":"shape","id":"sh/614nux8v","slide":15,"name":"矩形: 圆角 91","bbox":[733.33,400,157.33,233.33]}
+{"kind":"shape","id":"sh/72do329g","slide":15,"name":"矩形: 圆角 92","bbox":[906.67,400,157.33,233.33]}
+{"kind":"shape","id":"sh/gr6507qx","slide":15,"name":"矩形: 圆角 93","bbox":[1080,400,157.33,233.33]}
+{"kind":"textbox","id":"sh/hsf69cri","slide":15,"name":"矩形: 圆角 94","text":"SpringBoot","textPreview":"SpringBoot","textChars":10,"textLines":1,"bbox":[560,198.67,157.33,32]}
+{"kind":"textbox","id":"sh/u5onyx8r","slide":15,"name":"矩形: 圆角 95","text":"Java","textPreview":"Java","textChars":4,"textLines":1,"bbox":[733.33,198.67,157.33,32]}
+{"kind":"textbox","id":"sh/vqxo729c","slide":15,"name":"矩形: 圆角 96","text":"MyBatis-Plus","textPreview":"MyBatis-Plus","textChars":12,"textLines":1,"bbox":[906.67,198.67,157.33,32]}
+{"kind":"textbox","id":"sh/4v6p47q9","slide":15,"name":"矩形: 圆角 97","text":"MySQL","textPreview":"MySQL","textChars":5,"textLines":1,"bbox":[1080,198.67,157.33,32]}
+{"kind":"textbox","id":"sh/5wz6dcre","slide":15,"name":"矩形: 圆角 98","text":"3.2.3 · 服务基座","textPreview":"3.2.3 · 服务基座","textChars":12,"textLines":1,"bbox":[560,236,157.33,53.33]}
+{"kind":"textbox","id":"sh/yd8jmxcr","slide":15,"name":"矩形: 圆角 99","text":"17 · 语言基线","textPreview":"17 · 语言基线","textChars":9,"textLines":1,"bbox":[733.33,236,157.33,53.33]}
+{"kind":"textbox","id":"sh/zehkv2dc","slide":15,"name":"矩形: 圆角 100","text":"3.5.5 · 数据访问","textPreview":"3.5.5 · 数据访问","textChars":12,"textLines":1,"bbox":[906.67,236,157.33,53.33]}
+{"kind":"textbox","id":"sh/kfq1onuh","slide":15,"name":"矩形: 圆角 101","text":"8.0 · 关系型存储","textPreview":"8.0 · 关系型存储","textChars":11,"textLines":1,"bbox":[1080,236,157.33,53.33]}
+{"kind":"textbox","id":"sh/lgj2xsv2","slide":15,"name":"矩形: 圆角 102","text":"Redis","textPreview":"Redis","textChars":5,"textLines":1,"bbox":[560,512,157.33,32]}
+{"kind":"textbox","id":"sh/mhsjqxcn","slide":15,"name":"矩形: 圆角 103","text":"Vue","textPreview":"Vue","textChars":3,"textLines":1,"bbox":[733.33,512,157.33,32]}
+{"kind":"textbox","id":"sh/7i1kz2d8","slide":15,"name":"矩形: 圆角 104","text":"TypeScript","textPreview":"TypeScript","textChars":10,"textLines":1,"bbox":[906.67,512,157.33,32]}
+{"kind":"textbox","id":"sh/8ja1s7ut","slide":15,"name":"矩形: 圆角 105","text":"Tiptap","textPreview":"Tiptap","textChars":6,"textLines":1,"bbox":[1080,512,157.33,32]}
+{"kind":"textbox","id":"sh/9kj21cve","slide":15,"name":"矩形: 圆角 106","text":"7 · 缓存 · 幂等 · 锁","textPreview":"7 · 缓存 · 幂等 · 锁","textChars":15,"textLines":1,"bbox":[560,549.33,157.33,53.33]}
+{"kind":"textbox","id":"sh/ulsjuhcz","slide":15,"name":"矩形: 圆角 107","text":"3 · 响应式组件化","textPreview":"3 · 响应式组件化","textChars":10,"textLines":1,"bbox":[733.33,549.33,157.33,53.33]}
+{"kind":"textbox","id":"sh/vm1k3md4","slide":15,"name":"矩形: 圆角 108","text":"强类型约束","textPreview":"强类型约束","textChars":5,"textLines":1,"bbox":[906.67,549.33,157.33,53.33]}
+{"kind":"textbox","id":"sh/5gnmtgfm","slide":15,"name":"矩形: 圆角 109","text":"Markdown 编辑渲染","textPreview":"Markdown 编辑渲染","textChars":13,"textLines":1,"bbox":[1080,549.33,157.33,53.33]}
+{"kind":"image","id":"im/hcfihcjm","slide":15,"name":"图片 110","bbox":[609.33,124,58.67,58.67]}
+{"kind":"image","id":"im/u9ojmhkv","slide":15,"name":"图片 111","bbox":[782.67,124,58.67,58.67]}
+{"kind":"image","id":"im/vax0fm1g","slide":15,"name":"图片 112","bbox":[921.33,137.33,127.27,32]}
+{"kind":"image","id":"im/4z61srix","slide":15,"name":"图片 113","bbox":[1129.33,124,58.67,58.67]}
+{"kind":"image","id":"im/50filwji","slide":15,"name":"图片 114","bbox":[609.33,437.33,58.67,58.67]}
+{"kind":"image","id":"im/idojqh0r","slide":15,"name":"图片 115","bbox":[782.67,437.33,58.67,58.67]}
+{"kind":"image","id":"im/3yx0jm1c","slide":15,"name":"图片 116","bbox":[956,437.33,58.67,58.67]}
+{"kind":"image","id":"im/k3mhgn2t","slide":15,"name":"图片 117","bbox":[1129.33,437.33,58.67,58.67]}
+{"kind":"notes","id":"nt/vaxsvy10","slide":15,"text":"我们的技术栈紧跟主流。后端采用最新的SpringBoot 3和Java 17，保证了性能和未来的兼容性。前端则使用Vue 3和TypeScript，实现了高效的组件化开发。数据库选用MySQL，缓存使用Redis。整个架构实现了彻底的前后端分离和无状态认证，为系统的横向扩展提供了可能。"}
+{"kind":"slide","id":"sl/gny5sjyp","slide":16,"title":"项目模块与技术栈","textShapes":39}
+{"kind":"textbox","id":"sh/8z2h8bq1","slide":16,"name":"AutoShape 2","text":"项目模块与技术栈","textPreview":"项目模块与技术栈","textChars":8,"textLines":1,"bbox":[55,34,540,70]}
+{"kind":"textbox","id":"sh/ytkf2h8j","slide":16,"text":"PROJECT MODULES  /  前后端分离 · RESTful API · AI 智能增强","textPreview":"PROJECT MODULES  /  前后端分离 · RESTful API · AI 智能增强","textChars":49,"textLines":1,"bbox":[610,50,600,32]}
+{"kind":"shape","id":"sh/zutgvm94","slide":16,"bbox":[57,112,34,4]}
+{"kind":"textbox","id":"sh/kv2h4rqp","slide":16,"text":"从内容浏览到创作管理，再到智能能力与数据服务，形成完整业务闭环","textPreview":"从内容浏览到创作管理，再到智能能力与数据服务，形成完整业务闭环","textChars":31,"textLines":1,"bbox":[105,99,850,28]}
+{"kind":"shape","id":"sh/lwbyxwra","slide":16,"name":"module-阅读前台","bbox":[56,137,368,336]}
+{"kind":"shape","id":"sh/ip4zel83","slide":16,"bbox":[76,160,6,54]}
+{"kind":"shape","id":"sh/3qdg7qpo","slide":16,"bbox":[94,157,50,50]}
+{"kind":"textbox","id":"sh/e1sf65o3","slide":16,"text":"阅读前台","textPreview":"阅读前台","textChars":4,"textLines":1,"bbox":[158,154,225,35]}
+{"kind":"textbox","id":"sh/1ojy10ne","slide":16,"text":"面向访客与注册用户","textPreview":"面向访客与注册用户","textChars":9,"textLines":1,"bbox":[158,185,235,24]}
+{"kind":"shape","id":"sh/gnax8v6t","slide":16,"bbox":[76,229,328,56]}
+{"kind":"shape","id":"sh/nqlg3a5k","slide":16,"bbox":[92,245,24,24]}
+{"kind":"textbox","id":"sh/ps3y5knq","slide":16,"text":"文章浏览","textPreview":"文章浏览","textChars":4,"textLines":1,"bbox":[128,238,245,26]}
+{"kind":"textbox","id":"sh/oruhcf65","slide":16,"text":"列表、详情与多维排序","textPreview":"列表、详情与多维排序","textChars":10,"textLines":1,"bbox":[128,260,245,17]}
+{"kind":"shape","id":"sh/bulg7u5g","slide":16,"bbox":[76,299,328,56]}
+{"kind":"shape","id":"sh/atczepob","slide":16,"bbox":[92,315,24,24]}
+{"kind":"textbox","id":"sh/7qp0zepo","slide":16,"text":"分类与标签","textPreview":"分类与标签","textChars":5,"textLines":1,"bbox":[128,308,245,26]}
+{"kind":"textbox","id":"sh/8by18jq9","slide":16,"text":"主题聚合与快速定位","textPreview":"主题聚合与快速定位","textChars":9,"textLines":1,"bbox":[128,330,245,17]}
+{"kind":"shape","id":"sh/9c7i1o7u","slide":16,"bbox":[76,369,328,56]}
+{"kind":"shape","id":"sh/ylwj2987","slide":16,"bbox":[92,385,24,24]}
+{"kind":"textbox","id":"sh/kne14jqd","slide":16,"text":"用户中心","textPreview":"用户中心","textChars":4,"textLines":1,"bbox":[128,378,245,26]}
+{"kind":"textbox","id":"sh/lo7ixo7y","slide":16,"text":"注册、登录与资料管理","textPreview":"注册、登录与资料管理","textChars":10,"textLines":1,"bbox":[128,400,245,17]}
+{"kind":"shape","id":"sh/ih0jedob","slide":16,"name":"module-创作后台","bbox":[456,137,368,336]}
+{"kind":"shape","id":"sh/ji9k7ypw","slide":16,"bbox":[476,160,6,54]}
+{"kind":"shape","id":"sh/tcbmdcre","slide":16,"bbox":[494,157,50,50]}
+{"kind":"textbox","id":"sh/rat4b298","slide":16,"text":"创作后台","textPreview":"创作后台","textChars":4,"textLines":1,"bbox":[558,154,225,35]}
+{"kind":"textbox","id":"sh/69k32xsn","slide":16,"text":"面向内容维护与运营","textPreview":"面向内容维护与运营","textChars":9,"textLines":1,"bbox":[558,185,235,24]}
+{"kind":"shape","id":"sh/58bm9sr2","slide":16,"bbox":[476,229,328,56]}
+{"kind":"shape","id":"sh/47il0nah","slide":16,"bbox":[492,245,24,24]}
+{"kind":"textbox","id":"sh/i503ydsr","slide":16,"text":"文章全生命周期","textPreview":"文章全生命周期","textChars":7,"textLines":1,"bbox":[528,238,245,26]}
+{"kind":"textbox","id":"sh/p4vmlwrm","slide":16,"text":"草稿、发布、编辑与封面","textPreview":"草稿、发布、编辑与封面","textChars":11,"textLines":1,"bbox":[528,260,245,17]}
+{"kind":"shape","id":"sh/o3m5crq1","slide":16,"bbox":[476,299,328,56]}
+{"kind":"shape","id":"sh/wnadcrqh","slide":16,"bbox":[492,315,24,24]}
+{"kind":"textbox","id":"sh/alsbahsb","slide":16,"text":"Markdown 编辑","textPreview":"Markdown 编辑","textChars":11,"textLines":1,"bbox":[528,308,245,26]}
+{"kind":"textbox","id":"sh/vm1c3m9w","slide":16,"text":"结构化创作与即时渲染","textPreview":"结构化创作与即时渲染","textChars":10,"textLines":1,"bbox":[528,330,245,17]}
+{"kind":"shape","id":"sh/kbudgrqt","slide":16,"bbox":[476,369,328,56]}
+{"kind":"shape","id":"sh/5c3u9wry","slide":16,"bbox":[492,385,24,24]}
+{"kind":"textbox","id":"sh/ja1c7m98","slide":16,"text":"配置与数据看板","textPreview":"配置与数据看板","textChars":7,"textLines":1,"bbox":[528,378,245,26]}
+{"kind":"textbox","id":"sh/sfudkbqp","slide":16,"text":"站点配置、上传与统计","textPreview":"站点配置、上传与统计","textChars":10,"textLines":1,"bbox":[528,400,245,17]}
+{"kind":"shape","id":"sh/tg3udgra","slide":16,"name":"module-智能与服务","bbox":[856,137,368,336]}
+{"kind":"shape","id":"sh/3apg3atc","slide":16,"bbox":[876,160,6,54]}
+{"kind":"shape","id":"sh/29wfa5sr","slide":16,"bbox":[894,157,50,50]}
+{"kind":"textbox","id":"sh/obyxcfax","slide":16,"text":"智能与服务","textPreview":"智能与服务","textChars":5,"textLines":1,"bbox":[958,154,225,35]}
+{"kind":"textbox","id":"sh/f65wzqtg","slide":16,"text":"面向效率提升与系统支撑","textPreview":"面向效率提升与系统支撑","textChars":11,"textLines":1,"bbox":[958,185,235,24]}
+{"kind":"shape","id":"sh/u5wf6lcv","slide":16,"bbox":[876,229,328,56]}
+{"kind":"shape","id":"sh/h8ne10b6","slide":16,"bbox":[892,245,24,24]}
+{"kind":"textbox","id":"sh/z29gbutk","slide":16,"text":"DeepSeek 智能润色","textPreview":"DeepSeek 智能润色","textChars":13,"textLines":1,"bbox":[928,238,245,26]}
+{"kind":"textbox","id":"sh/y10fipsz","slide":16,"text":"改写、重生成与确认应用","textPreview":"改写、重生成与确认应用","textChars":11,"textLines":1,"bbox":[928,260,245,17]}
+{"kind":"shape","id":"sh/axkjatc7","slide":16,"bbox":[876,299,328,56]}
+{"kind":"shape","id":"sh/vyt03yds","slide":16,"bbox":[892,315,24,24]}
+{"kind":"textbox","id":"sh/x0bi58vy","slide":16,"text":"RESTful 数据接口","textPreview":"RESTful 数据接口","textChars":12,"textLines":1,"bbox":[928,308,245,26]}
+{"kind":"textbox","id":"sh/i14jetcj","slide":16,"text":"JSON 通信与前后端解耦","textPreview":"JSON 通信与前后端解耦","textChars":13,"textLines":1,"bbox":[928,330,245,17]}
+{"kind":"shape","id":"sh/j2d07yd4","slide":16,"bbox":[876,369,328,56]}
+{"kind":"shape","id":"sh/k3m1g3u9","slide":16,"bbox":[892,385,24,24]}
+{"kind":"textbox","id":"sh/y50z29cz","slide":16,"text":"缓存与数据持久化","textPreview":"缓存与数据持久化","textChars":8,"textLines":1,"bbox":[928,378,245,26]}
+{"kind":"textbox","id":"sh/z690vedk","slide":16,"text":"高效访问与稳定存储","textPreview":"高效访问与稳定存储","textChars":9,"textLines":1,"bbox":[928,400,245,17]}
+{"kind":"textbox","id":"sh/hkzmhcf2","slide":16,"text":"技术栈","textPreview":"技术栈","textChars":3,"textLines":1,"bbox":[57,521,92,35]}
+{"kind":"textbox","id":"sh/gj6l87eh","slide":16,"text":"TECH STACK","textPreview":"TECH STACK","textChars":10,"textLines":1,"bbox":[57,554,92,20]}
+{"kind":"textbox","id":"sh/fixkf2xc","slide":16,"text":"核心框架与工具","textPreview":"核心框架与工具","textChars":7,"textLines":1,"bbox":[57,579,92,20]}
+{"kind":"shape","id":"sh/uxo36xwr","slide":16,"name":"tech-Spring Boot","bbox":[158,512,109,122]}
+{"kind":"shape","id":"sh/pozm5cfe","slide":16,"bbox":[189.5,525,46,46]}
+{"kind":"textbox","id":"sh/3mh4jmx8","slide":16,"text":"Spring Boot","textPreview":"Spring Boot","textChars":11,"textLines":1,"bbox":[163,580,99,27]}
+{"kind":"shape","id":"sh/2l83ahwn","slide":16,"bbox":[198,613,29,3]}
+{"kind":"shape","id":"sh/5sf29sfu","slide":16,"name":"tech-Java 17","bbox":[276,512,109,122]}
+{"kind":"shape","id":"sh/krml0nep","slide":16,"bbox":[307.5,525,46,46]}
+{"kind":"textbox","id":"sh/xsbq9gnq","slide":16,"text":"Java 17","textPreview":"Java 17","textChars":7,"textLines":1,"bbox":[281,580,99,27]}
+{"kind":"shape","id":"sh/apk7yloz","slide":16,"bbox":[316,613,29,3]}
+{"kind":"shape","id":"sh/bqt8765k","slide":16,"name":"tech-MyBatis+","bbox":[394,512,109,122]}
+{"kind":"shape","id":"sh/on2pwb69","slide":16,"bbox":[425.5,525,46,46]}
+{"kind":"textbox","id":"sh/2l07u1o3","slide":16,"text":"MyBatis+","textPreview":"MyBatis+","textChars":8,"textLines":1,"bbox":[399,580,99,27]}
+{"kind":"shape","id":"sh/nmt8365o","slide":16,"bbox":[434,613,29,3]}
+{"kind":"shape","id":"sh/8jmp8v6d","slide":16,"name":"tech-MySQL 8","bbox":[512,512,109,122]}
+{"kind":"shape","id":"sh/tkvqh0ny","slide":16,"bbox":[543.5,525,46,46]}
+{"kind":"textbox","id":"sh/id8byp8f","slide":16,"text":"MySQL 8","textPreview":"MySQL 8","textChars":7,"textLines":1,"bbox":[517,580,99,27]}
+{"kind":"shape","id":"sh/5gza9476","slide":16,"bbox":[552,613,29,3]}
+{"kind":"shape","id":"sh/4fqt0zql","slide":16,"name":"tech-Redis 7","bbox":[630,512,109,122]}
+{"kind":"shape","id":"sh/rihsbepw","slide":16,"bbox":[661.5,525,46,46]}
+{"kind":"textbox","id":"sh/d4jado72","slide":16,"text":"Redis 7","textPreview":"Redis 7","textChars":7,"textLines":1,"bbox":[635,580,99,27]}
+{"kind":"shape","id":"sh/s3qt4jqh","slide":16,"bbox":[670,613,29,3]}
+{"kind":"shape","id":"sh/7mxszaps","slide":16,"name":"tech-Vue 3","bbox":[748,512,109,122]}
+{"kind":"shape","id":"sh/6lorq587","slide":16,"bbox":[779.5,525,46,46]}
+{"kind":"textbox","id":"sh/29sje5wv","slide":16,"text":"Vue 3","textPreview":"Vue 3","textChars":5,"textLines":1,"bbox":[753,580,99,27]}
+{"kind":"shape","id":"sh/pwji90f6","slide":16,"bbox":[788,613,29,3]}
+{"kind":"shape","id":"sh/ova1gfe1","slide":16,"name":"tech-TypeScript","bbox":[866,512,109,122]}
+{"kind":"shape","id":"sh/f6103qx4","slide":16,"bbox":[897.5,525,46,46]}
+{"kind":"textbox","id":"sh/18ji50fa","slide":16,"text":"TypeScript","textPreview":"TypeScript","textChars":10,"textLines":1,"bbox":[871,580,99,27]}
+{"kind":"shape","id":"sh/07ahcvep","slide":16,"bbox":[906,613,29,3]}
+{"kind":"shape","id":"sh/z2l0fuxo","slide":16,"name":"tech-Tiptap","bbox":[984,512,109,122]}
+{"kind":"shape","id":"sh/y1cjmpw3","slide":16,"bbox":[1015.5,525,46,46]}
+{"kind":"textbox","id":"sh/h8fy9wv6","slide":16,"text":"Tiptap","textPreview":"Tiptap","textChars":6,"textLines":1,"bbox":[989,580,99,27]}
+{"kind":"shape","id":"sh/u54fyhcf","slide":16,"bbox":[1024,613,29,3]}
+{"kind":"shape","id":"sh/v6xg7md0","slide":16,"name":"tech-DeepSeek","bbox":[1102,512,109,122]}
+{"kind":"shape","id":"sh/4b6x4ruh","slide":16,"bbox":[1133.5,525,46,46]}
+{"kind":"textbox","id":"sh/i9of2hcb","slide":16,"text":"DeepSeek","textPreview":"DeepSeek","textChars":8,"textLines":1,"bbox":[1107,580,99,27]}
+{"kind":"shape","id":"sh/3axgbmdw","slide":16,"bbox":[1142,613,29,3]}
+{"kind":"image","id":"im/03ylwfe1","slide":16,"name":"Picture 6","bbox":[1120,649.88,160,70.12]}
+{"kind":"image","id":"im/sn2t4fa1","slide":16,"name":"","alt":"阅读前台图标","bbox":[107,170,24,24]}
+{"kind":"image","id":"im/5kra9kra","slide":16,"name":"","alt":"文章浏览图标","bbox":[98,251,12,12]}
+{"kind":"image","id":"im/dcrap4jy","slide":16,"name":"","alt":"分类与标签图标","bbox":[98,321,12,12]}
+{"kind":"image","id":"im/o7y9sf2h","slide":16,"name":"","alt":"用户中心图标","bbox":[98,391,12,12]}
+{"kind":"image","id":"im/ra58rqho","slide":16,"name":"","alt":"创作后台图标","bbox":[507,170,24,24]}
+{"kind":"image","id":"im/4nupwbix","slide":16,"name":"","alt":"文章全生命周期图标","bbox":[498,251,12,12]}
+{"kind":"image","id":"im/m9c32xkr","slide":16,"name":"","alt":"Markdown 编辑图标","bbox":[498,321,12,12]}
+{"kind":"image","id":"im/l83mts36","slide":16,"name":"","alt":"配置与数据看板图标","bbox":[498,391,12,12]}
+{"kind":"image","id":"im/u9or6pgz","slide":16,"name":"","alt":"智能与服务图标","bbox":[907,170,24,24]}
+{"kind":"image","id":"im/3yxsjuxg","slide":16,"name":"","alt":"DeepSeek 智能润色图标","bbox":[898,251,12,12]}
+{"kind":"image","id":"im/zy58vmp0","slide":16,"name":"","alt":"RESTful 数据接口图标","bbox":[898,321,12,12]}
+{"kind":"image","id":"im/m1w7618r","slide":16,"name":"","alt":"缓存与数据持久化图标","bbox":[898,391,12,12]}
+{"kind":"image","id":"im/32143i5s","slide":16,"name":"","alt":"Spring Boot 技术栈图标","bbox":[195.5,531,34,34]}
+{"kind":"image","id":"im/by103u9k","slide":16,"name":"","alt":"Java 17 技术栈图标","bbox":[313.5,531,34,34]}
+{"kind":"image","id":"im/y1sje9sv","slide":16,"name":"","alt":"MyBatis+ 技术栈图标","bbox":[419.5,535,58,26]}
+{"kind":"image","id":"im/4vuhsj65","slide":16,"name":"","alt":"MySQL 8 技术栈图标","bbox":[549.5,531,34,34]}
+{"kind":"image","id":"im/hs3ixo7u","slide":16,"name":"","alt":"Redis 7 技术栈图标","bbox":[667.5,531,34,34]}
+{"kind":"image","id":"im/2ps76h43","slide":16,"name":"","alt":"Vue 3 技术栈图标","bbox":[785.5,531,34,34]}
+{"kind":"image","id":"im/fmhovmlc","slide":16,"name":"","alt":"TypeScript 技术栈图标","bbox":[903.5,531,34,34]}
+{"kind":"image","id":"im/9o7it4ra","slide":16,"name":"","alt":"Tiptap 技术栈图标","bbox":[1021.5,531,34,34]}
+{"kind":"image","id":"im/0je1gfad","slide":16,"name":"","alt":"DeepSeek 技术栈图标","bbox":[1144.5,536,24,24]}
+{"kind":"notes","id":"nt/gny5sjyp","slide":16,"text":"我的演示到此结束。感谢大家的聆听。这个个人博客系统是我们技术热情与工程实践的结合，我们相信它不仅是一个产品，更是一个持续进化的技术平台。谢谢大家！"}

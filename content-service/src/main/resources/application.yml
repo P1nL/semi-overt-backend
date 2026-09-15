@@ -52,6 +52,15 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 platform:
+  ai:
+    polish:
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      endpoint: ${AI_POLISH_ENDPOINT:}
+      api-key: ${DEEPSEEK_API_KEY:${AI_POLISH_API_KEY:}}
+      model: ${DEEPSEEK_MODEL:${AI_POLISH_MODEL:deepseek-flash}}
+      proxy-url: ${DEEPSEEK_PROXY_URL:}
+      timeout-seconds: ${AI_POLISH_TIMEOUT_SECONDS:45}
+      max-tokens: ${AI_POLISH_MAX_TOKENS:8192}
   feign:
     connect-timeout-ms: ${FEIGN_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${FEIGN_READ_TIMEOUT_MS:5000}

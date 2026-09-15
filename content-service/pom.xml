@@ -15,6 +15,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.20.0</version>
+        </dependency>
+        <dependency>
             <groupId>com.platform</groupId>
             <artifactId>platform-kernel</artifactId>
             <version>${project.version}</version>

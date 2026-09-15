@@ -153,6 +153,15 @@ services:
       <<: *backend-environment
       SERVICE_NAME: content-service
       SERVER_PORT: "8082"
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${AI_POLISH_API_KEY:-}}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-${AI_POLISH_MODEL:-deepseek-flash}}
+      DEEPSEEK_PROXY_URL: ${DEEPSEEK_PROXY_URL:-}
+      AI_POLISH_ENDPOINT: ${AI_POLISH_ENDPOINT:-}
+      AI_POLISH_API_KEY: ${AI_POLISH_API_KEY:-}
+      AI_POLISH_MODEL: ${AI_POLISH_MODEL:-}
+      AI_POLISH_TIMEOUT_SECONDS: ${AI_POLISH_TIMEOUT_SECONDS:-45}
+      AI_POLISH_MAX_TOKENS: ${AI_POLISH_MAX_TOKENS:-8192}
     depends_on: *service-depends
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8082/actuator/health/readiness >/dev/null"]
